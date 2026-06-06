@@ -32,7 +32,7 @@ func NewMessageHandler(service MessageService) *MessageHandler {
 	}
 }
 
-// Send 向 running Session 发送一条用户消息，并返回 Mock AI 回复。
+// Send 向 running Session 发送一条用户消息，并返回 AI 回复。
 func (h *MessageHandler) Send(c *gin.Context) {
 	id, ok := parsePositiveSessionID(c)
 	if !ok {
@@ -58,6 +58,7 @@ func (h *MessageHandler) Send(c *gin.Context) {
 		UserMessage: toMessageResponse(result.UserMessage),
 		AIMessage:   toMessageResponse(result.AIMessage),
 		Stage:       result.Stage,
+		NextGoal:    result.NextGoal,
 		TurnCount:   result.TurnCount,
 	})
 }
@@ -70,6 +71,7 @@ type sendMessageResponse struct {
 	UserMessage messageResponse `json:"user_message"`
 	AIMessage   messageResponse `json:"ai_message"`
 	Stage       string          `json:"stage"`
+	NextGoal    string          `json:"next_goal"`
 	TurnCount   int             `json:"turn_count"`
 }
 

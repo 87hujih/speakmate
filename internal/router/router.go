@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/gin-gonic/gin"
 
+	"speakmate/internal/agent"
 	"speakmate/internal/handler"
 	"speakmate/internal/repository"
 	"speakmate/internal/service"
@@ -21,7 +22,8 @@ func New() *gin.Engine {
 	scenarioService := service.NewScenarioService(scenarioRepo)
 	scenarioHandler := handler.NewScenarioHandler(scenarioService)
 	sessionRepo := repository.NewMemorySessionRepository()
-	sessionService := service.NewSessionService(scenarioService, sessionRepo)
+	conversationAgent := agent.NewMockConversationAgent()
+	sessionService := service.NewSessionService(scenarioService, sessionRepo, conversationAgent)
 	sessionHandler := handler.NewSessionHandler(sessionService)
 	messageHandler := handler.NewMessageHandler(sessionService)
 

@@ -128,7 +128,8 @@ Browser
 | 前端技术选型 | 已确定 | 正式前端工程使用 Vite + React + TypeScript |
 | 场景 API（Module 1） | 已完成 | 场景列表和详情接口，见 [docs/api文档/scenario-api-module1-api.md](docs/api文档/scenario-api-module1-api.md) |
 | 训练 Session API（Module 2） | 已完成 | 创建、查询、结束训练 Session，见 [docs/api文档/session-api-module2-api.md](docs/api文档/session-api-module2-api.md) |
-| 消息 API（Module 3） | 已完成 | 发送文本、AI Mock 回复、轮次更新和消息历史查询，见 [docs/api文档/message-api-module3-api.md](docs/api文档/message-api-module3-api.md) |
+| 消息 API（Module 3） | 已完成 | 发送文本、Conversation Agent 回复、轮次更新和消息历史查询，见 [docs/api文档/message-api-module3-api.md](docs/api文档/message-api-module3-api.md) |
+| Conversation Agent 抽象 | 已完成 Mock 版 | 已定义 `ConversationAgent` 接口，当前启动时固定注入 `MockConversationAgent`，暂不请求真实 LLM |
 | AI 纠错与评分 | 规划中 | Conversation、Correction、Scoring、Summary Agent |
 | 语音能力 | 规划中 | 浏览器录音、ASR、WebSocket 音频分片 |
 
@@ -189,6 +190,7 @@ web/preview.html
 speakmate/
 ├── cmd/server/              # 服务入口
 ├── internal/
+│   ├── agent/               # Conversation Agent 抽象和当前 Mock 实现
 │   ├── config/              # 环境配置
 │   ├── handler/             # HTTP Handler
 │   ├── response/            # 统一响应结构
