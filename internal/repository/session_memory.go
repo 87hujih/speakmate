@@ -83,6 +83,36 @@ func (r *MemorySessionRepository) Finish(id int, endedAt time.Time) (model.Sessi
 	return cloneSession(session), nil
 }
 
+// AddMessageTurn 原子地追加一轮用户消息和 AI 消息，并递增 turn_count。
+func (r *MemorySessionRepository) AddMessageTurn(id int, build func(model.Session, int, int) (model.Message, model.Message, error)) (model.Session, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	session, ok := r.sessions[id]
+	if !ok {
+		return model.Session{}, ErrSessionNotFound
+	}
+	if session.Status == model.SessionStatusFinished {
+		return model.Session{}, ErrSessionAlreadyFinished
+	}
+
+	nextMessageID := len(session.Messages) + 1
+	userMessage, aiMessage, err := build(cloneSession(session), nextMessageID, nextMessageID+1)
+	if err != nil {
+		return model.Session{}, err
+	}
+
+	userMessage.ID = nextMessageID
+	userMessage.SessionID = session.ID
+	aiMessage.ID = nextMessageID + 1
+	aiMessage.SessionID = session.ID
+	session.Messages = append(session.Messages, userMessage, aiMessage)
+	session.TurnCount++
+	r.sessions[session.ID] = cloneSession(session)
+
+	return cloneSession(session), nil
+}
+
 func cloneSession(session model.Session) model.Session {
 	if session.Messages != nil {
 		session.Messages = append([]model.Message(nil), session.Messages...)

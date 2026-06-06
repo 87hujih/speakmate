@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"speakmate/internal/model"
@@ -15,6 +16,10 @@ var (
 	ErrSessionNotFound = errors.New("session not found")
 	// ErrSessionAlreadyFinished 表示 Session 已经结束，不能执行运行中操作。
 	ErrSessionAlreadyFinished = errors.New("session already finished")
+	// ErrInvalidMessageRequest 表示发送消息的业务参数非法。
+	ErrInvalidMessageRequest = errors.New("invalid message request")
+	// ErrMessageContentRequired 表示发送消息时用户文本为空。
+	ErrMessageContentRequired = errors.New("message content is required")
 )
 
 // ScenarioReader 定义 Session 服务依赖的场景读取能力。
@@ -27,12 +32,14 @@ type SessionRepository interface {
 	Create(session model.Session) (model.Session, error)
 	FindByID(id int) (model.Session, error)
 	Finish(id int, endedAt time.Time) (model.Session, error)
+	AddMessageTurn(id int, build func(model.Session, int, int) (model.Message, model.Message, error)) (model.Session, error)
 }
 
 // SessionService 封装训练 Session 生命周期业务流程。
 type SessionService struct {
 	scenarioReader ScenarioReader
 	repo           SessionRepository
+	conversation   *ConversationService
 	now            func() time.Time
 }
 
@@ -41,6 +48,7 @@ func NewSessionService(scenarioReader ScenarioReader, repo SessionRepository) *S
 	return &SessionService{
 		scenarioReader: scenarioReader,
 		repo:           repo,
+		conversation:   NewConversationService(),
 		now:            time.Now,
 	}
 }
@@ -61,6 +69,20 @@ type CreateSessionResult struct {
 type GetSessionResult struct {
 	Session  model.Session
 	Scenario model.Scenario
+}
+
+// SendMessageInput 是发送用户文本消息的业务输入。
+type SendMessageInput struct {
+	SessionID int
+	Content   string
+}
+
+// SendMessageResult 是发送消息后的业务输出。
+type SendMessageResult struct {
+	UserMessage model.Message
+	AIMessage   model.Message
+	Stage       string
+	TurnCount   int
 }
 
 // CreateSession 基于有效场景创建 running 状态的训练 Session。
@@ -137,4 +159,70 @@ func (s *SessionService) FinishSession(id int) (model.Session, error) {
 	}
 
 	return session, nil
+}
+
+// SendMessage 保存用户文本，生成场景化 Mock AI 回复，并推进 Session 轮次。
+func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult, error) {
+	if input.SessionID <= 0 {
+		return SendMessageResult{}, ErrInvalidMessageRequest
+	}
+
+	content := strings.TrimSpace(input.Content)
+	if content == "" {
+		return SendMessageResult{}, ErrMessageContentRequired
+	}
+
+	var result SendMessageResult
+	session, err := s.repo.AddMessageTurn(input.SessionID, func(current model.Session, userMessageID int, aiMessageID int) (model.Message, model.Message, error) {
+		scenario, err := s.scenarioReader.GetScenario(current.ScenarioID)
+		if err != nil {
+			if errors.Is(err, ErrScenarioNotFound) {
+				return model.Message{}, model.Message{}, ErrScenarioNotFound
+			}
+
+			return model.Message{}, model.Message{}, err
+		}
+
+		reply := s.conversation.Generate(ConversationInput{
+			Scenario:    scenario,
+			TurnCount:   current.TurnCount,
+			UserContent: content,
+		})
+		createdAt := s.now()
+		userMessage := model.Message{
+			ID:        userMessageID,
+			SessionID: current.ID,
+			Role:      model.MessageRoleUser,
+			Content:   content,
+			Stage:     scenarioStageName(scenario.Stages, current.TurnCount),
+			CreatedAt: createdAt,
+		}
+		aiMessage := model.Message{
+			ID:        aiMessageID,
+			SessionID: current.ID,
+			Role:      model.MessageRoleAssistant,
+			Content:   reply.Content,
+			Stage:     reply.Stage,
+			CreatedAt: createdAt,
+		}
+
+		result.UserMessage = userMessage
+		result.AIMessage = aiMessage
+		result.Stage = reply.Stage
+
+		return userMessage, aiMessage, nil
+	})
+	if err != nil {
+		if errors.Is(err, repository.ErrSessionNotFound) {
+			return SendMessageResult{}, ErrSessionNotFound
+		}
+		if errors.Is(err, repository.ErrSessionAlreadyFinished) {
+			return SendMessageResult{}, ErrSessionAlreadyFinished
+		}
+
+		return SendMessageResult{}, err
+	}
+
+	result.TurnCount = session.TurnCount
+	return result, nil
 }

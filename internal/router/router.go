@@ -23,6 +23,7 @@ func New() *gin.Engine {
 	sessionRepo := repository.NewMemorySessionRepository()
 	sessionService := service.NewSessionService(scenarioService, sessionRepo)
 	sessionHandler := handler.NewSessionHandler(sessionService)
+	messageHandler := handler.NewMessageHandler(sessionService)
 
 	// v1 API 路由组承载场景、训练 Session 和消息等后续接口。
 	api := engine.Group("/api/v1")
@@ -31,6 +32,7 @@ func New() *gin.Engine {
 	api.POST("/sessions", sessionHandler.Create)
 	api.GET("/sessions/:id", sessionHandler.Detail)
 	api.POST("/sessions/:id/finish", sessionHandler.Finish)
+	api.POST("/sessions/:id/messages", messageHandler.Send)
 
 	return engine
 }

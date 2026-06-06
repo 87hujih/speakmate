@@ -3,6 +3,7 @@ bin/
 build/
 dist/
 tmp/
+.tmp/
 *.exe
 *.exe~
 *.dll
@@ -27,7 +28,9 @@ logs/
 /web/preview.html
 
 # Local workspace notes and task files
-/docs/
+/docs/*
+!/docs/api文档/
+!/docs/api文档/*.md
 /AGENT.md
 /tasks/
 /PR提交规范.md
