@@ -177,17 +177,21 @@ func toSessionDetailResponse(result service.GetSessionResult) sessionDetailRespo
 func toMessageResponses(messages []model.Message) []messageResponse {
 	result := make([]messageResponse, 0, len(messages))
 	for _, message := range messages {
-		result = append(result, messageResponse{
-			ID:        message.ID,
-			SessionID: message.SessionID,
-			Role:      string(message.Role),
-			Content:   message.Content,
-			Stage:     message.Stage,
-			CreatedAt: formatTime(message.CreatedAt),
-		})
+		result = append(result, toMessageResponse(message))
 	}
 
 	return result
+}
+
+func toMessageResponse(message model.Message) messageResponse {
+	return messageResponse{
+		ID:        message.ID,
+		SessionID: message.SessionID,
+		Role:      string(message.Role),
+		Content:   message.Content,
+		Stage:     message.Stage,
+		CreatedAt: formatTime(message.CreatedAt),
+	}
 }
 
 func formatOptionalTime(value *time.Time) *string {

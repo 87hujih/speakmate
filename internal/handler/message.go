@@ -6,7 +6,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"speakmate/internal/model"
 	"speakmate/internal/response"
 	"speakmate/internal/service"
 )
@@ -16,12 +15,12 @@ const (
 	messageContentRequiredCode = 3002
 )
 
-// MessageService 定义 Handler 依赖的消息发送业务能力。
+// MessageService 定义消息 Handler 依赖的业务能力。
 type MessageService interface {
 	SendMessage(input service.SendMessageInput) (service.SendMessageResult, error)
 }
 
-// MessageHandler 负责处理 Message API 的 HTTP 请求。
+// MessageHandler 负责处理消息发送 API。
 type MessageHandler struct {
 	service MessageService
 }
@@ -33,9 +32,9 @@ func NewMessageHandler(service MessageService) *MessageHandler {
 	}
 }
 
-// Send 向 running Session 发送用户文本消息并返回 Mock AI 回复。
+// Send 向 running Session 发送一条用户消息，并返回 Mock AI 回复。
 func (h *MessageHandler) Send(c *gin.Context) {
-	sessionID, ok := parsePositiveSessionID(c)
+	id, ok := parsePositiveSessionID(c)
 	if !ok {
 		return
 	}
@@ -47,7 +46,7 @@ func (h *MessageHandler) Send(c *gin.Context) {
 	}
 
 	result, err := h.service.SendMessage(service.SendMessageInput{
-		SessionID: sessionID,
+		SessionID: id,
 		Content:   *req.Content,
 	})
 	if err != nil {
@@ -74,17 +73,6 @@ type sendMessageResponse struct {
 	TurnCount   int             `json:"turn_count"`
 }
 
-func toMessageResponse(message model.Message) messageResponse {
-	return messageResponse{
-		ID:        message.ID,
-		SessionID: message.SessionID,
-		Role:      string(message.Role),
-		Content:   message.Content,
-		Stage:     message.Stage,
-		CreatedAt: formatTime(message.CreatedAt),
-	}
-}
-
 func writeMessageError(c *gin.Context, err error) {
 	if errors.Is(err, service.ErrInvalidMessageRequest) {
 		response.Error(c, http.StatusBadRequest, invalidMessageRequestCode, "invalid message request")
@@ -94,6 +82,18 @@ func writeMessageError(c *gin.Context, err error) {
 		response.Error(c, http.StatusBadRequest, messageContentRequiredCode, "message content is required")
 		return
 	}
+	if errors.Is(err, service.ErrSessionNotFound) {
+		response.Error(c, http.StatusNotFound, sessionNotFoundCode, "session not found")
+		return
+	}
+	if errors.Is(err, service.ErrSessionAlreadyFinished) {
+		response.Error(c, http.StatusConflict, sessionAlreadyFinishedCode, "session already finished")
+		return
+	}
+	if errors.Is(err, service.ErrScenarioNotFound) {
+		response.Error(c, http.StatusNotFound, scenarioNotFoundCode, "scenario not found")
+		return
+	}
 
-	writeSessionError(c, err)
+	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "internal server error")
 }

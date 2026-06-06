@@ -18,7 +18,7 @@ var (
 	ErrSessionAlreadyFinished = errors.New("session already finished")
 	// ErrInvalidMessageRequest 表示发送消息的业务参数非法。
 	ErrInvalidMessageRequest = errors.New("invalid message request")
-	// ErrMessageContentRequired 表示发送消息时用户文本为空。
+	// ErrMessageContentRequired 表示消息内容不能为空。
 	ErrMessageContentRequired = errors.New("message content is required")
 )
 
@@ -32,14 +32,14 @@ type SessionRepository interface {
 	Create(session model.Session) (model.Session, error)
 	FindByID(id int) (model.Session, error)
 	Finish(id int, endedAt time.Time) (model.Session, error)
-	AddMessageTurn(id int, build func(model.Session, int, int) (model.Message, model.Message, error)) (model.Session, error)
+	AppendTurn(id int, userMessage model.Message, aiMessage model.Message) (model.Session, error)
 }
 
 // SessionService 封装训练 Session 生命周期业务流程。
 type SessionService struct {
 	scenarioReader ScenarioReader
 	repo           SessionRepository
-	conversation   *ConversationService
+	conversation   ConversationGenerator
 	now            func() time.Time
 }
 
@@ -48,7 +48,7 @@ func NewSessionService(scenarioReader ScenarioReader, repo SessionRepository) *S
 	return &SessionService{
 		scenarioReader: scenarioReader,
 		repo:           repo,
-		conversation:   NewConversationService(),
+		conversation:   NewMockConversationService(),
 		now:            time.Now,
 	}
 }
@@ -71,7 +71,7 @@ type GetSessionResult struct {
 	Scenario model.Scenario
 }
 
-// SendMessageInput 是发送用户文本消息的业务输入。
+// SendMessageInput 是发送文本消息的业务输入。
 type SendMessageInput struct {
 	SessionID int
 	Content   string
@@ -161,7 +161,7 @@ func (s *SessionService) FinishSession(id int) (model.Session, error) {
 	return session, nil
 }
 
-// SendMessage 保存用户文本，生成场景化 Mock AI 回复，并推进 Session 轮次。
+// SendMessage 保存用户消息，生成 Mock AI 回复，并推进对话轮次。
 func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult, error) {
 	if input.SessionID <= 0 {
 		return SendMessageResult{}, ErrInvalidMessageRequest
@@ -172,46 +172,48 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 		return SendMessageResult{}, ErrMessageContentRequired
 	}
 
-	var result SendMessageResult
-	session, err := s.repo.AddMessageTurn(input.SessionID, func(current model.Session, userMessageID int, aiMessageID int) (model.Message, model.Message, error) {
-		scenario, err := s.scenarioReader.GetScenario(current.ScenarioID)
-		if err != nil {
-			if errors.Is(err, ErrScenarioNotFound) {
-				return model.Message{}, model.Message{}, ErrScenarioNotFound
-			}
-
-			return model.Message{}, model.Message{}, err
+	session, err := s.repo.FindByID(input.SessionID)
+	if err != nil {
+		if errors.Is(err, repository.ErrSessionNotFound) {
+			return SendMessageResult{}, ErrSessionNotFound
 		}
 
-		reply := s.conversation.Generate(ConversationInput{
-			Scenario:    scenario,
-			TurnCount:   current.TurnCount,
-			UserContent: content,
-		})
-		createdAt := s.now()
-		userMessage := model.Message{
-			ID:        userMessageID,
-			SessionID: current.ID,
-			Role:      model.MessageRoleUser,
-			Content:   content,
-			Stage:     scenarioStageName(scenario.Stages, current.TurnCount),
-			CreatedAt: createdAt,
-		}
-		aiMessage := model.Message{
-			ID:        aiMessageID,
-			SessionID: current.ID,
-			Role:      model.MessageRoleAssistant,
-			Content:   reply.Content,
-			Stage:     reply.Stage,
-			CreatedAt: createdAt,
-		}
+		return SendMessageResult{}, err
+	}
+	if session.Status == model.SessionStatusFinished {
+		return SendMessageResult{}, ErrSessionAlreadyFinished
+	}
 
-		result.UserMessage = userMessage
-		result.AIMessage = aiMessage
-		result.Stage = reply.Stage
+	scenario, err := s.scenarioReader.GetScenario(session.ScenarioID)
+	if err != nil {
+		return SendMessageResult{}, err
+	}
 
-		return userMessage, aiMessage, nil
+	conversation := s.conversation
+	if conversation == nil {
+		conversation = NewMockConversationService()
+	}
+	reply := conversation.GenerateReply(ConversationInput{
+		Scenario:    scenario,
+		Session:     session,
+		UserContent: content,
 	})
+
+	createdAt := s.now()
+	userMessage := model.Message{
+		Role:      model.MessageRoleUser,
+		Content:   content,
+		Stage:     stageNameForTurn(scenario.Stages, session.TurnCount),
+		CreatedAt: createdAt,
+	}
+	aiMessage := model.Message{
+		Role:      model.MessageRoleAI,
+		Content:   reply.Content,
+		Stage:     reply.Stage,
+		CreatedAt: createdAt,
+	}
+
+	updated, err := s.repo.AppendTurn(session.ID, userMessage, aiMessage)
 	if err != nil {
 		if errors.Is(err, repository.ErrSessionNotFound) {
 			return SendMessageResult{}, ErrSessionNotFound
@@ -222,7 +224,18 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 
 		return SendMessageResult{}, err
 	}
+	if len(updated.Messages) < 2 {
+		return SendMessageResult{}, errors.New("append turn returned incomplete messages")
+	}
 
-	result.TurnCount = session.TurnCount
-	return result, nil
+	messages := updated.Messages
+	savedUserMessage := messages[len(messages)-2]
+	savedAIMessage := messages[len(messages)-1]
+
+	return SendMessageResult{
+		UserMessage: savedUserMessage,
+		AIMessage:   savedAIMessage,
+		Stage:       savedAIMessage.Stage,
+		TurnCount:   updated.TurnCount,
+	}, nil
 }

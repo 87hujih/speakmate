@@ -8,10 +8,8 @@ type MessageRole string
 const (
 	// MessageRoleUser 表示用户发送的消息。
 	MessageRoleUser MessageRole = "user"
-	// MessageRoleAssistant 表示 AI 助手发送的消息。
-	MessageRoleAssistant MessageRole = "assistant"
-	// MessageRoleAI 保留旧命名，值与 assistant 响应契约一致。
-	MessageRoleAI MessageRole = MessageRoleAssistant
+	// MessageRoleAI 表示 AI 发送的消息。
+	MessageRoleAI MessageRole = "ai"
 )
 
 // Message 表示训练 Session 中的一条对话消息。
