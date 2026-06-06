@@ -50,3 +50,83 @@ func TestNewConversationAgentReturnsLLMAgentWhenConfigured(t *testing.T) {
 		t.Fatalf("agent type = %T, want *agent.LLMConversationAgent", got)
 	}
 }
+
+func TestNewCorrectionAgentReturnsLLMAgentWhenConfigured(t *testing.T) {
+	got := NewCorrectionAgent(config.Config{
+		LLM: config.LLMConfig{
+			UseMock:        false,
+			Provider:       "openai-compatible",
+			BaseURL:        "https://llm.example.com/v1",
+			APIKey:         "test-key",
+			Model:          "test-model",
+			TimeoutSeconds: 30,
+		},
+		Feedback: config.FeedbackConfig{
+			CorrectionUseMock: false,
+		},
+	})
+
+	if _, ok := got.(*agent.LLMCorrectionAgent); !ok {
+		t.Fatalf("agent type = %T, want *agent.LLMCorrectionAgent", got)
+	}
+}
+
+func TestNewCorrectionAgentReturnsMockWhenLLMMockEnabled(t *testing.T) {
+	got := NewCorrectionAgent(config.Config{
+		LLM: config.LLMConfig{
+			UseMock:        true,
+			Provider:       "openai-compatible",
+			BaseURL:        "https://llm.example.com/v1",
+			APIKey:         "test-key",
+			Model:          "test-model",
+			TimeoutSeconds: 30,
+		},
+		Feedback: config.FeedbackConfig{
+			CorrectionUseMock: false,
+		},
+	})
+
+	if _, ok := got.(*agent.MockCorrectionAgent); !ok {
+		t.Fatalf("agent type = %T, want *agent.MockCorrectionAgent", got)
+	}
+}
+
+func TestNewScoringAgentReturnsLLMAgentWhenConfigured(t *testing.T) {
+	got := NewScoringAgent(config.Config{
+		LLM: config.LLMConfig{
+			UseMock:        false,
+			Provider:       "openai-compatible",
+			BaseURL:        "https://llm.example.com/v1",
+			APIKey:         "test-key",
+			Model:          "test-model",
+			TimeoutSeconds: 30,
+		},
+		Feedback: config.FeedbackConfig{
+			ScoringUseMock: false,
+		},
+	})
+
+	if _, ok := got.(*agent.LLMScoringAgent); !ok {
+		t.Fatalf("agent type = %T, want *agent.LLMScoringAgent", got)
+	}
+}
+
+func TestNewScoringAgentReturnsMockWhenLLMMockEnabled(t *testing.T) {
+	got := NewScoringAgent(config.Config{
+		LLM: config.LLMConfig{
+			UseMock:        true,
+			Provider:       "openai-compatible",
+			BaseURL:        "https://llm.example.com/v1",
+			APIKey:         "test-key",
+			Model:          "test-model",
+			TimeoutSeconds: 30,
+		},
+		Feedback: config.FeedbackConfig{
+			ScoringUseMock: false,
+		},
+	})
+
+	if _, ok := got.(*agent.MockScoringAgent); !ok {
+		t.Fatalf("agent type = %T, want *agent.MockScoringAgent", got)
+	}
+}
