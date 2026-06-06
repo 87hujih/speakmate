@@ -23,6 +23,9 @@ coverage.html
 *.log
 logs/
 
+# Local frontend prototype
+/web/preview.html
+
 # Environment and local config
 .env
 .env.*
