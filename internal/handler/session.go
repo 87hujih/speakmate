@@ -134,6 +134,7 @@ type messageResponse struct {
 	SessionID int    `json:"session_id"`
 	Role      string `json:"role"`
 	Content   string `json:"content"`
+	Stage     string `json:"stage"`
 	CreatedAt string `json:"created_at"`
 }
 
@@ -181,6 +182,7 @@ func toMessageResponses(messages []model.Message) []messageResponse {
 			SessionID: message.SessionID,
 			Role:      string(message.Role),
 			Content:   message.Content,
+			Stage:     message.Stage,
 			CreatedAt: formatTime(message.CreatedAt),
 		})
 	}

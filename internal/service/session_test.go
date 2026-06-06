@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,6 +92,187 @@ func TestSessionServiceRejectsAlreadyFinishedSession(t *testing.T) {
 	}
 }
 
+func TestSessionServiceSendMessageAppendsUserAndAssistantMessages(t *testing.T) {
+	scenarioReader := fakeScenarioReader{
+		scenarios: map[int]model.Scenario{
+			1: {
+				ID:   1,
+				Code: "interview",
+				Stages: []model.ScenarioStage{
+					{Name: "自我介绍"},
+					{Name: "项目经历"},
+					{Name: "技术追问"},
+				},
+			},
+		},
+	}
+	sessionRepo := repository.NewMemorySessionRepository()
+	sessionService := service.NewSessionService(scenarioReader, sessionRepo)
+	created, err := sessionService.CreateSession(service.CreateSessionInput{ScenarioID: 1})
+	if err != nil {
+		t.Fatalf("CreateSession returned error: %v", err)
+	}
+
+	result, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.Session.ID,
+		Content:   "  I built a robot control project last semester.  ",
+	})
+	if err != nil {
+		t.Fatalf("SendMessage returned error: %v", err)
+	}
+
+	if result.TurnCount != 1 {
+		t.Fatalf("turn count = %d, want 1", result.TurnCount)
+	}
+	if result.Stage != "项目经历" {
+		t.Fatalf("stage = %q, want %q", result.Stage, "项目经历")
+	}
+	if result.UserMessage.ID != 1 {
+		t.Fatalf("user message id = %d, want 1", result.UserMessage.ID)
+	}
+	if result.UserMessage.SessionID != created.Session.ID {
+		t.Fatalf("user message session id = %d, want %d", result.UserMessage.SessionID, created.Session.ID)
+	}
+	if result.UserMessage.Role != model.MessageRoleUser {
+		t.Fatalf("user message role = %q, want %q", result.UserMessage.Role, model.MessageRoleUser)
+	}
+	if result.UserMessage.Content != "I built a robot control project last semester." {
+		t.Fatalf("user message content = %q, want trimmed content", result.UserMessage.Content)
+	}
+	if result.UserMessage.Stage != "自我介绍" {
+		t.Fatalf("user message stage = %q, want %q", result.UserMessage.Stage, "自我介绍")
+	}
+	if result.UserMessage.CreatedAt.IsZero() {
+		t.Fatal("user message created_at is zero")
+	}
+	if result.AIMessage.ID != 2 {
+		t.Fatalf("ai message id = %d, want 2", result.AIMessage.ID)
+	}
+	if result.AIMessage.Role != model.MessageRoleAssistant {
+		t.Fatalf("ai message role = %q, want %q", result.AIMessage.Role, model.MessageRoleAssistant)
+	}
+	if result.AIMessage.Stage != "项目经历" {
+		t.Fatalf("ai message stage = %q, want %q", result.AIMessage.Stage, "项目经历")
+	}
+	if !strings.Contains(strings.ToLower(result.AIMessage.Content), "project") {
+		t.Fatalf("ai message content = %q, want interview project-related reply", result.AIMessage.Content)
+	}
+
+	detail, err := sessionService.GetSession(created.Session.ID)
+	if err != nil {
+		t.Fatalf("GetSession returned error: %v", err)
+	}
+	if detail.Session.TurnCount != 1 {
+		t.Fatalf("persisted turn count = %d, want 1", detail.Session.TurnCount)
+	}
+	if len(detail.Session.Messages) != 2 {
+		t.Fatalf("persisted message count = %d, want 2", len(detail.Session.Messages))
+	}
+	if detail.Session.Messages[0].Content != result.UserMessage.Content {
+		t.Fatalf("persisted user content = %q, want %q", detail.Session.Messages[0].Content, result.UserMessage.Content)
+	}
+	if detail.Session.Messages[1].Content != result.AIMessage.Content {
+		t.Fatalf("persisted ai content = %q, want %q", detail.Session.Messages[1].Content, result.AIMessage.Content)
+	}
+}
+
+func TestSessionServiceSendMessageAdvancesTurnCount(t *testing.T) {
+	scenarioReader := fakeScenarioReader{
+		scenarios: map[int]model.Scenario{
+			1: {
+				ID:   1,
+				Code: "meeting",
+				Stages: []model.ScenarioStage{
+					{Name: "进度同步"},
+					{Name: "观点表达"},
+					{Name: "澄清确认"},
+				},
+			},
+		},
+	}
+	sessionRepo := repository.NewMemorySessionRepository()
+	sessionService := service.NewSessionService(scenarioReader, sessionRepo)
+	created, err := sessionService.CreateSession(service.CreateSessionInput{ScenarioID: 1})
+	if err != nil {
+		t.Fatalf("CreateSession returned error: %v", err)
+	}
+
+	first, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.Session.ID,
+		Content:   "The API work is mostly finished.",
+	})
+	if err != nil {
+		t.Fatalf("first SendMessage returned error: %v", err)
+	}
+	second, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.Session.ID,
+		Content:   "I think we should prioritize the report page.",
+	})
+	if err != nil {
+		t.Fatalf("second SendMessage returned error: %v", err)
+	}
+
+	if first.TurnCount != 1 {
+		t.Fatalf("first turn count = %d, want 1", first.TurnCount)
+	}
+	if second.TurnCount != 2 {
+		t.Fatalf("second turn count = %d, want 2", second.TurnCount)
+	}
+	if second.UserMessage.ID != 3 || second.AIMessage.ID != 4 {
+		t.Fatalf("second message ids = %d/%d, want 3/4", second.UserMessage.ID, second.AIMessage.ID)
+	}
+	if second.Stage != "澄清确认" {
+		t.Fatalf("second stage = %q, want %q", second.Stage, "澄清确认")
+	}
+}
+
+func TestSessionServiceSendMessageRejectsEmptyContent(t *testing.T) {
+	sessionService := service.NewSessionService(fakeScenarioReader{}, repository.NewMemorySessionRepository())
+
+	_, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: 1,
+		Content:   "   ",
+	})
+
+	if !errors.Is(err, service.ErrMessageContentRequired) {
+		t.Fatalf("error = %v, want ErrMessageContentRequired", err)
+	}
+}
+
+func TestSessionServiceSendMessageRejectsFinishedSession(t *testing.T) {
+	scenarioReader := fakeScenarioReader{
+		scenarios: map[int]model.Scenario{
+			1: {
+				ID:   1,
+				Code: "restaurant",
+				Stages: []model.ScenarioStage{
+					{Name: "询问菜单"},
+					{Name: "表达偏好"},
+					{Name: "确认订单"},
+				},
+			},
+		},
+	}
+	sessionRepo := repository.NewMemorySessionRepository()
+	sessionService := service.NewSessionService(scenarioReader, sessionRepo)
+	created, err := sessionService.CreateSession(service.CreateSessionInput{ScenarioID: 1})
+	if err != nil {
+		t.Fatalf("CreateSession returned error: %v", err)
+	}
+	if _, err := sessionService.FinishSession(created.Session.ID); err != nil {
+		t.Fatalf("FinishSession returned error: %v", err)
+	}
+
+	_, err = sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.Session.ID,
+		Content:   "Can I have the soup?",
+	})
+
+	if !errors.Is(err, service.ErrSessionAlreadyFinished) {
+		t.Fatalf("error = %v, want ErrSessionAlreadyFinished", err)
+	}
+}
+
 type fakeScenarioReader struct {
 	scenarios map[int]model.Scenario
 }
@@ -147,6 +329,27 @@ func (r *fakeSessionRepository) Finish(id int, endedAt time.Time) (model.Session
 
 	session.Status = model.SessionStatusFinished
 	session.EndedAt = &endedAt
+	r.sessions[id] = session
+
+	return session, nil
+}
+
+func (r *fakeSessionRepository) AddMessageTurn(id int, build func(model.Session, int, int) (model.Message, model.Message, error)) (model.Session, error) {
+	session, ok := r.sessions[id]
+	if !ok {
+		return model.Session{}, repository.ErrSessionNotFound
+	}
+	if session.Status == model.SessionStatusFinished {
+		return model.Session{}, repository.ErrSessionAlreadyFinished
+	}
+
+	nextID := len(session.Messages) + 1
+	userMessage, aiMessage, err := build(session, nextID, nextID+1)
+	if err != nil {
+		return model.Session{}, err
+	}
+	session.Messages = append(session.Messages, userMessage, aiMessage)
+	session.TurnCount++
 	r.sessions[id] = session
 
 	return session, nil

@@ -8,8 +8,10 @@ type MessageRole string
 const (
 	// MessageRoleUser 表示用户发送的消息。
 	MessageRoleUser MessageRole = "user"
-	// MessageRoleAI 表示 AI 发送的消息。
-	MessageRoleAI MessageRole = "ai"
+	// MessageRoleAssistant 表示 AI 助手发送的消息。
+	MessageRoleAssistant MessageRole = "assistant"
+	// MessageRoleAI 保留旧命名，值与 assistant 响应契约一致。
+	MessageRoleAI MessageRole = MessageRoleAssistant
 )
 
 // Message 表示训练 Session 中的一条对话消息。
@@ -22,6 +24,8 @@ type Message struct {
 	Role MessageRole `json:"role"`
 	// Content 是消息文本内容。
 	Content string `json:"content"`
+	// Stage 是消息所属的训练阶段。
+	Stage string `json:"stage"`
 	// CreatedAt 是消息创建时间。
 	CreatedAt time.Time `json:"created_at"`
 }

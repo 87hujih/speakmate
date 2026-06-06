@@ -475,6 +475,239 @@ func TestSessionFinishTwiceReturnsConflict(t *testing.T) {
 	assertErrorResponse(t, secondRec, http.StatusConflict, 2004, "session already finished")
 }
 
+// TestSessionMessageSendReturnsMockConversation 验证发送文本消息后返回用户消息、AI 回复和递增后的轮次。
+func TestSessionMessageSendReturnsMockConversation(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/messages", bytes.NewBufferString(`{"content":"I built a robot control project."}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var body struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Data    struct {
+			UserMessage struct {
+				ID        int    `json:"id"`
+				SessionID int    `json:"session_id"`
+				Role      string `json:"role"`
+				Content   string `json:"content"`
+				Stage     string `json:"stage"`
+				CreatedAt string `json:"created_at"`
+			} `json:"user_message"`
+			AIMessage struct {
+				ID        int    `json:"id"`
+				SessionID int    `json:"session_id"`
+				Role      string `json:"role"`
+				Content   string `json:"content"`
+				Stage     string `json:"stage"`
+				CreatedAt string `json:"created_at"`
+			} `json:"ai_message"`
+			Stage     string `json:"stage"`
+			TurnCount int    `json:"turn_count"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+
+	if body.Code != 0 {
+		t.Fatalf("code = %d, want 0", body.Code)
+	}
+	if body.Message != "success" {
+		t.Fatalf("message = %q, want %q", body.Message, "success")
+	}
+	if body.Data.UserMessage.ID != 1 || body.Data.AIMessage.ID != 2 {
+		t.Fatalf("message ids = %d/%d, want 1/2", body.Data.UserMessage.ID, body.Data.AIMessage.ID)
+	}
+	if body.Data.UserMessage.SessionID != sessionID || body.Data.AIMessage.SessionID != sessionID {
+		t.Fatalf("message session ids = %d/%d, want %d", body.Data.UserMessage.SessionID, body.Data.AIMessage.SessionID, sessionID)
+	}
+	if body.Data.UserMessage.Role != "user" {
+		t.Fatalf("user role = %q, want %q", body.Data.UserMessage.Role, "user")
+	}
+	if body.Data.AIMessage.Role != "assistant" {
+		t.Fatalf("ai role = %q, want %q", body.Data.AIMessage.Role, "assistant")
+	}
+	if body.Data.UserMessage.Stage != "自我介绍" {
+		t.Fatalf("user stage = %q, want %q", body.Data.UserMessage.Stage, "自我介绍")
+	}
+	if body.Data.Stage != "项目经历" || body.Data.AIMessage.Stage != "项目经历" {
+		t.Fatalf("stage = %q/%q, want 项目经历", body.Data.Stage, body.Data.AIMessage.Stage)
+	}
+	if !strings.Contains(strings.ToLower(body.Data.AIMessage.Content), "project") {
+		t.Fatalf("ai content = %q, want project-related reply", body.Data.AIMessage.Content)
+	}
+	if body.Data.TurnCount != 1 {
+		t.Fatalf("turn_count = %d, want 1", body.Data.TurnCount)
+	}
+	if _, err := time.Parse(time.RFC3339, body.Data.UserMessage.CreatedAt); err != nil {
+		t.Fatalf("user created_at is not RFC3339: %v", err)
+	}
+	if _, err := time.Parse(time.RFC3339, body.Data.AIMessage.CreatedAt); err != nil {
+		t.Fatalf("ai created_at is not RFC3339: %v", err)
+	}
+}
+
+// TestSessionMessageSendPersistsMessagesInSessionDetail 验证发送消息后查询 Session 能看到消息历史。
+func TestSessionMessageSendPersistsMessagesInSessionDetail(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+	sendMessage(t, engine, sessionID, "I worked on the backend service.")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+strconv.Itoa(sessionID), nil)
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var body struct {
+		Data struct {
+			TurnCount int `json:"turn_count"`
+			Messages  []struct {
+				ID        int    `json:"id"`
+				SessionID int    `json:"session_id"`
+				Role      string `json:"role"`
+				Content   string `json:"content"`
+				Stage     string `json:"stage"`
+				CreatedAt string `json:"created_at"`
+			} `json:"messages"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+
+	if body.Data.TurnCount != 1 {
+		t.Fatalf("turn_count = %d, want 1", body.Data.TurnCount)
+	}
+	if len(body.Data.Messages) != 2 {
+		t.Fatalf("messages length = %d, want 2", len(body.Data.Messages))
+	}
+	if body.Data.Messages[0].Role != "user" || body.Data.Messages[1].Role != "assistant" {
+		t.Fatalf("message roles = %q/%q, want user/assistant", body.Data.Messages[0].Role, body.Data.Messages[1].Role)
+	}
+	if body.Data.Messages[0].Stage == "" || body.Data.Messages[1].Stage == "" {
+		t.Fatalf("message stages should not be empty: %#v", body.Data.Messages)
+	}
+}
+
+// TestSessionMessageSendRejectsInvalidRequests 验证消息接口错误语义保持统一结构。
+func TestSessionMessageSendRejectsInvalidRequests(t *testing.T) {
+	tests := []struct {
+		name       string
+		setup      func(t *testing.T, engine http.Handler) int
+		pathID     string
+		body       string
+		httpStatus int
+		code       int
+		message    string
+	}{
+		{
+			name: "invalid session id",
+			setup: func(t *testing.T, engine http.Handler) int {
+				t.Helper()
+				return 0
+			},
+			pathID:     "abc",
+			body:       `{"content":"hello"}`,
+			httpStatus: http.StatusBadRequest,
+			code:       2002,
+			message:    "invalid session id",
+		},
+		{
+			name: "invalid json",
+			setup: func(t *testing.T, engine http.Handler) int {
+				t.Helper()
+				return createSession(t, engine, 1)
+			},
+			body:       `{`,
+			httpStatus: http.StatusBadRequest,
+			code:       3001,
+			message:    "invalid message request",
+		},
+		{
+			name: "missing content",
+			setup: func(t *testing.T, engine http.Handler) int {
+				t.Helper()
+				return createSession(t, engine, 1)
+			},
+			body:       `{}`,
+			httpStatus: http.StatusBadRequest,
+			code:       3001,
+			message:    "invalid message request",
+		},
+		{
+			name: "empty content",
+			setup: func(t *testing.T, engine http.Handler) int {
+				t.Helper()
+				return createSession(t, engine, 1)
+			},
+			body:       `{"content":"   "}`,
+			httpStatus: http.StatusBadRequest,
+			code:       3002,
+			message:    "message content is required",
+		},
+		{
+			name: "session not found",
+			setup: func(t *testing.T, engine http.Handler) int {
+				t.Helper()
+				return 999
+			},
+			body:       `{"content":"hello"}`,
+			httpStatus: http.StatusNotFound,
+			code:       2003,
+			message:    "session not found",
+		},
+		{
+			name: "finished session",
+			setup: func(t *testing.T, engine http.Handler) int {
+				t.Helper()
+				sessionID := createSession(t, engine, 1)
+				req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/finish", nil)
+				rec := httptest.NewRecorder()
+				engine.ServeHTTP(rec, req)
+				if rec.Code != http.StatusOK {
+					t.Fatalf("finish session status code = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+				}
+				return sessionID
+			},
+			body:       `{"content":"hello"}`,
+			httpStatus: http.StatusConflict,
+			code:       2004,
+			message:    "session already finished",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := New()
+			sessionID := tt.setup(t, engine)
+			pathID := tt.pathID
+			if pathID == "" {
+				pathID = strconv.Itoa(sessionID)
+			}
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+pathID+"/messages", bytes.NewBufferString(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			engine.ServeHTTP(rec, req)
+
+			assertErrorResponse(t, rec, tt.httpStatus, tt.code, tt.message)
+		})
+	}
+}
+
 func createSession(t *testing.T, engine http.Handler, scenarioID int) int {
 	t.Helper()
 
@@ -501,6 +734,24 @@ func createSession(t *testing.T, engine http.Handler, scenarioID int) int {
 	}
 
 	return body.Data.SessionID
+}
+
+func sendMessage(t *testing.T, engine http.Handler, sessionID int, content string) {
+	t.Helper()
+
+	payload, err := json.Marshal(map[string]string{"content": content})
+	if err != nil {
+		t.Fatalf("marshal message payload returned error: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/messages", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send message status code = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
 }
 
 func assertErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, httpStatus int, code int, message string) {
