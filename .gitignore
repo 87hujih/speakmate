@@ -1,0 +1,36 @@
+# Go build artifacts
+bin/
+build/
+dist/
+tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/speakmate
+/speakmate.exe
+
+# Test coverage and profiles
+coverage.out
+coverage.html
+*.coverprofile
+*.prof
+
+# Logs
+*.log
+logs/
+
+# Environment and local config
+.env
+.env.*
+!.env.example
+
+# Editor and OS files
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

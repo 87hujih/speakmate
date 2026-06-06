@@ -4,7 +4,7 @@
 
 SpeakMate AI 不是一个开放闲聊机器人。它更像一个有训练目标的英语陪练教练：先给用户一个具体场景，再通过 AI 追问推动对话，最后把用户的表达问题整理成可执行的练习建议。
 
-本项目面向七牛云 XEngineer 暑期实训营「AI 英语口语陪练」议题设计。当前仓库已完成 Go + Gin 后端基础骨架和静态前端原型，完整技术方案见 [docs/project-blueprint.md](docs/project-blueprint.md)。
+本项目面向七牛云 XEngineer 暑期实训营「AI 英语口语陪练」议题设计。当前仓库已完成 Go + Gin 后端基础骨架和静态前端原型，并确定正式前端技术栈为 Vite + React + TypeScript。完整技术方案见 [docs/project-blueprint.md](docs/project-blueprint.md)。
 
 ## 项目背景
 
@@ -125,6 +125,7 @@ Browser
 | 配置加载 | 已完成 | 支持 `APP_PORT`，默认端口 `8080` |
 | 统一响应结构 | 已完成 | 成功响应格式为 `{ code, message, data }` |
 | 前端原型 | 已完成 | [web/preview.html](web/preview.html) 展示训练、对话、报告和历史记录页面 |
+| 前端技术选型 | 已确定 | 正式前端工程使用 Vite + React + TypeScript |
 | 场景与训练 API | 规划中 | 场景列表、创建训练、发送消息、结束训练 |
 | AI 纠错与评分 | 规划中 | Conversation、Correction、Scoring、Summary Agent |
 | 语音能力 | 规划中 | 浏览器录音、ASR、WebSocket 音频分片 |
@@ -137,7 +138,8 @@ Browser
 | AI 编排 | Eino |
 | 实时通信 | SSE、WebSocket |
 | 数据存储 | MySQL、Redis |
-| 前端原型 | HTML、CSS、JavaScript |
+| 前端 | Vite、React、TypeScript |
+| 当前原型 | HTML、CSS、JavaScript |
 
 ## 快速开始
 
@@ -177,7 +179,7 @@ go test ./...
 web/preview.html
 ```
 
-该页面是静态交互原型，用于展示目标产品体验，不依赖后端接口。
+该页面是静态交互原型，用于展示目标产品体验，不依赖后端接口。正式前端工程后续将在 `web/` 目录下使用 Vite + React + TypeScript 初始化。
 
 ## 项目结构
 
@@ -189,7 +191,8 @@ speakmate/
 │   ├── handler/             # HTTP Handler
 │   ├── response/            # 统一响应结构
 │   └── router/              # Gin 路由
-├── web/preview.html         # 前端交互原型
+├── web/                     # 前端目录，后续使用 Vite + React + TypeScript
+│   └── preview.html         # 当前静态交互原型
 ├── docs/project-blueprint.md # 完整产品与技术方案
 ├── go.mod
 ├── go.sum
@@ -205,4 +208,3 @@ speakmate/
 - 接入 ASR，支持浏览器录音和语音识别；
 - 使用 MySQL 保存训练记录和报告；
 - 使用 Redis 管理训练过程中的上下文和临时状态。
-

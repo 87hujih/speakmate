@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpeakMate UI Prototype</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --panel: #ffffff;
+      --panel-2: rgba(255,255,255,.82);
+      --text: #0f172a;
+      --muted: #64748b;
+      --subtle: #94a3b8;
+      --line: #e2e8f0;
+      --blue: #2563eb;
+      --blue-2: #3b82f6;
+      --purple: #7c3aed;
+      --violet: #8b5cf6;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --shadow: 0 20px 50px rgba(15,23,42,.08);
+      --shadow-sm: 0 10px 25px rgba(15,23,42,.06);
+      --radius: 24px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--text); background: radial-gradient(circle at top left, rgba(37,99,235,.12), transparent 34%), radial-gradient(circle at 80% 10%, rgba(124,58,237,.11), transparent 30%), var(--bg); }
+    body { overflow-x: hidden; }
+    button { font: inherit; }
+    .app { min-height: 100vh; }
+    .topbar {
+      height: 72px; display: flex; align-items: center; justify-content: space-between; padding: 0 38px; position: sticky; top: 0; z-index: 20;
+      backdrop-filter: blur(18px); background: rgba(248,250,252,.78); border-bottom: 1px solid rgba(226,232,240,.72);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 850; letter-spacing: -.02em; font-size: 21px; }
+    .logo { width: 38px; height: 38px; border-radius: 14px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, var(--blue), var(--purple)); box-shadow: 0 12px 26px rgba(37,99,235,.28); }
+    .nav { display: flex; gap: 8px; align-items: center; }
+    .nav button { border: 0; background: transparent; color: var(--muted); padding: 10px 14px; border-radius: 999px; cursor: pointer; transition: .18s ease; }
+    .nav button:hover, .nav button.active { background: #fff; color: var(--blue); box-shadow: var(--shadow-sm); }
+    .github { padding: 10px 14px; border: 1px solid var(--line); border-radius: 999px; color: var(--text); background: #fff; text-decoration: none; font-size: 14px; }
+    .screen { display: none; animation: fade .25s ease; }
+    .screen.active { display: block; }
+    @keyframes fade { from { opacity: .2; transform: translateY(5px);} to { opacity: 1; transform: translateY(0);} }
+    .container { max-width: 1200px; margin: 0 auto; padding: 42px 26px 70px; }
+    .hero { display: grid; grid-template-columns: 1.08fr .92fr; gap: 30px; align-items: center; margin-top: 18px; }
+    .hero-card { position: relative; overflow: hidden; min-height: 410px; padding: 48px; border-radius: 34px; background: linear-gradient(135deg, rgba(37,99,235,.97), rgba(124,58,237,.95)); color: #fff; box-shadow: 0 30px 70px rgba(37,99,235,.22); }
+    .hero-card:before { content:""; position: absolute; width: 360px; height: 360px; border-radius: 50%; background: rgba(255,255,255,.13); right: -110px; top: -130px; }
+    .hero-card:after { content:""; position: absolute; width: 240px; height: 240px; border-radius: 50%; background: rgba(255,255,255,.09); left: -90px; bottom: -110px; }
+    .eyebrow { display:inline-flex; align-items:center; gap:8px; padding: 8px 12px; border-radius: 999px; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.22); font-size: 13px; font-weight: 700; }
+    .hero h1 { margin: 24px 0 14px; font-size: 54px; line-height: 1.02; letter-spacing: -.055em; }
+    .hero p { max-width: 560px; line-height: 1.8; color: rgba(255,255,255,.82); font-size: 17px; margin: 0; }
+    .hero-actions { display: flex; gap: 14px; margin-top: 32px; }
+    .btn { border: 0; padding: 13px 18px; border-radius: 15px; cursor: pointer; font-weight: 800; transition: .18s ease; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+    .btn.primary { background: linear-gradient(135deg, var(--blue), var(--purple)); color: #fff; box-shadow: 0 14px 28px rgba(37,99,235,.23); }
+    .hero-card .btn.primary { background: #fff; color: var(--blue); box-shadow: none; }
+    .btn.secondary { background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.25); }
+    .btn.ghost { background: #fff; color: var(--text); border: 1px solid var(--line); }
+    .btn.danger { background: #fff1f2; color: #e11d48; border: 1px solid #ffe4e6; }
+    .btn:hover { transform: translateY(-1px); }
+    .hero-preview { background: rgba(255,255,255,.78); border: 1px solid rgba(226,232,240,.78); box-shadow: var(--shadow); border-radius: 34px; padding: 22px; backdrop-filter: blur(18px); }
+    .mini-window { border-radius: 26px; overflow: hidden; background: #fff; border: 1px solid var(--line); }
+    .window-bar { height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: #f8fafc; border-bottom: 1px solid var(--line); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #cbd5e1; }
+    .dot:nth-child(1) { background: #fb7185; }
+    .dot:nth-child(2) { background: #fbbf24; }
+    .dot:nth-child(3) { background: #34d399; }
+    .mini-content { padding: 18px; }
+    .bubble { max-width: 86%; padding: 13px 15px; border-radius: 18px; margin: 10px 0; font-size: 14px; line-height: 1.58; }
+    .bubble.ai { background: #eff6ff; color: #1e3a8a; border-top-left-radius: 7px; }
+    .bubble.user { margin-left: auto; background: #f5f3ff; color: #4c1d95; border-top-right-radius: 7px; }
+    .coach-card { margin-top: 18px; padding: 16px; border-radius: 20px; background: linear-gradient(135deg, #ffffff, #f8fafc); border: 1px solid var(--line); box-shadow: var(--shadow-sm); }
+    .score-row { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; margin: 10px 0 5px; }
+    .bar { height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--purple)); }
+    .section-title { display: flex; align-items: flex-end; justify-content: space-between; margin: 46px 0 18px; }
+    .section-title h2 { margin: 0; font-size: 30px; letter-spacing: -.035em; }
+    .section-title p { margin: 8px 0 0; color: var(--muted); }
+    .scenario-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .scenario { background: rgba(255,255,255,.86); border: 1px solid var(--line); border-radius: 28px; padding: 24px; box-shadow: var(--shadow-sm); transition: .2s ease; position: relative; overflow: hidden; }
+    .scenario:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
+    .scenario:before { content:""; position:absolute; inset:0 0 auto 0; height: 5px; background: linear-gradient(90deg, var(--blue), var(--purple)); }
+    .scenario-icon { width: 54px; height: 54px; border-radius: 20px; background: #eff6ff; display: grid; place-items: center; font-size: 26px; margin-bottom: 18px; }
+    .scenario h3 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+    .scenario .en { color: var(--muted); font-weight: 700; font-size: 13px; margin-top: 4px; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 800; margin: 15px 6px 4px 0; }
+    .scenario ul { padding: 0; list-style: none; margin: 16px 0 22px; color: var(--muted); line-height: 1.85; font-size: 14px; }
+    .scenario li:before { content: "✓"; color: var(--green); font-weight: 900; margin-right: 8px; }
+
+    /* Training */
+    .training-shell { height: calc(100vh - 72px); min-height: 780px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+    .training-top { height: 62px; background: rgba(255,255,255,.82); border: 1px solid var(--line); border-radius: 24px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px 0 22px; box-shadow: var(--shadow-sm); }
+    .train-title { display: flex; align-items: center; gap: 14px; }
+    .badge { padding: 7px 10px; border-radius: 999px; background: #eef2ff; color: #4338ca; font-size: 12px; font-weight: 900; }
+    .timer { display: flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 800; }
+    .live-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; box-shadow: 0 0 0 6px rgba(16,185,129,.12); }
+    .training-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 276px minmax(520px, 1fr) 380px; gap: 14px; }
+    .train-panel { background: rgba(255,255,255,.88); border: 1px solid var(--line); border-radius: 26px; box-shadow: var(--shadow-sm); min-height: 0; overflow: hidden; }
+    .side-panel { padding: 22px; }
+    .panel-caption { color: var(--subtle); font-size: 12px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 12px; }
+    .role-card { padding: 16px; border-radius: 20px; background: linear-gradient(135deg,#eff6ff,#f5f3ff); border: 1px solid #dbeafe; margin-bottom: 20px; }
+    .role-card strong { display:block; margin-bottom: 5px; }
+    .role-card p { margin: 0; color: var(--muted); line-height: 1.6; font-size: 13px; }
+    .task-list { display: grid; gap: 10px; margin: 0 0 20px; }
+    .task { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 15px; background: #f8fafc; color: #475569; font-size: 14px; border: 1px solid transparent; }
+    .task.done { background: #ecfdf5; color: #047857; }
+    .task.active { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+    .check { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: #e2e8f0; color: #64748b; font-size: 12px; font-weight: 900; flex: none; }
+    .done .check { background: var(--green); color: #fff; }
+    .active .check { background: var(--blue); color: #fff; }
+    .focus-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+    .focus-tags span { padding: 8px 10px; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 800; }
+    .chat-panel { display: flex; flex-direction: column; }
+    .chat-scroll { flex: 1; overflow: auto; padding: 24px; }
+    .message { display: flex; gap: 12px; margin-bottom: 20px; align-items: flex-start; }
+    .message.user { flex-direction: row-reverse; }
+    .avatar { width: 38px; height: 38px; border-radius: 15px; display: grid; place-items: center; font-size: 17px; flex: none; background: linear-gradient(135deg,#eff6ff,#e0e7ff); }
+    .message.user .avatar { background: linear-gradient(135deg,#f5f3ff,#ede9fe); }
+    .msg-body { max-width: 78%; }
+    .msg-meta { display: flex; gap: 10px; align-items: center; color: var(--subtle); font-size: 12px; font-weight: 800; margin-bottom: 6px; }
+    .message.user .msg-meta { justify-content: flex-end; }
+    .msg-text { padding: 15px 16px; border-radius: 20px; line-height: 1.65; font-size: 15px; background: #eff6ff; color: #172554; border-top-left-radius: 8px; }
+    .message.user .msg-text { background: #f5f3ff; color: #3b0764; border-top-left-radius: 20px; border-top-right-radius: 8px; }
+    .asr-meta { margin-top: 8px; display:flex; gap: 7px; justify-content: flex-end; }
+    .asr-meta span { color: var(--muted); background: #f8fafc; border: 1px solid var(--line); border-radius: 999px; padding: 5px 8px; font-size: 11px; font-weight: 800; }
+    .typing { display: inline-flex; gap: 4px; align-items: center; margin-left: 2px; }
+    .typing i { width: 5px; height: 5px; border-radius: 50%; background: #60a5fa; animation: blink 1s infinite ease-in-out; }
+    .typing i:nth-child(2) { animation-delay: .15s; }
+    .typing i:nth-child(3) { animation-delay: .3s; }
+    @keyframes blink { 0%,80%,100%{ opacity:.25; transform:translateY(0)} 40%{opacity:1; transform:translateY(-3px)} }
+    .recorder { margin: 0 22px 20px; border-radius: 24px; padding: 18px; background: linear-gradient(135deg,#f8fafc,#ffffff); border: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+    .mic-block { display: flex; align-items: center; gap: 15px; }
+    .mic { width: 62px; height: 62px; border-radius: 24px; display: grid; place-items: center; font-size: 26px; color: #fff; background: linear-gradient(135deg, var(--blue), var(--purple)); box-shadow: 0 20px 36px rgba(37,99,235,.22); position: relative; }
+    .mic:after { content:""; position:absolute; inset:-8px; border-radius: 30px; border: 1px solid rgba(37,99,235,.23); animation: pulse 1.7s infinite; }
+    @keyframes pulse { 0%{transform:scale(.95); opacity:.9} 100%{transform:scale(1.25); opacity:0} }
+    .mic-text strong { display: block; }
+    .mic-text span { color: var(--muted); font-size: 13px; }
+    .wave { display: flex; align-items: center; gap: 4px; height: 50px; flex: 1; justify-content: center; }
+    .wave i { width: 5px; border-radius: 999px; background: linear-gradient(180deg,var(--blue),var(--purple)); height: 16px; opacity: .82; animation: wave 1.2s infinite ease-in-out; }
+    .wave i:nth-child(2n) { animation-delay: .1s; height: 26px; }
+    .wave i:nth-child(3n) { animation-delay: .22s; height: 36px; }
+    .wave i:nth-child(4n) { animation-delay: .34s; height: 22px; }
+    @keyframes wave { 0%,100%{ transform: scaleY(.55); opacity:.55;} 50%{ transform: scaleY(1.1); opacity:1;} }
+    .coach-panel { padding: 22px; overflow: auto; }
+    .score-big { display: grid; grid-template-columns: 102px 1fr; gap: 16px; align-items: center; padding: 18px; border-radius: 24px; background: linear-gradient(135deg,#eff6ff,#faf5ff); border: 1px solid #dbeafe; margin-bottom: 18px; }
+    .score-circle { width: 92px; height: 92px; border-radius: 50%; background: conic-gradient(var(--blue) 0 78%, #dbeafe 78% 100%); display:grid; place-items:center; position:relative; }
+    .score-circle:after { content:""; position:absolute; inset:8px; border-radius:50%; background:#fff; }
+    .score-circle strong { position: relative; z-index: 2; font-size: 26px; }
+    .metric { margin: 11px 0; }
+    .metric .label { display:flex; justify-content:space-between; color: var(--muted); font-size: 12px; font-weight: 800; margin-bottom: 6px; }
+    .correction-card { border-radius: 20px; border: 1px solid var(--line); background:#fff; padding: 16px; margin-bottom: 14px; box-shadow: var(--shadow-sm); }
+    .correction-card h4 { margin: 0 0 12px; display:flex; align-items:center; justify-content:space-between; }
+    .tag { font-size: 11px; padding: 5px 8px; border-radius: 999px; font-weight: 900; }
+    .tag.grammar { background:#fef2f2; color:#dc2626; }
+    .tag.expr { background:#fff7ed; color:#ea580c; }
+    .tag.good { background:#ecfdf5; color:#059669; }
+    .diff { display:grid; grid-template-columns: 1fr; gap: 8px; }
+    .diff del { text-decoration: none; color:#be123c; background:#fff1f2; padding: 8px 10px; border-radius: 12px; display:block; }
+    .diff ins { text-decoration: none; color:#047857; background:#ecfdf5; padding: 8px 10px; border-radius: 12px; display:block; }
+    .natural { color: var(--muted); font-size: 13px; line-height: 1.65; background: #f8fafc; padding: 12px; border-radius: 14px; }
+
+    /* Report */
+    .report-wrap { max-width: 1180px; margin: 0 auto; padding: 30px 26px 70px; }
+    .report-hero { display:flex; align-items: center; justify-content: space-between; gap: 20px; padding: 30px; border-radius: 32px; background: linear-gradient(135deg,#0f172a,#1e3a8a 55%,#5b21b6); color:#fff; box-shadow: 0 30px 70px rgba(15,23,42,.24); }
+    .report-hero h1 { margin:0; font-size: 34px; letter-spacing:-.035em; }
+    .report-hero p { color:rgba(255,255,255,.7); margin: 9px 0 0; }
+    .report-score { text-align: center; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.22); border-radius: 26px; padding: 20px 28px; min-width: 150px; }
+    .report-score strong { display:block; font-size: 48px; line-height: 1; }
+    .stat-grid { display:grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin: 22px 0; }
+    .stat { background:#fff; border:1px solid var(--line); border-radius: 24px; padding: 19px; box-shadow: var(--shadow-sm); }
+    .stat span { color: var(--muted); font-weight: 800; font-size: 13px; }
+    .stat strong { display:block; font-size: 28px; margin-top: 8px; letter-spacing:-.03em; }
+    .report-grid { display:grid; grid-template-columns: 430px 1fr; gap: 18px; align-items: start; }
+    .report-card { background:#fff; border:1px solid var(--line); border-radius: 28px; padding: 22px; box-shadow: var(--shadow-sm); }
+    .report-card h3 { margin: 0 0 18px; font-size: 20px; letter-spacing:-.02em; }
+    .radar { width: 230px; height: 230px; margin: 10px auto 22px; position: relative; }
+    .radar svg { width: 100%; height: 100%; overflow: visible; }
+    .report-list { display:grid; gap: 14px; }
+    .error-card { padding: 16px; border-radius: 20px; border: 1px solid var(--line); background:#fff; }
+    .error-head { display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; }
+    .compare { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .compare div { background:#f8fafc; border-radius:14px; padding: 12px; color: var(--muted); line-height: 1.55; font-size: 13px; }
+    .compare strong { display:block; color: var(--text); margin-bottom:5px; }
+    .plan { display:grid; grid-template-columns: repeat(2,1fr); gap: 12px; }
+    .plan-item { padding: 16px; border-radius: 18px; background: linear-gradient(135deg,#f8fafc,#fff); border: 1px solid var(--line); }
+    .plan-item strong { display:block; margin-bottom:7px; }
+    .plan-item span { color: var(--muted); line-height: 1.55; font-size: 13px; }
+
+    /* History */
+    .history-layout { display:grid; grid-template-columns: 330px 1fr; gap: 20px; }
+    .trend-card { padding: 24px; border-radius: 30px; background:#fff; border:1px solid var(--line); box-shadow: var(--shadow-sm); }
+    .trend-card h2 { margin:0 0 6px; }
+    .trend-card p { margin:0 0 20px; color:var(--muted); }
+    .trend-number { font-size: 54px; letter-spacing:-.055em; font-weight:900; }
+    .history-list { display:grid; gap: 14px; }
+    .session-card { display:flex; align-items:center; justify-content:space-between; gap:18px; padding: 20px; background:#fff; border:1px solid var(--line); border-radius: 26px; box-shadow: var(--shadow-sm); }
+    .session-main { display:flex; gap:15px; align-items:center; }
+    .session-icon { width: 52px; height:52px; border-radius:18px; background:#eff6ff; display:grid; place-items:center; font-size:24px; }
+    .session-card h3 { margin:0 0 5px; }
+    .session-card p { margin:0; color:var(--muted); font-size:14px; }
+    .session-score { font-weight:900; font-size: 28px; color: var(--blue); }
+
+    @media (max-width: 1040px) {
+      .hero, .report-grid, .history-layout { grid-template-columns: 1fr; }
+      .scenario-grid, .stat-grid { grid-template-columns: 1fr; }
+      .training-shell { height: auto; }
+      .training-grid { grid-template-columns: 1fr; }
+      .train-panel { min-height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><div class="logo">S</div><span>SpeakMate</span></div>
+      <nav class="nav">
+        <button data-screen="home" class="active">场景训练</button>
+        <button data-screen="training">训练驾驶舱</button>
+        <button data-screen="report">课后报告</button>
+        <button data-screen="history">历史记录</button>
+        <a class="github" href="#">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="home" class="screen active">
+      <div class="container">
+        <section class="hero">
+          <div class="hero-card">
+            <span class="eyebrow">⚡ AI Speaking Coach · WebSocket / SSE</span>
+            <h1>在真实场景中练英语，让 AI 帮你说得更自然</h1>
+            <p>SpeakMate 支持面试、点餐、会议等场景化语音对话，并在不打断交流的前提下给出表达纠错、能力评分与课后复盘。</p>
+            <div class="hero-actions">
+              <button class="btn primary" data-screen="training">开始英语面试训练</button>
+              <button class="btn secondary" data-screen="report">查看示例报告</button>
+            </div>
+          </div>
+          <div class="hero-preview">
+            <div class="mini-window">
+              <div class="window-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+              <div class="mini-content">
+                <div class="bubble ai">Could you briefly introduce yourself?</div>
+                <div class="bubble user">I am study computer science and I have did a robot project.</div>
+                <div class="bubble ai">That sounds interesting. Could you tell me more about your role?</div>
+                <div class="coach-card">
+                  <strong>AI Coach 实时反馈</strong>
+                  <div class="score-row"><span>语法准确度</span><b>72</b></div><div class="bar"><i style="width:72%"></i></div>
+                  <div class="score-row"><span>表达自然度</span><b>80</b></div><div class="bar"><i style="width:80%"></i></div>
+                  <p style="margin:14px 0 0;color:#64748b;line-height:1.55;font-size:13px;">am study → am studying<br/>have did → have done</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="section-title">
+          <div><h2>选择训练场景</h2><p>每个场景都有 AI 角色、任务目标和评分重点。</p></div>
+        </div>
+        <section class="scenario-grid">
+          <article class="scenario">
+            <div class="scenario-icon">💼</div>
+            <h3>英语面试</h3><div class="en">Interview Practice</div>
+            <span class="pill">AI：技术面试官</span><span class="pill">难度：中等</span>
+            <ul><li>英文自我介绍</li><li>项目经历表达</li><li>技术追问回答</li></ul>
+            <button class="btn primary" data-screen="training">开始训练</button>
+          </article>
+          <article class="scenario">
+            <div class="scenario-icon">🍽️</div>
+            <h3>餐厅点餐</h3><div class="en">Restaurant Ordering</div>
+            <span class="pill">AI：餐厅服务员</span><span class="pill">难度：简单</span>
+            <ul><li>询问菜单推荐</li><li>表达饮食偏好</li><li>完成付款沟通</li></ul>
+            <button class="btn primary" data-screen="training">开始训练</button>
+          </article>
+          <article class="scenario">
+            <div class="scenario-icon">🧑‍💻</div>
+            <h3>工作会议</h3><div class="en">Work Meeting</div>
+            <span class="pill">AI：项目同事</span><span class="pill">难度：较难</span>
+            <ul><li>表达观点</li><li>汇报项目进展</li><li>回应质疑与追问</li></ul>
+            <button class="btn primary" data-screen="training">开始训练</button>
+          </article>
+        </section>
+      </div>
+    </main>
+
+    <main id="training" class="screen">
+      <div class="training-shell">
+        <div class="training-top">
+          <div class="train-title"><span class="badge">英语面试训练</span><strong>AI 技术面试官 · 口语陪练中</strong></div>
+          <div style="display:flex;align-items:center;gap:16px;"><span class="timer"><i class="live-dot"></i>WebSocket 已连接</span><span class="timer">⏱ 04:32</span><button class="btn danger" data-screen="report">结束并生成报告</button></div>
+        </div>
+        <div class="training-grid">
+          <aside class="train-panel side-panel">
+            <div class="panel-caption">Scenario</div>
+            <div class="role-card"><strong>AI 角色：外企技术面试官</strong><p>围绕技术背景、项目经历和团队协作进行追问，帮助用户完成真实面试练习。</p></div>
+            <div class="panel-caption">本轮目标</div>
+            <div class="task-list">
+              <div class="task done"><span class="check">✓</span><span>完成英文自我介绍</span></div>
+              <div class="task done"><span class="check">✓</span><span>说明一个项目经历</span></div>
+              <div class="task active"><span class="check">3</span><span>回答技术追问</span></div>
+              <div class="task"><span class="check">4</span><span>向面试官提问</span></div>
+            </div>
+            <div class="score-row"><span>场景完成度</span><b>60%</b></div><div class="bar"><i style="width:60%"></i></div>
+            <div style="height:22px"></div>
+            <div class="panel-caption">训练重点</div>
+            <div class="focus-tags"><span>回答结构</span><span>时态准确性</span><span>项目表达</span><span>临场反应</span></div>
+          </aside>
+
+          <section class="train-panel chat-panel">
+            <div class="chat-scroll">
+              <div class="message">
+                <div class="avatar">🤖</div><div class="msg-body"><div class="msg-meta"><span>AI 面试官</span><span>04:28</span></div><div class="msg-text">Could you briefly introduce yourself and tell me about your technical background?</div></div>
+              </div>
+              <div class="message user">
+                <div class="avatar">👤</div><div class="msg-body"><div class="msg-meta"><span>You</span><span>04:29</span></div><div class="msg-text">I am study computer science, and I have did a project about robot control.</div><div class="asr-meta"><span>ASR 86%</span><span>124 WPM</span><span>停顿 2 次</span></div></div>
+              </div>
+              <div class="message">
+                <div class="avatar">🤖</div><div class="msg-body"><div class="msg-meta"><span>AI 面试官</span><span>04:30</span></div><div class="msg-text">That sounds interesting. Could you explain your main responsibility in the robot control project?</div></div>
+              </div>
+              <div class="message user">
+                <div class="avatar">👤</div><div class="msg-body"><div class="msg-meta"><span>You</span><span>04:31</span></div><div class="msg-text">My work is make the backend service and connect it with Redis and MySQL.</div><div class="asr-meta"><span>ASR 91%</span><span>118 WPM</span><span>停顿 1 次</span></div></div>
+              </div>
+              <div class="message">
+                <div class="avatar">🤖</div><div class="msg-body"><div class="msg-meta"><span>AI 面试官</span><span>正在回复</span></div><div class="msg-text">Great. What challenge did you meet when designing the backend service?<span class="typing"><i></i><i></i><i></i></span></div></div>
+              </div>
+            </div>
+            <div class="recorder">
+              <div class="mic-block"><div class="mic">🎙</div><div class="mic-text"><strong>正在听你说英语...</strong><span>点击按钮结束录音，系统会识别语音并继续对话</span></div></div>
+              <div class="wave"> <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i> </div>
+              <button class="btn primary">结束录音</button>
+            </div>
+          </section>
+
+          <aside class="train-panel coach-panel">
+            <div class="panel-caption">AI Coach</div>
+            <div class="score-big"><div class="score-circle"><strong>78</strong></div><div><strong>当前表现良好</strong><p style="color:#64748b;line-height:1.55;margin:8px 0 0;font-size:13px;">表达能被理解，但语法准确性和项目贡献描述还可以进一步优化。</p></div></div>
+            <div class="metric"><div class="label"><span>流利度</span><b>75</b></div><div class="bar"><i style="width:75%"></i></div></div>
+            <div class="metric"><div class="label"><span>语法准确度</span><b>72</b></div><div class="bar"><i style="width:72%"></i></div></div>
+            <div class="metric"><div class="label"><span>表达自然度</span><b>80</b></div><div class="bar"><i style="width:80%"></i></div></div>
+            <div style="height:12px"></div>
+            <div class="correction-card"><h4>最新纠错 <span class="tag grammar">Grammar</span></h4><div class="diff"><del>I am study computer science.</del><ins>I am studying computer science.</ins></div></div>
+            <div class="correction-card"><h4>完成时错误 <span class="tag grammar">Grammar</span></h4><div class="diff"><del>I have did a project.</del><ins>I have done a project.</ins></div></div>
+            <div class="correction-card"><h4>更自然表达 <span class="tag expr">Expression</span></h4><p class="natural">I’m currently studying computer science, and I recently worked on a robotics control project.</p></div>
+          </aside>
+        </div>
+      </div>
+    </main>
+
+    <main id="report" class="screen">
+      <div class="report-wrap">
+        <section class="report-hero">
+          <div><span class="eyebrow">📊 Post-class Report</span><h1>英语面试训练报告</h1><p>本次训练重点：项目经历表达、时态准确性、技术追问回答。</p></div>
+          <div class="report-score"><strong>78</strong><span>Good / 100</span></div>
+        </section>
+        <div class="stat-grid">
+          <div class="stat"><span>训练时长</span><strong>04:32</strong></div>
+          <div class="stat"><span>对话轮次</span><strong>8</strong></div>
+          <div class="stat"><span>发现问题</span><strong>6</strong></div>
+          <div class="stat"><span>场景完成度</span><strong>85%</strong></div>
+        </div>
+        <div class="report-grid">
+          <section class="report-card">
+            <h3>五维能力评分</h3>
+            <div class="radar">
+              <svg viewBox="0 0 240 240" aria-label="能力雷达图">
+                <polygon points="120,20 215,90 180,205 60,205 25,90" fill="none" stroke="#e2e8f0" stroke-width="2"/>
+                <polygon points="120,55 182,100 160,175 80,175 58,100" fill="none" stroke="#e2e8f0" stroke-width="2"/>
+                <line x1="120" y1="120" x2="120" y2="20" stroke="#e2e8f0"/><line x1="120" y1="120" x2="215" y2="90" stroke="#e2e8f0"/><line x1="120" y1="120" x2="180" y2="205" stroke="#e2e8f0"/><line x1="120" y1="120" x2="60" y2="205" stroke="#e2e8f0"/><line x1="120" y1="120" x2="25" y2="90" stroke="#e2e8f0"/>
+                <polygon points="120,45 196,96 166,183 74,189 49,97" fill="rgba(37,99,235,.18)" stroke="#2563eb" stroke-width="3"/>
+                <text x="120" y="14" text-anchor="middle" fill="#64748b" font-size="12">流利度</text><text x="225" y="91" fill="#64748b" font-size="12">语法</text><text x="186" y="222" fill="#64748b" font-size="12">表达</text><text x="24" y="222" fill="#64748b" font-size="12">词汇</text><text x="0" y="91" fill="#64748b" font-size="12">完成</text>
+              </svg>
+            </div>
+            <div class="metric"><div class="label"><span>流利度</span><b>75</b></div><div class="bar"><i style="width:75%"></i></div></div>
+            <div class="metric"><div class="label"><span>语法准确度</span><b>72</b></div><div class="bar"><i style="width:72%"></i></div></div>
+            <div class="metric"><div class="label"><span>表达自然度</span><b>80</b></div><div class="bar"><i style="width:80%"></i></div></div>
+            <div class="metric"><div class="label"><span>词汇丰富度</span><b>76</b></div><div class="bar"><i style="width:76%"></i></div></div>
+            <div class="metric"><div class="label"><span>场景完成度</span><b>85</b></div><div class="bar"><i style="width:85%"></i></div></div>
+          </section>
+          <section class="report-list">
+            <div class="report-card"><h3>高频错误总结</h3>
+              <div class="error-card"><div class="error-head"><strong>现在进行时误用</strong><span class="tag grammar">Grammar</span></div><div class="compare"><div><strong>原句</strong>I am study computer science.</div><div><strong>建议</strong>I am studying computer science.</div></div></div>
+              <div class="error-card"><div class="error-head"><strong>完成时动词形式错误</strong><span class="tag grammar">Grammar</span></div><div class="compare"><div><strong>原句</strong>I have did a project.</div><div><strong>建议</strong>I have done a project.</div></div></div>
+            </div>
+            <div class="report-card"><h3>表达升级</h3><div class="error-card"><div class="compare"><div><strong>你的表达</strong>I made a robot project.</div><div><strong>更自然表达</strong>I built a robotics project focused on motion control.</div></div></div></div>
+            <div class="report-card"><h3>下次练习计划</h3><div class="plan"><div class="plan-item"><strong>1. 用 STAR 法重答项目经历</strong><span>从 Situation、Task、Action、Result 四个维度组织回答。</span></div><div class="plan-item"><strong>2. 重点练习时态</strong><span>复盘 have done / worked on / built 等项目表达句式。</span></div><div class="plan-item"><strong>3. 增加个人贡献</strong><span>用 “I was responsible for...” 明确说明你的角色。</span></div><div class="plan-item"><strong>4. 减少泛词使用</strong><span>少用 good、thing、do，替换为具体动词。</span></div></div></div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <main id="history" class="screen">
+      <div class="container">
+        <div class="section-title"><div><h2>历史训练记录</h2><p>持续记录每次训练结果，观察口语能力变化趋势。</p></div><button class="btn primary" data-screen="training">开始新训练</button></div>
+        <div class="history-layout">
+          <aside class="trend-card"><span class="eyebrow" style="background:#eff6ff;color:#1d4ed8;border-color:#dbeafe;">Progress</span><h2>最近 7 次训练</h2><p>你的平均分正在提升，语法错误率下降明显。</p><div class="trend-number">+12</div><p>综合评分提升</p><div class="metric"><div class="label"><span>语法错误率下降</span><b>18%</b></div><div class="bar"><i style="width:82%"></i></div></div><div class="metric"><div class="label"><span>场景完成度提升</span><b>24%</b></div><div class="bar"><i style="width:76%"></i></div></div></aside>
+          <section class="history-list">
+            <article class="session-card"><div class="session-main"><div class="session-icon">💼</div><div><h3>英语面试</h3><p>2026-06-05 20:30 · 主要问题：时态错误、项目表达不够具体</p></div></div><div style="display:flex;gap:14px;align-items:center"><span class="session-score">78</span><button class="btn ghost" data-screen="report">查看报告</button></div></article>
+            <article class="session-card"><div class="session-main"><div class="session-icon">🍽️</div><div><h3>餐厅点餐</h3><p>2026-06-06 10:12 · 主要问题：礼貌表达可以更自然</p></div></div><div style="display:flex;gap:14px;align-items:center"><span class="session-score">84</span><button class="btn ghost" data-screen="report">查看报告</button></div></article>
+            <article class="session-card"><div class="session-main"><div class="session-icon">🧑‍💻</div><div><h3>工作会议</h3><p>2026-06-06 21:45 · 主要问题：观点表达较短，缺少例子支撑</p></div></div><div style="display:flex;gap:14px;align-items:center"><span class="session-score">81</span><button class="btn ghost" data-screen="report">查看报告</button></div></article>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script>
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      document.querySelectorAll('[data-screen]').forEach(b => b.classList.toggle('active', b.getAttribute('data-screen') === id && b.tagName === 'BUTTON' && b.parentElement.classList.contains('nav')));
+      window.scrollTo({top:0, behavior:'instant'});
+    }
+    document.querySelectorAll('[data-screen]').forEach(el => {
+      el.addEventListener('click', e => { e.preventDefault(); showScreen(el.getAttribute('data-screen')); });
+    });
+    window.showScreen = showScreen;
+  </script>
+</body>
+</html>
