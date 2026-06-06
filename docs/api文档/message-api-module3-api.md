@@ -1,12 +1,12 @@
-# Module 3: Message API + Mock Conversation 接口文档
+# Module 3: Message API + Conversation Agent 接口文档
 
 本文档说明当前已实现的文本消息发送接口。前端可以用它完成训练页的核心对话闭环：
 
 ```text
-创建 Session -> 发送用户文本 -> 收到 AI Mock 回复 -> 查询消息历史 -> 结束训练
+创建 Session -> 发送用户文本 -> 收到 Conversation Agent 回复 -> 查询消息历史 -> 结束训练
 ```
 
-当前版本只支持文本消息和普通 JSON 响应，不接真实 LLM、不做 SSE 流式输出、不处理语音。
+当前版本只支持文本消息和普通 JSON 响应。服务默认使用本地 `MockConversationAgent`，配置完整且 `LLM_USE_MOCK=false` 时可切换到 OpenAI-compatible LLM Agent。当前不做 SSE 流式输出、不处理语音。
 
 ## 基本信息
 
@@ -27,13 +27,13 @@
 | 可发送状态 | 只有 `running` Session 可以发送消息 |
 | 禁止发送状态 | `finished` Session 会返回 `409 / 2004` |
 | 轮次递增 | 每次成功发送用户消息并生成 AI 回复后，`turn_count + 1` |
-| 消息保存 | 每次成功发送会保存 2 条消息：用户消息和 AI Mock 消息 |
+| 消息保存 | 每次成功发送会保存 2 条消息：用户消息和 AI 消息 |
 | 消息历史 | 调用 `GET /api/v1/sessions/:id` 可以看到已保存的消息列表 |
 | 数据持久性 | 当前使用内存存储，服务重启后 Session 和消息数据会丢失 |
 
-## Mock 回复规则
+## Conversation Agent 规则
 
-当前 AI 回复由本地 Mock Conversation 生成，不请求外部模型。
+消息发送业务依赖 `internal/agent` 下的 `ConversationAgent` 接口。默认使用本地 Mock Agent，不请求外部模型；当配置 `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL` 且关闭 `LLM_USE_MOCK` 后，启动装配会使用真实 LLM Agent，并在 LLM 调用失败时降级为 Mock 回复。
 
 | 场景编码 | 回复方向 |
 |---|---|
@@ -52,11 +52,12 @@
 | `400` | `3002` | `message content is required` | `content` 去除首尾空白后为空 |
 | `404` | `2003` | `session not found` | Session 不存在 |
 | `409` | `2004` | `session already finished` | Session 已结束，不允许继续发送消息 |
+| `502` | `3003` | `conversation agent failed` | Conversation Agent 生成回复失败且没有可用降级 |
 | `500` | `500` | `internal server error` | 非预期服务端错误 |
 
 ## 发送文本消息
 
-向一个正在进行中的训练 Session 发送用户文本，并返回本轮保存的用户消息和 AI Mock 回复。
+向一个正在进行中的训练 Session 发送用户文本，并返回本轮保存的用户消息和 AI 回复。
 
 ### 接口路径
 
@@ -99,14 +100,15 @@ HTTP 状态码：`200`
 | `user_message.content` | string | 去除首尾空白后的用户输入 |
 | `user_message.stage` | string | 用户消息所属训练阶段 |
 | `user_message.created_at` | string | 消息创建时间，RFC3339 格式 |
-| `ai_message` | object | 本次生成并保存的 AI Mock 回复 |
+| `ai_message` | object | 本次生成并保存的 AI 回复 |
 | `ai_message.id` | number | 消息 ID |
 | `ai_message.session_id` | number | 所属 Session ID |
 | `ai_message.role` | string | 固定为 `ai` |
-| `ai_message.content` | string | AI Mock 回复内容 |
+| `ai_message.content` | string | AI 回复内容 |
 | `ai_message.stage` | string | AI 回复推进到的训练阶段 |
 | `ai_message.created_at` | string | 消息创建时间，RFC3339 格式 |
 | `stage` | string | 当前响应对应的训练阶段，与 `ai_message.stage` 一致 |
+| `next_goal` | string | Agent 给出的下一步追问目标 |
 | `turn_count` | number | 发送成功后的 Session 对话轮次 |
 
 示例响应：
@@ -133,6 +135,7 @@ HTTP 状态码：`200`
       "created_at": "2026-06-06T07:30:00Z"
     },
     "stage": "项目经历",
+    "next_goal": "ask user to describe personal project contribution",
     "turn_count": 1
   }
 }
@@ -314,5 +317,5 @@ go run ./cmd/server
 自动化测试：
 
 ```bash
-go test ./internal/router ./internal/service
+LLM_USE_MOCK=true go test ./...
 ```

@@ -12,12 +12,13 @@ func (a *MockConversationAgent) GenerateReply(ctx context.Context, input Convers
 	stageIndex := input.Session.TurnCount + 1
 	stage := StageNameForTurn(input.Scenario.Stages, stageIndex)
 	replies := repliesForScenario(input.Scenario.Code)
+	nextGoals := nextGoalsForScenario(input.Scenario.Code)
 	index := input.Session.TurnCount % len(replies)
 
 	return ConversationOutput{
 		Reply:    replies[index],
 		Stage:    stage,
-		NextGoal: mockNextGoalForScenario(input.Scenario.Code, stage),
+		NextGoal: nextGoals[index],
 	}, nil
 }
 
@@ -48,15 +49,29 @@ func repliesForScenario(code string) []string {
 	}
 }
 
-func mockNextGoalForScenario(code string, stage string) string {
+func nextGoalsForScenario(code string) []string {
 	switch code {
 	case "interview":
-		return "Ask the candidate for concrete project details and personal contribution"
+		return []string{
+			"ask user to describe personal project contribution",
+			"ask user to explain technical design trade-offs",
+			"ask user to describe teamwork under pressure",
+		}
 	case "restaurant":
-		return "Clarify the guest's preference and move toward confirming the order"
+		return []string{
+			"ask user to express menu preferences",
+			"ask user to clarify allergies or avoided ingredients",
+			"ask user to confirm add-ons before ordering",
+		}
 	case "meeting":
-		return "Clarify the main point and identify the next action"
+		return []string{
+			"ask user to identify the main blocker",
+			"ask user to recommend an option with trade-offs",
+			"ask user to assign the next action",
+		}
 	default:
-		return "Ask one natural follow-up for the " + stage + " stage"
+		return []string{
+			"ask user to add one specific detail",
+		}
 	}
 }
