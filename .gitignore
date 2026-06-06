@@ -19,6 +19,11 @@ coverage.html
 *.coverprofile
 *.prof
 
+# Local Go caches created during sandboxed test runs
+/.gocache*/
+/.gomodcache*/
+/.renamecheck/
+
 # Logs
 *.log
 logs/

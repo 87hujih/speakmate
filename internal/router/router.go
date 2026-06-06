@@ -1,15 +1,25 @@
 package router
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 
+	"speakmate/internal/agent"
+	"speakmate/internal/config"
 	"speakmate/internal/handler"
+	"speakmate/internal/infra/llm"
 	"speakmate/internal/repository"
 	"speakmate/internal/service"
 )
 
 // New 创建并配置 Gin 路由引擎。
-func New() *gin.Engine {
+func New(configs ...config.Config) *gin.Engine {
+	cfg := config.Load()
+	if len(configs) > 0 {
+		cfg = configs[0]
+	}
+
 	gin.SetMode(gin.ReleaseMode)
 
 	engine := gin.New()
@@ -21,7 +31,11 @@ func New() *gin.Engine {
 	scenarioService := service.NewScenarioService(scenarioRepo)
 	scenarioHandler := handler.NewScenarioHandler(scenarioService)
 	sessionRepo := repository.NewMemorySessionRepository()
-	sessionService := service.NewSessionService(scenarioService, sessionRepo)
+	sessionService := service.NewSessionService(
+		scenarioService,
+		sessionRepo,
+		service.WithConversationAgent(NewConversationAgent(cfg)),
+	)
 	sessionHandler := handler.NewSessionHandler(sessionService)
 	messageHandler := handler.NewMessageHandler(sessionService)
 
@@ -35,4 +49,20 @@ func New() *gin.Engine {
 	api.POST("/sessions/:id/messages", messageHandler.Send)
 
 	return engine
+}
+
+func NewConversationAgent(cfg config.Config) agent.ConversationAgent {
+	if cfg.LLM.UseMock || !cfg.LLM.HasRequiredFields() {
+		return agent.NewMockConversationAgent()
+	}
+	if !strings.EqualFold(cfg.LLM.Provider, "openai-compatible") {
+		return agent.NewMockConversationAgent()
+	}
+
+	client, err := llm.NewOpenAICompatibleClient(cfg.LLM)
+	if err != nil {
+		return agent.NewMockConversationAgent()
+	}
+
+	return agent.NewLLMConversationAgent(client, agent.WithFallbackAgent(agent.NewMockConversationAgent()))
 }

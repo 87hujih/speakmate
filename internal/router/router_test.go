@@ -5,11 +5,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestMain(m *testing.M) {
+	_ = os.Setenv("LLM_USE_MOCK", "true")
+	os.Exit(m.Run())
+}
 
 // TestHealthEndpointReturnsOK 验证健康检查接口保持统一成功响应结构。
 func TestHealthEndpointReturnsOK(t *testing.T) {
@@ -503,6 +509,7 @@ func TestMessageSendCreatesMockReplyAndSessionHistory(t *testing.T) {
 			UserMessage messagePayload `json:"user_message"`
 			AIMessage   messagePayload `json:"ai_message"`
 			Stage       string         `json:"stage"`
+			NextGoal    string         `json:"next_goal"`
 			TurnCount   int            `json:"turn_count"`
 		} `json:"data"`
 	}
@@ -530,6 +537,9 @@ func TestMessageSendCreatesMockReplyAndSessionHistory(t *testing.T) {
 	}
 	if body.Data.Stage == "" {
 		t.Fatal("stage is empty")
+	}
+	if body.Data.NextGoal == "" {
+		t.Fatal("next_goal is empty")
 	}
 	if body.Data.TurnCount != 1 {
 		t.Fatalf("turn_count = %d, want 1", body.Data.TurnCount)
@@ -672,6 +682,7 @@ type postMessageResponse struct {
 		UserMessage messagePayload `json:"user_message"`
 		AIMessage   messagePayload `json:"ai_message"`
 		Stage       string         `json:"stage"`
+		NextGoal    string         `json:"next_goal"`
 		TurnCount   int            `json:"turn_count"`
 	} `json:"data"`
 }

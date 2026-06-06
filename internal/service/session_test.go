@@ -1,10 +1,12 @@
 package service_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
+	"speakmate/internal/agent"
 	"speakmate/internal/model"
 	"speakmate/internal/repository"
 	"speakmate/internal/service"
@@ -143,6 +145,9 @@ func TestSessionServiceSendsMessageAndPersistsMockReply(t *testing.T) {
 	if result.TurnCount != 1 {
 		t.Fatalf("turn_count = %d, want 1", result.TurnCount)
 	}
+	if result.NextGoal == "" {
+		t.Fatal("next_goal is empty")
+	}
 
 	saved, err := sessionRepo.FindByID(created.ID)
 	if err != nil {
@@ -153,6 +158,119 @@ func TestSessionServiceSendsMessageAndPersistsMockReply(t *testing.T) {
 	}
 	if len(saved.Messages) != 2 {
 		t.Fatalf("saved messages length = %d, want 2", len(saved.Messages))
+	}
+}
+
+func TestSessionServicePassesScenarioHistoryAndUserInputToConversationAgent(t *testing.T) {
+	scenarioReader := fakeScenarioReader{
+		scenarios: map[int]model.Scenario{
+			1: {
+				ID:   1,
+				Code: "interview",
+				Stages: []model.ScenarioStage{
+					{Name: "自我介绍"},
+					{Name: "项目经历"},
+					{Name: "技术追问"},
+				},
+			},
+		},
+	}
+	sessionRepo := newFakeSessionRepository()
+	created, err := sessionRepo.Create(model.Session{
+		ScenarioID: 1,
+		UserID:     1,
+		Status:     model.SessionStatusRunning,
+		TurnCount:  1,
+		CreatedAt:  time.Now(),
+		Messages: []model.Message{
+			{Role: model.MessageRoleUser, Content: "I study computer science.", Stage: "自我介绍"},
+			{Role: model.MessageRoleAI, Content: "Could you tell me about a project?", Stage: "项目经历"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("setup session returned error: %v", err)
+	}
+	conversation := &fakeConversationAgent{
+		output: agent.ConversationOutput{
+			Reply:    "What technical challenge did you solve?",
+			Stage:    "技术追问",
+			NextGoal: "ask user to explain a technical challenge",
+		},
+	}
+	sessionService := service.NewSessionService(
+		scenarioReader,
+		sessionRepo,
+		service.WithConversationAgent(conversation),
+	)
+
+	result, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.ID,
+		Content:   " I built a robot control project. ",
+	})
+	if err != nil {
+		t.Fatalf("SendMessage returned error: %v", err)
+	}
+
+	if conversation.callCount != 1 {
+		t.Fatalf("conversation call count = %d, want 1", conversation.callCount)
+	}
+	if conversation.input.Scenario.Code != "interview" {
+		t.Fatalf("conversation scenario code = %q, want interview", conversation.input.Scenario.Code)
+	}
+	if conversation.input.UserContent != "I built a robot control project." {
+		t.Fatalf("conversation user content = %q, want trimmed content", conversation.input.UserContent)
+	}
+	if len(conversation.input.History) != 2 {
+		t.Fatalf("conversation history length = %d, want 2", len(conversation.input.History))
+	}
+	if result.AIMessage.Content != "What technical challenge did you solve?" {
+		t.Fatalf("ai content = %q, want fake agent reply", result.AIMessage.Content)
+	}
+	if result.Stage != "技术追问" {
+		t.Fatalf("stage = %q, want 技术追问", result.Stage)
+	}
+	if result.NextGoal != "ask user to explain a technical challenge" {
+		t.Fatalf("next_goal = %q, want fake agent next goal", result.NextGoal)
+	}
+}
+
+func TestSessionServiceReturnsConversationAgentFailureWithoutAppendingMessages(t *testing.T) {
+	scenarioReader := fakeScenarioReader{
+		scenarios: map[int]model.Scenario{
+			1: {ID: 1, Code: "interview"},
+		},
+	}
+	sessionRepo := newFakeSessionRepository()
+	created, err := sessionRepo.Create(model.Session{
+		ScenarioID: 1,
+		UserID:     1,
+		Status:     model.SessionStatusRunning,
+		CreatedAt:  time.Now(),
+		Messages:   []model.Message{},
+	})
+	if err != nil {
+		t.Fatalf("setup session returned error: %v", err)
+	}
+	sessionService := service.NewSessionService(
+		scenarioReader,
+		sessionRepo,
+		service.WithConversationAgent(&fakeConversationAgent{err: errors.New("llm failed")}),
+	)
+
+	_, err = sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.ID,
+		Content:   "Hello",
+	})
+
+	if !errors.Is(err, service.ErrConversationAgentFailed) {
+		t.Fatalf("error = %v, want ErrConversationAgentFailed", err)
+	}
+	saved, findErr := sessionRepo.FindByID(created.ID)
+	if findErr != nil {
+		t.Fatalf("FindByID returned error: %v", findErr)
+	}
+	if len(saved.Messages) != 0 {
+		t.Fatalf("saved messages length = %d, want 0", len(saved.Messages))
 	}
 }
 
@@ -273,4 +391,21 @@ func (r *fakeSessionRepository) Finish(id int, endedAt time.Time) (model.Session
 	r.sessions[id] = session
 
 	return session, nil
+}
+
+type fakeConversationAgent struct {
+	output    agent.ConversationOutput
+	err       error
+	callCount int
+	input     agent.ConversationInput
+}
+
+func (a *fakeConversationAgent) GenerateReply(ctx context.Context, input agent.ConversationInput) (agent.ConversationOutput, error) {
+	a.callCount++
+	a.input = input
+	if a.err != nil {
+		return agent.ConversationOutput{}, a.err
+	}
+
+	return a.output, nil
 }

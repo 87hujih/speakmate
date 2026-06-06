@@ -1,10 +1,13 @@
 package service
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
+	"speakmate/internal/agent"
 	"speakmate/internal/model"
 	"speakmate/internal/repository"
 )
@@ -20,6 +23,8 @@ var (
 	ErrInvalidMessageRequest = errors.New("invalid message request")
 	// ErrMessageContentRequired 表示消息内容不能为空。
 	ErrMessageContentRequired = errors.New("message content is required")
+	// ErrConversationAgentFailed 表示对话 Agent 生成回复失败。
+	ErrConversationAgentFailed = errors.New("conversation agent failed")
 )
 
 // ScenarioReader 定义 Session 服务依赖的场景读取能力。
@@ -39,17 +44,32 @@ type SessionRepository interface {
 type SessionService struct {
 	scenarioReader ScenarioReader
 	repo           SessionRepository
-	conversation   ConversationGenerator
+	conversation   agent.ConversationAgent
 	now            func() time.Time
 }
 
+type SessionOption func(*SessionService)
+
 // NewSessionService 创建 Session 服务实例。
-func NewSessionService(scenarioReader ScenarioReader, repo SessionRepository) *SessionService {
-	return &SessionService{
+func NewSessionService(scenarioReader ScenarioReader, repo SessionRepository, opts ...SessionOption) *SessionService {
+	service := &SessionService{
 		scenarioReader: scenarioReader,
 		repo:           repo,
-		conversation:   NewMockConversationService(),
+		conversation:   agent.NewMockConversationAgent(),
 		now:            time.Now,
+	}
+	for _, opt := range opts {
+		opt(service)
+	}
+
+	return service
+}
+
+func WithConversationAgent(conversation agent.ConversationAgent) SessionOption {
+	return func(service *SessionService) {
+		if conversation != nil {
+			service.conversation = conversation
+		}
 	}
 }
 
@@ -75,6 +95,7 @@ type GetSessionResult struct {
 type SendMessageInput struct {
 	SessionID int
 	Content   string
+	Context   context.Context
 }
 
 // SendMessageResult 是发送消息后的业务输出。
@@ -82,6 +103,7 @@ type SendMessageResult struct {
 	UserMessage model.Message
 	AIMessage   model.Message
 	Stage       string
+	NextGoal    string
 	TurnCount   int
 }
 
@@ -161,7 +183,7 @@ func (s *SessionService) FinishSession(id int) (model.Session, error) {
 	return session, nil
 }
 
-// SendMessage 保存用户消息，生成 Mock AI 回复，并推进对话轮次。
+// SendMessage 保存用户消息，生成 AI 回复，并推进对话轮次。
 func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult, error) {
 	if input.SessionID <= 0 {
 		return SendMessageResult{}, ErrInvalidMessageRequest
@@ -191,24 +213,42 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 
 	conversation := s.conversation
 	if conversation == nil {
-		conversation = NewMockConversationService()
+		conversation = agent.NewMockConversationAgent()
 	}
-	reply := conversation.GenerateReply(ConversationInput{
+	ctx := input.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reply, err := conversation.GenerateReply(ctx, agent.ConversationInput{
 		Scenario:    scenario,
 		Session:     session,
+		History:     session.Messages,
 		UserContent: content,
 	})
+	if err != nil {
+		return SendMessageResult{}, fmt.Errorf("%w: %v", ErrConversationAgentFailed, err)
+	}
+	reply.Reply = strings.TrimSpace(reply.Reply)
+	if reply.Reply == "" {
+		return SendMessageResult{}, ErrConversationAgentFailed
+	}
+	if reply.Stage == "" {
+		reply.Stage = agent.StageNameForTurn(scenario.Stages, session.TurnCount+1)
+	}
+	if reply.NextGoal == "" {
+		reply.NextGoal = agent.NextGoalForTurn(scenario.Stages, session.TurnCount+1)
+	}
 
 	createdAt := s.now()
 	userMessage := model.Message{
 		Role:      model.MessageRoleUser,
 		Content:   content,
-		Stage:     stageNameForTurn(scenario.Stages, session.TurnCount),
+		Stage:     agent.StageNameForTurn(scenario.Stages, session.TurnCount),
 		CreatedAt: createdAt,
 	}
 	aiMessage := model.Message{
 		Role:      model.MessageRoleAI,
-		Content:   reply.Content,
+		Content:   reply.Reply,
 		Stage:     reply.Stage,
 		CreatedAt: createdAt,
 	}
@@ -236,6 +276,7 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 		UserMessage: savedUserMessage,
 		AIMessage:   savedAIMessage,
 		Stage:       savedAIMessage.Stage,
+		NextGoal:    reply.NextGoal,
 		TurnCount:   updated.TurnCount,
 	}, nil
 }
