@@ -668,6 +668,44 @@ func TestMessageSendRejectsFinishedSession(t *testing.T) {
 	assertErrorResponse(t, rec, http.StatusConflict, 2004, "session already finished")
 }
 
+// TestSessionScoresRouteReturnsScoreNotFound 验证 Session 当前评分查询路由已注册并返回统一反馈错误。
+func TestSessionScoresRouteReturnsScoreNotFound(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/scores", nil)
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	assertErrorResponse(t, rec, http.StatusNotFound, 4003, "score not found")
+}
+
+// TestMessageCorrectionsRouteReturnsCorrectionNotFound 验证单条消息纠错查询路由已注册并返回统一反馈错误。
+func TestMessageCorrectionsRouteReturnsCorrectionNotFound(t *testing.T) {
+	engine := New()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/messages/999/corrections", nil)
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	assertErrorResponse(t, rec, http.StatusNotFound, 4002, "correction not found")
+}
+
+// TestSessionCorrectionsRouteReturnsCorrectionNotFound 验证整场训练纠错查询路由已注册并返回统一反馈错误。
+func TestSessionCorrectionsRouteReturnsCorrectionNotFound(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/corrections", nil)
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	assertErrorResponse(t, rec, http.StatusNotFound, 4002, "correction not found")
+}
+
 type messagePayload struct {
 	ID        int    `json:"id"`
 	SessionID int    `json:"session_id"`

@@ -129,8 +129,9 @@ Browser
 | 场景 API（Module 1） | 已完成 | 场景列表和详情接口，见 [docs/api文档/scenario-api-module1-api.md](docs/api文档/scenario-api-module1-api.md) |
 | 训练 Session API（Module 2） | 已完成 | 创建、查询、结束训练 Session，见 [docs/api文档/session-api-module2-api.md](docs/api文档/session-api-module2-api.md) |
 | 消息 API（Module 3） | 已完成 | 发送文本、AI 回复、轮次更新和消息历史查询，见 [docs/api文档/message-api-module3-api.md](docs/api文档/message-api-module3-api.md) |
+| 反馈查询 API（Module 4） | 部分完成 | 单条消息纠错、Session 纠错列表和当前评分查询，见 [docs/api文档/feedback-api-module4-api.md](docs/api文档/feedback-api-module4-api.md) |
 | Conversation Agent | 已接入 | 默认使用 Mock；配置 API Key 且关闭 Mock 后使用 OpenAI-compatible LLM，失败时降级 Mock |
-| AI 纠错与评分 | 规划中 | Conversation、Correction、Scoring、Summary Agent |
+| AI 纠错与评分 | 部分完成 | Correction / Scoring 模型、Mock Agent、内存仓库、查询 Service 和查询 API 已接入，消息发送后自动生成反馈仍待接入 |
 | 语音能力 | 规划中 | 浏览器录音、ASR、WebSocket 音频分片 |
 
 ## 技术栈
