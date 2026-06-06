@@ -25,6 +25,8 @@ var (
 	ErrMessageContentRequired = errors.New("message content is required")
 	// ErrConversationAgentFailed 表示对话 Agent 生成回复失败。
 	ErrConversationAgentFailed = errors.New("conversation agent failed")
+	// ErrFeedbackAgentFailed 表示反馈 Agent 生成纠错或评分失败。
+	ErrFeedbackAgentFailed = errors.New("feedback agent failed")
 )
 
 // ScenarioReader 定义 Session 服务依赖的场景读取能力。
@@ -42,13 +44,14 @@ type SessionRepository interface {
 
 // SessionService 封装训练 Session 生命周期业务流程。
 type SessionService struct {
-	scenarioReader ScenarioReader
-	repo           SessionRepository
-	feedbackRepo   FeedbackRepository
-	conversation   agent.ConversationAgent
-	correction     agent.CorrectionAgent
-	scoring        agent.ScoringAgent
-	now            func() time.Time
+	scenarioReader   ScenarioReader
+	repo             SessionRepository
+	feedbackRepo     FeedbackRepository
+	conversation     agent.ConversationAgent
+	correction       agent.CorrectionAgent
+	scoring          agent.ScoringAgent
+	feedbackFailOpen bool
+	now              func() time.Time
 }
 
 type SessionOption func(*SessionService)
@@ -56,12 +59,13 @@ type SessionOption func(*SessionService)
 // NewSessionService 创建 Session 服务实例。
 func NewSessionService(scenarioReader ScenarioReader, repo SessionRepository, opts ...SessionOption) *SessionService {
 	service := &SessionService{
-		scenarioReader: scenarioReader,
-		repo:           repo,
-		conversation:   agent.NewMockConversationAgent(),
-		correction:     agent.NewMockCorrectionAgent(),
-		scoring:        agent.NewMockScoringAgent(),
-		now:            time.Now,
+		scenarioReader:   scenarioReader,
+		repo:             repo,
+		conversation:     agent.NewMockConversationAgent(),
+		correction:       agent.NewMockCorrectionAgent(),
+		scoring:          agent.NewMockScoringAgent(),
+		feedbackFailOpen: true,
+		now:              time.Now,
 	}
 	for _, opt := range opts {
 		opt(service)
@@ -99,6 +103,12 @@ func WithScoringAgent(scoring agent.ScoringAgent) SessionOption {
 		if scoring != nil {
 			service.scoring = scoring
 		}
+	}
+}
+
+func WithFeedbackFailOpen(failOpen bool) SessionOption {
+	return func(service *SessionService) {
+		service.feedbackFailOpen = failOpen
 	}
 }
 
@@ -315,7 +325,10 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 	messages := updated.Messages
 	savedUserMessage := messages[len(messages)-2]
 	savedAIMessage := messages[len(messages)-1]
-	correctionSummary, scoreSummary := s.generateFeedback(ctx, scenario, updated, savedUserMessage)
+	correctionSummary, scoreSummary, err := s.generateFeedback(ctx, scenario, updated, savedUserMessage)
+	if err != nil {
+		return SendMessageResult{}, err
+	}
 
 	return SendMessageResult{
 		UserMessage:       savedUserMessage,
@@ -328,9 +341,9 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 	}, nil
 }
 
-func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Scenario, session model.Session, userMessage model.Message) (CorrectionSummary, ScoreSummary) {
+func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Scenario, session model.Session, userMessage model.Message) (CorrectionSummary, ScoreSummary, error) {
 	if s.feedbackRepo == nil {
-		return CorrectionSummary{}, ScoreSummary{}
+		return CorrectionSummary{}, ScoreSummary{}, nil
 	}
 
 	correctionAgent := s.correction
@@ -344,11 +357,11 @@ func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Sc
 		UserMessage: userMessage,
 	})
 	if err != nil {
-		return CorrectionSummary{}, ScoreSummary{}
+		return s.handleFeedbackFailure(CorrectionSummary{}, ScoreSummary{}, "correction agent failed", err)
 	}
 	correction := normalizeCorrectionResult(correctionOutput.Result, session.ID, userMessage)
 	if err := s.feedbackRepo.SaveCorrection(correction); err != nil {
-		return CorrectionSummary{}, ScoreSummary{}
+		return s.handleFeedbackFailure(CorrectionSummary{}, ScoreSummary{}, "save correction failed", err)
 	}
 
 	scoringAgent := s.scoring
@@ -363,14 +376,22 @@ func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Sc
 		Correction:  correction,
 	})
 	if err != nil {
-		return correctionSummaryFromResult(correction), ScoreSummary{}
+		return s.handleFeedbackFailure(correctionSummaryFromResult(correction), ScoreSummary{}, "scoring agent failed", err)
 	}
 	score := normalizeScoreResult(scoreOutput.Result, session.ID, userMessage, correction)
 	if err := s.feedbackRepo.SaveScore(score); err != nil {
-		return correctionSummaryFromResult(correction), ScoreSummary{}
+		return s.handleFeedbackFailure(correctionSummaryFromResult(correction), ScoreSummary{}, "save score failed", err)
 	}
 
-	return correctionSummaryFromResult(correction), scoreSummaryFromResult(score)
+	return correctionSummaryFromResult(correction), scoreSummaryFromResult(score), nil
+}
+
+func (s *SessionService) handleFeedbackFailure(correctionSummary CorrectionSummary, scoreSummary ScoreSummary, step string, err error) (CorrectionSummary, ScoreSummary, error) {
+	if s.feedbackFailOpen {
+		return correctionSummary, scoreSummary, nil
+	}
+
+	return CorrectionSummary{}, ScoreSummary{}, fmt.Errorf("%w: %s: %v", ErrFeedbackAgentFailed, step, err)
 }
 
 func normalizeCorrectionResult(correction model.CorrectionResult, sessionID int, userMessage model.Message) model.CorrectionResult {

@@ -14,6 +14,7 @@ const (
 	invalidMessageRequestCode   = 3001
 	messageContentRequiredCode  = 3002
 	conversationAgentFailedCode = 3003
+	feedbackAgentFailedCode     = 3004
 )
 
 // MessageService 定义消息 Handler 依赖的业务能力。
@@ -130,6 +131,10 @@ func writeMessageError(c *gin.Context, err error) {
 	}
 	if errors.Is(err, service.ErrConversationAgentFailed) {
 		response.Error(c, http.StatusBadGateway, conversationAgentFailedCode, "conversation agent failed")
+		return
+	}
+	if errors.Is(err, service.ErrFeedbackAgentFailed) {
+		response.Error(c, http.StatusBadGateway, feedbackAgentFailedCode, "feedback agent failed")
 		return
 	}
 

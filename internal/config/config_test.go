@@ -34,6 +34,15 @@ func TestLoadDefaultsToPort8080(t *testing.T) {
 	if !cfg.LLM.UseMock {
 		t.Fatal("LLM.UseMock = false, want true by default")
 	}
+	if !cfg.Feedback.CorrectionUseMock {
+		t.Fatal("Feedback.CorrectionUseMock = false, want true by default")
+	}
+	if !cfg.Feedback.ScoringUseMock {
+		t.Fatal("Feedback.ScoringUseMock = false, want true by default")
+	}
+	if !cfg.Feedback.FailOpen {
+		t.Fatal("Feedback.FailOpen = false, want true by default")
+	}
 }
 
 func TestLoadReadsLLMEnvironment(t *testing.T) {
@@ -44,6 +53,9 @@ func TestLoadReadsLLMEnvironment(t *testing.T) {
 	t.Setenv("LLM_MODEL", "test-model")
 	t.Setenv("LLM_TIMEOUT_SECONDS", "45")
 	t.Setenv("LLM_USE_MOCK", "false")
+	t.Setenv("CORRECTION_USE_MOCK", "false")
+	t.Setenv("SCORING_USE_MOCK", "false")
+	t.Setenv("FEEDBACK_FAIL_OPEN", "false")
 
 	cfg := Load()
 
@@ -68,12 +80,24 @@ func TestLoadReadsLLMEnvironment(t *testing.T) {
 	if cfg.LLM.UseMock {
 		t.Fatal("LLM.UseMock = true, want false")
 	}
+	if cfg.Feedback.CorrectionUseMock {
+		t.Fatal("Feedback.CorrectionUseMock = true, want false")
+	}
+	if cfg.Feedback.ScoringUseMock {
+		t.Fatal("Feedback.ScoringUseMock = true, want false")
+	}
+	if cfg.Feedback.FailOpen {
+		t.Fatal("Feedback.FailOpen = true, want false")
+	}
 }
 
 func TestLoadFallsBackForInvalidLLMTimeoutAndMockFlag(t *testing.T) {
 	clearLLMEnv(t)
 	t.Setenv("LLM_TIMEOUT_SECONDS", "not-a-number")
 	t.Setenv("LLM_USE_MOCK", "not-a-bool")
+	t.Setenv("CORRECTION_USE_MOCK", "not-a-bool")
+	t.Setenv("SCORING_USE_MOCK", "not-a-bool")
+	t.Setenv("FEEDBACK_FAIL_OPEN", "not-a-bool")
 
 	cfg := Load()
 
@@ -82,6 +106,15 @@ func TestLoadFallsBackForInvalidLLMTimeoutAndMockFlag(t *testing.T) {
 	}
 	if !cfg.LLM.UseMock {
 		t.Fatal("LLM.UseMock = false, want true for invalid flag")
+	}
+	if !cfg.Feedback.CorrectionUseMock {
+		t.Fatal("Feedback.CorrectionUseMock = false, want true for invalid flag")
+	}
+	if !cfg.Feedback.ScoringUseMock {
+		t.Fatal("Feedback.ScoringUseMock = false, want true for invalid flag")
+	}
+	if !cfg.Feedback.FailOpen {
+		t.Fatal("Feedback.FailOpen = false, want true for invalid flag")
 	}
 }
 
@@ -94,4 +127,7 @@ func clearLLMEnv(t *testing.T) {
 	t.Setenv("LLM_MODEL", "")
 	t.Setenv("LLM_TIMEOUT_SECONDS", "")
 	t.Setenv("LLM_USE_MOCK", "")
+	t.Setenv("CORRECTION_USE_MOCK", "")
+	t.Setenv("SCORING_USE_MOCK", "")
+	t.Setenv("FEEDBACK_FAIL_OPEN", "")
 }
