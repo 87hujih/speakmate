@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"speakmate/internal/agent"
 	"speakmate/internal/model"
 	"speakmate/internal/repository"
 )
@@ -20,6 +21,8 @@ var (
 	ErrInvalidMessageRequest = errors.New("invalid message request")
 	// ErrMessageContentRequired 表示消息内容不能为空。
 	ErrMessageContentRequired = errors.New("message content is required")
+	// ErrConversationAgentUnavailable 表示消息发送缺少可用的对话 Agent。
+	ErrConversationAgentUnavailable = errors.New("conversation agent unavailable")
 )
 
 // ScenarioReader 定义 Session 服务依赖的场景读取能力。
@@ -39,16 +42,20 @@ type SessionRepository interface {
 type SessionService struct {
 	scenarioReader ScenarioReader
 	repo           SessionRepository
-	conversation   ConversationGenerator
+	conversation   agent.ConversationAgent
 	now            func() time.Time
 }
 
 // NewSessionService 创建 Session 服务实例。
-func NewSessionService(scenarioReader ScenarioReader, repo SessionRepository) *SessionService {
+func NewSessionService(
+	scenarioReader ScenarioReader,
+	repo SessionRepository,
+	conversation agent.ConversationAgent,
+) *SessionService {
 	return &SessionService{
 		scenarioReader: scenarioReader,
 		repo:           repo,
-		conversation:   NewMockConversationService(),
+		conversation:   conversation,
 		now:            time.Now,
 	}
 }
@@ -82,6 +89,7 @@ type SendMessageResult struct {
 	UserMessage model.Message
 	AIMessage   model.Message
 	Stage       string
+	NextGoal    string
 	TurnCount   int
 }
 
@@ -161,7 +169,7 @@ func (s *SessionService) FinishSession(id int) (model.Session, error) {
 	return session, nil
 }
 
-// SendMessage 保存用户消息，生成 Mock AI 回复，并推进对话轮次。
+// SendMessage 保存用户消息，调用 ConversationAgent 生成 AI 回复，并推进对话轮次。
 func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult, error) {
 	if input.SessionID <= 0 {
 		return SendMessageResult{}, ErrInvalidMessageRequest
@@ -189,15 +197,20 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 		return SendMessageResult{}, err
 	}
 
-	conversation := s.conversation
-	if conversation == nil {
-		conversation = NewMockConversationService()
+	if s.conversation == nil {
+		return SendMessageResult{}, ErrConversationAgentUnavailable
 	}
-	reply := conversation.GenerateReply(ConversationInput{
+
+	reply, err := s.conversation.Generate(agent.ConversationInput{
 		Scenario:    scenario,
 		Session:     session,
-		UserContent: content,
+		History:     session.Messages,
+		UserMessage: content,
+		TurnCount:   session.TurnCount,
 	})
+	if err != nil {
+		return SendMessageResult{}, err
+	}
 
 	createdAt := s.now()
 	userMessage := model.Message{
@@ -208,7 +221,7 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 	}
 	aiMessage := model.Message{
 		Role:      model.MessageRoleAI,
-		Content:   reply.Content,
+		Content:   reply.Reply,
 		Stage:     reply.Stage,
 		CreatedAt: createdAt,
 	}
@@ -236,6 +249,21 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 		UserMessage: savedUserMessage,
 		AIMessage:   savedAIMessage,
 		Stage:       savedAIMessage.Stage,
+		NextGoal:    reply.NextGoal,
 		TurnCount:   updated.TurnCount,
 	}, nil
+}
+
+func stageNameForTurn(stages []model.ScenarioStage, turnIndex int) string {
+	if len(stages) == 0 {
+		return "general"
+	}
+	if turnIndex < 0 {
+		turnIndex = 0
+	}
+	if turnIndex >= len(stages) {
+		turnIndex = len(stages) - 1
+	}
+
+	return stages[turnIndex].Name
 }
