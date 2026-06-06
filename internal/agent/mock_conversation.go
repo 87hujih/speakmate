@@ -1,32 +1,24 @@
 package agent
 
-import "speakmate/internal/model"
+import "context"
 
-// MockConversationAgent 基于场景和轮次返回稳定的本地 Mock 回复。
 type MockConversationAgent struct{}
 
-// NewMockConversationAgent 创建 Mock 对话 Agent。
 func NewMockConversationAgent() *MockConversationAgent {
 	return &MockConversationAgent{}
 }
 
-// Generate 根据场景编码和当前轮次选择一条英文追问。
-func (a *MockConversationAgent) Generate(input ConversationInput) (ConversationOutput, error) {
-	turnCount := input.TurnCount
-	if turnCount < 0 {
-		turnCount = 0
-	}
-
-	stage := stageNameForTurn(input.Scenario.Stages, turnCount+1)
+func (a *MockConversationAgent) GenerateReply(ctx context.Context, input ConversationInput) (ConversationOutput, error) {
+	stageIndex := input.Session.TurnCount + 1
+	stage := StageNameForTurn(input.Scenario.Stages, stageIndex)
 	replies := repliesForScenario(input.Scenario.Code)
 	nextGoals := nextGoalsForScenario(input.Scenario.Code)
-	index := turnCount % len(replies)
+	index := input.Session.TurnCount % len(replies)
 
 	return ConversationOutput{
 		Reply:    replies[index],
 		Stage:    stage,
 		NextGoal: nextGoals[index],
-		Raw:      nil,
 	}, nil
 }
 
@@ -82,18 +74,4 @@ func nextGoalsForScenario(code string) []string {
 			"ask user to add one specific detail",
 		}
 	}
-}
-
-func stageNameForTurn(stages []model.ScenarioStage, turnIndex int) string {
-	if len(stages) == 0 {
-		return "general"
-	}
-	if turnIndex < 0 {
-		turnIndex = 0
-	}
-	if turnIndex >= len(stages) {
-		turnIndex = len(stages) - 1
-	}
-
-	return stages[turnIndex].Name
 }
