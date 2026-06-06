@@ -1,6 +1,7 @@
 package agent_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 func TestMockConversationAgentGeneratesScenarioSpecificReplyAndStage(t *testing.T) {
 	conversationAgent := agent.NewMockConversationAgent()
 
-	output, err := conversationAgent.Generate(agent.ConversationInput{
+	output, err := conversationAgent.GenerateReply(context.Background(), agent.ConversationInput{
 		Scenario: model.Scenario{
 			Code: "interview",
 			Stages: []model.ScenarioStage{
@@ -20,11 +21,10 @@ func TestMockConversationAgentGeneratesScenarioSpecificReplyAndStage(t *testing.
 			},
 		},
 		Session:     model.Session{TurnCount: 0},
-		UserMessage: "I built a robot control project.",
-		TurnCount:   0,
+		UserContent: "I built a robot control project.",
 	})
 	if err != nil {
-		t.Fatalf("Generate returned error: %v", err)
+		t.Fatalf("GenerateReply returned error: %v", err)
 	}
 
 	if !strings.Contains(strings.ToLower(output.Reply), "project") {
@@ -33,25 +33,24 @@ func TestMockConversationAgentGeneratesScenarioSpecificReplyAndStage(t *testing.
 	if output.Stage != "项目经历" {
 		t.Fatalf("stage = %q, want 项目经历", output.Stage)
 	}
-	if output.NextGoal == "" {
-		t.Fatal("next_goal is empty")
+	if output.NextGoal != "ask user to describe personal project contribution" {
+		t.Fatalf("next_goal = %q, want project contribution goal", output.NextGoal)
 	}
-	if output.Raw != nil {
-		t.Fatalf("raw = %#v, want nil for mock output", output.Raw)
+	if output.Raw != "" {
+		t.Fatalf("raw = %q, want empty for mock output", output.Raw)
 	}
 }
 
 func TestMockConversationAgentFallsBackForUnknownScenario(t *testing.T) {
 	conversationAgent := agent.NewMockConversationAgent()
 
-	output, err := conversationAgent.Generate(agent.ConversationInput{
+	output, err := conversationAgent.GenerateReply(context.Background(), agent.ConversationInput{
 		Scenario:    model.Scenario{Code: "unknown"},
 		Session:     model.Session{TurnCount: 8},
-		UserMessage: "Hello",
-		TurnCount:   8,
+		UserContent: "Hello",
 	})
 	if err != nil {
-		t.Fatalf("Generate returned error: %v", err)
+		t.Fatalf("GenerateReply returned error: %v", err)
 	}
 
 	if output.Reply == "" {
@@ -60,7 +59,7 @@ func TestMockConversationAgentFallsBackForUnknownScenario(t *testing.T) {
 	if output.Stage != "general" {
 		t.Fatalf("stage = %q, want general", output.Stage)
 	}
-	if output.NextGoal == "" {
-		t.Fatal("next_goal is empty")
+	if output.NextGoal != "ask user to add one specific detail" {
+		t.Fatalf("next_goal = %q, want fallback detail goal", output.NextGoal)
 	}
 }

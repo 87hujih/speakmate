@@ -122,14 +122,14 @@ Browser
 |---|---|---|
 | Gin 服务骨架 | 已完成 | `cmd/server` 启动 HTTP 服务 |
 | 健康检查接口 | 已完成 | `GET /health` 返回统一 JSON 响应 |
-| 配置加载 | 已完成 | 支持 `APP_PORT`，默认端口 `8080` |
+| 配置加载 | 已完成 | 支持 `APP_PORT` 和 LLM 相关环境变量，默认端口 `8080` |
 | 统一响应结构 | 已完成 | 成功响应格式为 `{ code, message, data }` |
 | 前端原型 | 已完成 | [web/preview.html](web/preview.html) 展示训练、对话、报告和历史记录页面 |
 | 前端技术选型 | 已确定 | 正式前端工程使用 Vite + React + TypeScript |
 | 场景 API（Module 1） | 已完成 | 场景列表和详情接口，见 [docs/api文档/scenario-api-module1-api.md](docs/api文档/scenario-api-module1-api.md) |
 | 训练 Session API（Module 2） | 已完成 | 创建、查询、结束训练 Session，见 [docs/api文档/session-api-module2-api.md](docs/api文档/session-api-module2-api.md) |
-| 消息 API（Module 3） | 已完成 | 发送文本、Conversation Agent 回复、轮次更新和消息历史查询，见 [docs/api文档/message-api-module3-api.md](docs/api文档/message-api-module3-api.md) |
-| Conversation Agent 抽象 | 已完成 Mock 版 | 已定义 `ConversationAgent` 接口，当前启动时固定注入 `MockConversationAgent`，暂不请求真实 LLM |
+| 消息 API（Module 3） | 已完成 | 发送文本、AI 回复、轮次更新和消息历史查询，见 [docs/api文档/message-api-module3-api.md](docs/api文档/message-api-module3-api.md) |
+| Conversation Agent | 已接入 | 默认使用 Mock；配置 API Key 且关闭 Mock 后使用 OpenAI-compatible LLM，失败时降级 Mock |
 | AI 纠错与评分 | 规划中 | Conversation、Correction、Scoring、Summary Agent |
 | 语音能力 | 规划中 | 浏览器录音、ASR、WebSocket 音频分片 |
 
@@ -145,6 +145,13 @@ Browser
 | 当前原型 | HTML、CSS、JavaScript |
 
 ## 快速开始
+
+默认配置会使用本地 Mock Agent，不需要 API Key：
+
+```bash
+LLM_USE_MOCK=true
+go run ./cmd/server
+```
 
 启动后端服务：
 
@@ -176,6 +183,23 @@ curl http://localhost:8080/health
 go test ./...
 ```
 
+### LLM 配置
+
+自动测试只使用 Fake / Mock，不会请求真实模型。本地默认 `LLM_USE_MOCK=true`，只有配置完整且关闭 Mock 时才会请求 OpenAI-compatible API：
+
+```bash
+APP_PORT=8080
+LLM_PROVIDER=openai-compatible
+LLM_BASE_URL=https://api.example.com/v1
+LLM_API_KEY=replace-with-your-api-key
+LLM_MODEL=replace-with-your-model
+LLM_TIMEOUT_SECONDS=30
+LLM_USE_MOCK=false
+go run ./cmd/server
+```
+
+如果 `LLM_USE_MOCK=true`，或 `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 不完整，服务会继续使用 Mock Agent。真实 LLM 调用失败时当前启动策略会降级为 Mock 回复，保证本地演示链路可用。
+
 查看前端原型：
 
 ```text
@@ -190,9 +214,10 @@ web/preview.html
 speakmate/
 ├── cmd/server/              # 服务入口
 ├── internal/
-│   ├── agent/               # Conversation Agent 抽象和当前 Mock 实现
 │   ├── config/              # 环境配置
+│   ├── agent/               # Conversation Agent、Prompt 和 Mock/LLM 实现
 │   ├── handler/             # HTTP Handler
+│   ├── infra/llm/           # OpenAI-compatible LLM HTTP Client
 │   ├── response/            # 统一响应结构
 │   └── router/              # Gin 路由
 ├── web/                     # 前端目录，后续使用 Vite + React + TypeScript

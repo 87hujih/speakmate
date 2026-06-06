@@ -6,7 +6,7 @@
 创建 Session -> 发送用户文本 -> 收到 Conversation Agent 回复 -> 查询消息历史 -> 结束训练
 ```
 
-当前版本只支持文本消息和普通 JSON 响应，已抽象 `ConversationAgent`，启动时固定注入本地 `MockConversationAgent`。当前不接真实 LLM、不做 SSE 流式输出、不处理语音。
+当前版本只支持文本消息和普通 JSON 响应。服务默认使用本地 `MockConversationAgent`，配置完整且 `LLM_USE_MOCK=false` 时可切换到 OpenAI-compatible LLM Agent。当前不做 SSE 流式输出、不处理语音。
 
 ## 基本信息
 
@@ -33,7 +33,7 @@
 
 ## Conversation Agent 规则
 
-当前 AI 回复由 `internal/agent` 下的 `MockConversationAgent` 生成，不请求外部模型。消息发送业务只依赖 `ConversationAgent` 接口，后续可在启动装配时替换为真实 LLM Agent。
+消息发送业务依赖 `internal/agent` 下的 `ConversationAgent` 接口。默认使用本地 Mock Agent，不请求外部模型；当配置 `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL` 且关闭 `LLM_USE_MOCK` 后，启动装配会使用真实 LLM Agent，并在 LLM 调用失败时降级为 Mock 回复。
 
 | 场景编码 | 回复方向 |
 |---|---|
@@ -52,6 +52,7 @@
 | `400` | `3002` | `message content is required` | `content` 去除首尾空白后为空 |
 | `404` | `2003` | `session not found` | Session 不存在 |
 | `409` | `2004` | `session already finished` | Session 已结束，不允许继续发送消息 |
+| `502` | `3003` | `conversation agent failed` | Conversation Agent 生成回复失败且没有可用降级 |
 | `500` | `500` | `internal server error` | 非预期服务端错误 |
 
 ## 发送文本消息
@@ -107,7 +108,7 @@ HTTP 状态码：`200`
 | `ai_message.stage` | string | AI 回复推进到的训练阶段 |
 | `ai_message.created_at` | string | 消息创建时间，RFC3339 格式 |
 | `stage` | string | 当前响应对应的训练阶段，与 `ai_message.stage` 一致 |
-| `next_goal` | string | Agent 给出的下一步追问目标，当前由 Mock Agent 稳定返回 |
+| `next_goal` | string | Agent 给出的下一步追问目标 |
 | `turn_count` | number | 发送成功后的 Session 对话轮次 |
 
 示例响应：
@@ -316,5 +317,5 @@ go run ./cmd/server
 自动化测试：
 
 ```bash
-go test ./internal/router ./internal/service
+LLM_USE_MOCK=true go test ./...
 ```
