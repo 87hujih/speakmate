@@ -26,6 +26,12 @@ logs/
 # Local frontend prototype
 /web/preview.html
 
+# Local workspace notes and task files
+/docs/
+/AGENT.md
+/tasks/
+/PR提交规范.md
+
 # Environment and local config
 .env
 .env.*

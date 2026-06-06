@@ -126,7 +126,8 @@ Browser
 | 统一响应结构 | 已完成 | 成功响应格式为 `{ code, message, data }` |
 | 前端原型 | 已完成 | [web/preview.html](web/preview.html) 展示训练、对话、报告和历史记录页面 |
 | 前端技术选型 | 已确定 | 正式前端工程使用 Vite + React + TypeScript |
-| 场景与训练 API | 规划中 | 场景列表、创建训练、发送消息、结束训练 |
+| 场景 API（Module 1） | 已完成 | 场景列表和详情接口，见 [docs/scenario-api-module1-api.md](docs/scenario-api-module1-api.md) |
+| 训练 Session 与消息 API | 规划中 | 创建训练、发送消息、结束训练 |
 | AI 纠错与评分 | 规划中 | Conversation、Correction、Scoring、Summary Agent |
 | 语音能力 | 规划中 | 浏览器录音、ASR、WebSocket 音频分片 |
 
