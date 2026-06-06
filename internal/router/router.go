@@ -31,14 +31,17 @@ func New(configs ...config.Config) *gin.Engine {
 	scenarioService := service.NewScenarioService(scenarioRepo)
 	scenarioHandler := handler.NewScenarioHandler(scenarioService)
 	sessionRepo := repository.NewMemorySessionRepository()
+	feedbackRepo := repository.NewMemoryFeedbackRepository()
 	sessionService := service.NewSessionService(
 		scenarioService,
 		sessionRepo,
 		service.WithConversationAgent(NewConversationAgent(cfg)),
+		service.WithFeedbackRepository(feedbackRepo),
+		service.WithCorrectionAgent(NewCorrectionAgent(cfg)),
+		service.WithScoringAgent(NewScoringAgent(cfg)),
 	)
 	sessionHandler := handler.NewSessionHandler(sessionService)
 	messageHandler := handler.NewMessageHandler(sessionService)
-	feedbackRepo := repository.NewMemoryFeedbackRepository()
 	feedbackService := service.NewFeedbackService(feedbackRepo)
 	feedbackHandler := handler.NewFeedbackHandler(feedbackService)
 
@@ -71,4 +74,12 @@ func NewConversationAgent(cfg config.Config) agent.ConversationAgent {
 	}
 
 	return agent.NewLLMConversationAgent(client, agent.WithFallbackAgent(agent.NewMockConversationAgent()))
+}
+
+func NewCorrectionAgent(cfg config.Config) agent.CorrectionAgent {
+	return agent.NewMockCorrectionAgent()
+}
+
+func NewScoringAgent(cfg config.Config) agent.ScoringAgent {
+	return agent.NewMockScoringAgent()
 }

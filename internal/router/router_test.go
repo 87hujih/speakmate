@@ -576,6 +576,140 @@ func TestMessageSendCreatesMockReplyAndSessionHistory(t *testing.T) {
 	}
 }
 
+// TestMessageSendGeneratesFeedbackAndFeedbackRoutesReturnIt 验证发送消息会同步生成纠错、评分，并能被反馈查询接口读到。
+func TestMessageSendGeneratesFeedbackAndFeedbackRoutesReturnIt(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+
+	sent := postMessage(t, engine, sessionID, `{"content":"I am study computer science and I have did a project."}`)
+
+	if !sent.Data.CorrectionSummary.HasErrors {
+		t.Fatal("correction_summary.has_errors = false, want true")
+	}
+	if sent.Data.CorrectionSummary.ErrorCount != 2 {
+		t.Fatalf("correction_summary.error_count = %d, want 2", sent.Data.CorrectionSummary.ErrorCount)
+	}
+	if sent.Data.ScoreSummary.TotalScore != 77 {
+		t.Fatalf("score_summary.total_score = %d, want 77", sent.Data.ScoreSummary.TotalScore)
+	}
+	if sent.Data.ScoreSummary.Grammar != 72 {
+		t.Fatalf("score_summary.grammar = %d, want 72", sent.Data.ScoreSummary.Grammar)
+	}
+	if sent.Data.ScoreSummary.Expression != 80 {
+		t.Fatalf("score_summary.expression = %d, want 80", sent.Data.ScoreSummary.Expression)
+	}
+
+	messageID := sent.Data.UserMessage.ID
+	correctionReq := httptest.NewRequest(http.MethodGet, "/api/v1/messages/"+strconv.Itoa(messageID)+"/corrections", nil)
+	correctionRec := httptest.NewRecorder()
+
+	engine.ServeHTTP(correctionRec, correctionReq)
+
+	if correctionRec.Code != http.StatusOK {
+		t.Fatalf("correction status code = %d, want %d; body = %s", correctionRec.Code, http.StatusOK, correctionRec.Body.String())
+	}
+	var correctionBody struct {
+		Code int `json:"code"`
+		Data struct {
+			MessageID     int    `json:"message_id"`
+			SessionID     int    `json:"session_id"`
+			OriginalText  string `json:"original_text"`
+			CorrectedText string `json:"corrected_text"`
+			Errors        []struct {
+				Type       string `json:"type"`
+				Span       string `json:"span"`
+				Suggestion string `json:"suggestion"`
+			} `json:"errors"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(correctionRec.Body.Bytes(), &correctionBody); err != nil {
+		t.Fatalf("correction response is not valid JSON: %v", err)
+	}
+	if correctionBody.Code != 0 {
+		t.Fatalf("correction code = %d, want 0", correctionBody.Code)
+	}
+	if correctionBody.Data.MessageID != messageID {
+		t.Fatalf("correction message_id = %d, want %d", correctionBody.Data.MessageID, messageID)
+	}
+	if correctionBody.Data.SessionID != sessionID {
+		t.Fatalf("correction session_id = %d, want %d", correctionBody.Data.SessionID, sessionID)
+	}
+	if correctionBody.Data.CorrectedText != "I am studying computer science, and I have done a project." {
+		t.Fatalf("corrected_text = %q, want mock corrected text", correctionBody.Data.CorrectedText)
+	}
+	if len(correctionBody.Data.Errors) != 2 {
+		t.Fatalf("correction errors length = %d, want 2", len(correctionBody.Data.Errors))
+	}
+
+	sessionCorrectionsReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/corrections", nil)
+	sessionCorrectionsRec := httptest.NewRecorder()
+
+	engine.ServeHTTP(sessionCorrectionsRec, sessionCorrectionsReq)
+
+	if sessionCorrectionsRec.Code != http.StatusOK {
+		t.Fatalf("session corrections status code = %d, want %d; body = %s", sessionCorrectionsRec.Code, http.StatusOK, sessionCorrectionsRec.Body.String())
+	}
+	var sessionCorrectionsBody struct {
+		Code int `json:"code"`
+		Data []struct {
+			MessageID int `json:"message_id"`
+			SessionID int `json:"session_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(sessionCorrectionsRec.Body.Bytes(), &sessionCorrectionsBody); err != nil {
+		t.Fatalf("session corrections response is not valid JSON: %v", err)
+	}
+	if sessionCorrectionsBody.Code != 0 {
+		t.Fatalf("session corrections code = %d, want 0", sessionCorrectionsBody.Code)
+	}
+	if len(sessionCorrectionsBody.Data) != 1 {
+		t.Fatalf("session corrections length = %d, want 1", len(sessionCorrectionsBody.Data))
+	}
+	if sessionCorrectionsBody.Data[0].MessageID != messageID {
+		t.Fatalf("session correction message_id = %d, want %d", sessionCorrectionsBody.Data[0].MessageID, messageID)
+	}
+
+	scoreReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/scores", nil)
+	scoreRec := httptest.NewRecorder()
+
+	engine.ServeHTTP(scoreRec, scoreReq)
+
+	if scoreRec.Code != http.StatusOK {
+		t.Fatalf("score status code = %d, want %d; body = %s", scoreRec.Code, http.StatusOK, scoreRec.Body.String())
+	}
+	var scoreBody struct {
+		Code int `json:"code"`
+		Data struct {
+			MessageID  int `json:"message_id"`
+			SessionID  int `json:"session_id"`
+			Grammar    int `json:"grammar"`
+			Expression int `json:"expression"`
+			TotalScore int `json:"total_score"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(scoreRec.Body.Bytes(), &scoreBody); err != nil {
+		t.Fatalf("score response is not valid JSON: %v", err)
+	}
+	if scoreBody.Code != 0 {
+		t.Fatalf("score code = %d, want 0", scoreBody.Code)
+	}
+	if scoreBody.Data.MessageID != messageID {
+		t.Fatalf("score message_id = %d, want %d", scoreBody.Data.MessageID, messageID)
+	}
+	if scoreBody.Data.SessionID != sessionID {
+		t.Fatalf("score session_id = %d, want %d", scoreBody.Data.SessionID, sessionID)
+	}
+	if scoreBody.Data.TotalScore != 77 {
+		t.Fatalf("score total_score = %d, want 77", scoreBody.Data.TotalScore)
+	}
+	if scoreBody.Data.Grammar != 72 {
+		t.Fatalf("score grammar = %d, want 72", scoreBody.Data.Grammar)
+	}
+	if scoreBody.Data.Expression != 80 {
+		t.Fatalf("score expression = %d, want 80", scoreBody.Data.Expression)
+	}
+}
+
 // TestMessageSendIncrementsTurnCountOnEachSuccessfulSend 验证多轮发送会持续递增轮次。
 func TestMessageSendIncrementsTurnCountOnEachSuccessfulSend(t *testing.T) {
 	engine := New()
@@ -717,12 +851,25 @@ type messagePayload struct {
 
 type postMessageResponse struct {
 	Data struct {
-		UserMessage messagePayload `json:"user_message"`
-		AIMessage   messagePayload `json:"ai_message"`
-		Stage       string         `json:"stage"`
-		NextGoal    string         `json:"next_goal"`
-		TurnCount   int            `json:"turn_count"`
+		UserMessage       messagePayload    `json:"user_message"`
+		AIMessage         messagePayload    `json:"ai_message"`
+		Stage             string            `json:"stage"`
+		NextGoal          string            `json:"next_goal"`
+		TurnCount         int               `json:"turn_count"`
+		CorrectionSummary correctionSummary `json:"correction_summary"`
+		ScoreSummary      scoreSummary      `json:"score_summary"`
 	} `json:"data"`
+}
+
+type correctionSummary struct {
+	HasErrors  bool `json:"has_errors"`
+	ErrorCount int  `json:"error_count"`
+}
+
+type scoreSummary struct {
+	TotalScore int `json:"total_score"`
+	Grammar    int `json:"grammar"`
+	Expression int `json:"expression"`
 }
 
 func postMessage(t *testing.T, engine http.Handler, sessionID int, body string) postMessageResponse {

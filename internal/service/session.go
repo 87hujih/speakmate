@@ -44,7 +44,10 @@ type SessionRepository interface {
 type SessionService struct {
 	scenarioReader ScenarioReader
 	repo           SessionRepository
+	feedbackRepo   FeedbackRepository
 	conversation   agent.ConversationAgent
+	correction     agent.CorrectionAgent
+	scoring        agent.ScoringAgent
 	now            func() time.Time
 }
 
@@ -56,6 +59,8 @@ func NewSessionService(scenarioReader ScenarioReader, repo SessionRepository, op
 		scenarioReader: scenarioReader,
 		repo:           repo,
 		conversation:   agent.NewMockConversationAgent(),
+		correction:     agent.NewMockCorrectionAgent(),
+		scoring:        agent.NewMockScoringAgent(),
 		now:            time.Now,
 	}
 	for _, opt := range opts {
@@ -69,6 +74,30 @@ func WithConversationAgent(conversation agent.ConversationAgent) SessionOption {
 	return func(service *SessionService) {
 		if conversation != nil {
 			service.conversation = conversation
+		}
+	}
+}
+
+func WithFeedbackRepository(feedbackRepo FeedbackRepository) SessionOption {
+	return func(service *SessionService) {
+		if feedbackRepo != nil {
+			service.feedbackRepo = feedbackRepo
+		}
+	}
+}
+
+func WithCorrectionAgent(correction agent.CorrectionAgent) SessionOption {
+	return func(service *SessionService) {
+		if correction != nil {
+			service.correction = correction
+		}
+	}
+}
+
+func WithScoringAgent(scoring agent.ScoringAgent) SessionOption {
+	return func(service *SessionService) {
+		if scoring != nil {
+			service.scoring = scoring
 		}
 	}
 }
@@ -100,11 +129,26 @@ type SendMessageInput struct {
 
 // SendMessageResult 是发送消息后的业务输出。
 type SendMessageResult struct {
-	UserMessage model.Message
-	AIMessage   model.Message
-	Stage       string
-	NextGoal    string
-	TurnCount   int
+	UserMessage       model.Message
+	AIMessage         model.Message
+	Stage             string
+	NextGoal          string
+	TurnCount         int
+	CorrectionSummary CorrectionSummary
+	ScoreSummary      ScoreSummary
+}
+
+// CorrectionSummary 是发送消息响应中返回的纠错摘要。
+type CorrectionSummary struct {
+	HasErrors  bool `json:"has_errors"`
+	ErrorCount int  `json:"error_count"`
+}
+
+// ScoreSummary 是发送消息响应中返回的评分摘要。
+type ScoreSummary struct {
+	TotalScore int `json:"total_score"`
+	Grammar    int `json:"grammar"`
+	Expression int `json:"expression"`
 }
 
 // CreateSession 基于有效场景创建 running 状态的训练 Session。
@@ -271,12 +315,116 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 	messages := updated.Messages
 	savedUserMessage := messages[len(messages)-2]
 	savedAIMessage := messages[len(messages)-1]
+	correctionSummary, scoreSummary := s.generateFeedback(ctx, scenario, updated, savedUserMessage)
 
 	return SendMessageResult{
-		UserMessage: savedUserMessage,
-		AIMessage:   savedAIMessage,
-		Stage:       savedAIMessage.Stage,
-		NextGoal:    reply.NextGoal,
-		TurnCount:   updated.TurnCount,
+		UserMessage:       savedUserMessage,
+		AIMessage:         savedAIMessage,
+		Stage:             savedAIMessage.Stage,
+		NextGoal:          reply.NextGoal,
+		TurnCount:         updated.TurnCount,
+		CorrectionSummary: correctionSummary,
+		ScoreSummary:      scoreSummary,
 	}, nil
+}
+
+func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Scenario, session model.Session, userMessage model.Message) (CorrectionSummary, ScoreSummary) {
+	if s.feedbackRepo == nil {
+		return CorrectionSummary{}, ScoreSummary{}
+	}
+
+	correctionAgent := s.correction
+	if correctionAgent == nil {
+		correctionAgent = agent.NewMockCorrectionAgent()
+	}
+	correctionOutput, err := correctionAgent.Correct(agent.CorrectionInput{
+		Scenario:    scenario,
+		Session:     session,
+		History:     session.Messages,
+		UserMessage: userMessage,
+	})
+	if err != nil {
+		return CorrectionSummary{}, ScoreSummary{}
+	}
+	correction := normalizeCorrectionResult(correctionOutput.Result, session.ID, userMessage)
+	if err := s.feedbackRepo.SaveCorrection(correction); err != nil {
+		return CorrectionSummary{}, ScoreSummary{}
+	}
+
+	scoringAgent := s.scoring
+	if scoringAgent == nil {
+		scoringAgent = agent.NewMockScoringAgent()
+	}
+	scoreOutput, err := scoringAgent.Score(agent.ScoringInput{
+		Scenario:    scenario,
+		Session:     session,
+		History:     session.Messages,
+		UserMessage: userMessage,
+		Correction:  correction,
+	})
+	if err != nil {
+		return correctionSummaryFromResult(correction), ScoreSummary{}
+	}
+	score := normalizeScoreResult(scoreOutput.Result, session.ID, userMessage, correction)
+	if err := s.feedbackRepo.SaveScore(score); err != nil {
+		return correctionSummaryFromResult(correction), ScoreSummary{}
+	}
+
+	return correctionSummaryFromResult(correction), scoreSummaryFromResult(score)
+}
+
+func normalizeCorrectionResult(correction model.CorrectionResult, sessionID int, userMessage model.Message) model.CorrectionResult {
+	if correction.MessageID == 0 {
+		correction.MessageID = userMessage.ID
+	}
+	if correction.SessionID == 0 {
+		correction.SessionID = sessionID
+	}
+	if correction.OriginalText == "" {
+		correction.OriginalText = userMessage.Content
+	}
+	if correction.CorrectedText == "" {
+		correction.CorrectedText = correction.OriginalText
+	}
+	if correction.Errors == nil {
+		correction.Errors = []model.CorrectionError{}
+	}
+	if correction.BetterExpressions == nil {
+		correction.BetterExpressions = []string{}
+	}
+
+	return correction
+}
+
+func normalizeScoreResult(score model.ScoreResult, sessionID int, userMessage model.Message, correction model.CorrectionResult) model.ScoreResult {
+	if score.MessageID == 0 {
+		score.MessageID = correction.MessageID
+	}
+	if score.MessageID == 0 {
+		score.MessageID = userMessage.ID
+	}
+	if score.SessionID == 0 {
+		score.SessionID = correction.SessionID
+	}
+	if score.SessionID == 0 {
+		score.SessionID = sessionID
+	}
+
+	return score
+}
+
+func correctionSummaryFromResult(correction model.CorrectionResult) CorrectionSummary {
+	errorCount := len(correction.Errors)
+	return CorrectionSummary{
+		HasErrors:  errorCount > 0,
+		ErrorCount: errorCount,
+	}
+}
+
+func scoreSummaryFromResult(score model.ScoreResult) ScoreSummary {
+	return ScoreSummary{
+		TotalScore: score.TotalScore,
+		Grammar:    score.Grammar,
+		Expression: score.Expression,
+	}
 }

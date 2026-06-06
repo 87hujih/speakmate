@@ -161,6 +161,101 @@ func TestSessionServiceSendsMessageAndPersistsMockReply(t *testing.T) {
 	}
 }
 
+func TestSessionServiceSendsMessageAndGeneratesFeedback(t *testing.T) {
+	scenarioReader := fakeScenarioReader{
+		scenarios: map[int]model.Scenario{
+			1: {
+				ID:   1,
+				Code: "interview",
+				Stages: []model.ScenarioStage{
+					{Name: "自我介绍"},
+					{Name: "项目经历"},
+				},
+			},
+		},
+	}
+	sessionRepo := newFakeSessionRepository()
+	created, err := sessionRepo.Create(model.Session{
+		ScenarioID: 1,
+		UserID:     1,
+		Status:     model.SessionStatusRunning,
+		CreatedAt:  time.Now(),
+		Messages:   []model.Message{},
+	})
+	if err != nil {
+		t.Fatalf("setup session returned error: %v", err)
+	}
+	feedbackRepo := newFakeFeedbackRepository()
+	correctionAgent := &fakeCorrectionAgent{}
+	scoringAgent := &fakeScoringAgent{}
+	sessionService := service.NewSessionService(
+		scenarioReader,
+		sessionRepo,
+		service.WithFeedbackRepository(feedbackRepo),
+		service.WithCorrectionAgent(correctionAgent),
+		service.WithScoringAgent(scoringAgent),
+	)
+
+	result, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.ID,
+		Content:   "I am study computer science and I have did a project.",
+	})
+	if err != nil {
+		t.Fatalf("SendMessage returned error: %v", err)
+	}
+
+	if correctionAgent.callCount != 1 {
+		t.Fatalf("correction call count = %d, want 1", correctionAgent.callCount)
+	}
+	if scoringAgent.callCount != 1 {
+		t.Fatalf("scoring call count = %d, want 1", scoringAgent.callCount)
+	}
+	if correctionAgent.input.UserMessage.ID != result.UserMessage.ID {
+		t.Fatalf("correction message id = %d, want saved user message id %d", correctionAgent.input.UserMessage.ID, result.UserMessage.ID)
+	}
+	if scoringAgent.input.Correction.MessageID != result.UserMessage.ID {
+		t.Fatalf("scoring correction message id = %d, want %d", scoringAgent.input.Correction.MessageID, result.UserMessage.ID)
+	}
+
+	correction, ok := feedbackRepo.correctionsByMessageID[result.UserMessage.ID]
+	if !ok {
+		t.Fatalf("saved correction for message %d not found", result.UserMessage.ID)
+	}
+	if correction.SessionID != created.ID {
+		t.Fatalf("correction session id = %d, want %d", correction.SessionID, created.ID)
+	}
+	if len(correction.Errors) != 2 {
+		t.Fatalf("correction errors length = %d, want 2", len(correction.Errors))
+	}
+
+	score, ok := feedbackRepo.scoresBySessionID[created.ID]
+	if !ok {
+		t.Fatalf("saved score for session %d not found", created.ID)
+	}
+	if score.MessageID != result.UserMessage.ID {
+		t.Fatalf("score message id = %d, want %d", score.MessageID, result.UserMessage.ID)
+	}
+	if score.TotalScore != 77 {
+		t.Fatalf("score total = %d, want 77", score.TotalScore)
+	}
+
+	if !result.CorrectionSummary.HasErrors {
+		t.Fatal("correction summary has_errors = false, want true")
+	}
+	if result.CorrectionSummary.ErrorCount != 2 {
+		t.Fatalf("correction summary error_count = %d, want 2", result.CorrectionSummary.ErrorCount)
+	}
+	if result.ScoreSummary.TotalScore != 77 {
+		t.Fatalf("score summary total_score = %d, want 77", result.ScoreSummary.TotalScore)
+	}
+	if result.ScoreSummary.Grammar != 72 {
+		t.Fatalf("score summary grammar = %d, want 72", result.ScoreSummary.Grammar)
+	}
+	if result.ScoreSummary.Expression != 80 {
+		t.Fatalf("score summary expression = %d, want 80", result.ScoreSummary.Expression)
+	}
+}
+
 func TestSessionServicePassesScenarioHistoryAndUserInputToConversationAgent(t *testing.T) {
 	scenarioReader := fakeScenarioReader{
 		scenarios: map[int]model.Scenario{
@@ -296,7 +391,16 @@ func TestSessionServiceRejectsMessageForFinishedSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("setup session returned error: %v", err)
 	}
-	sessionService := service.NewSessionService(fakeScenarioReader{}, sessionRepo)
+	feedbackRepo := newFakeFeedbackRepository()
+	correctionAgent := &fakeCorrectionAgent{}
+	scoringAgent := &fakeScoringAgent{}
+	sessionService := service.NewSessionService(
+		fakeScenarioReader{},
+		sessionRepo,
+		service.WithFeedbackRepository(feedbackRepo),
+		service.WithCorrectionAgent(correctionAgent),
+		service.WithScoringAgent(scoringAgent),
+	)
 
 	_, err = sessionService.SendMessage(service.SendMessageInput{
 		SessionID: created.ID,
@@ -305,6 +409,15 @@ func TestSessionServiceRejectsMessageForFinishedSession(t *testing.T) {
 
 	if !errors.Is(err, service.ErrSessionAlreadyFinished) {
 		t.Fatalf("error = %v, want ErrSessionAlreadyFinished", err)
+	}
+	if correctionAgent.callCount != 0 {
+		t.Fatalf("correction call count = %d, want 0", correctionAgent.callCount)
+	}
+	if scoringAgent.callCount != 0 {
+		t.Fatalf("scoring call count = %d, want 0", scoringAgent.callCount)
+	}
+	if feedbackRepo.callCount != 0 {
+		t.Fatalf("feedback repo call count = %d, want 0", feedbackRepo.callCount)
 	}
 }
 
@@ -408,4 +521,70 @@ func (a *fakeConversationAgent) GenerateReply(ctx context.Context, input agent.C
 	}
 
 	return a.output, nil
+}
+
+type fakeCorrectionAgent struct {
+	err       error
+	callCount int
+	input     agent.CorrectionInput
+}
+
+func (a *fakeCorrectionAgent) Correct(input agent.CorrectionInput) (agent.CorrectionOutput, error) {
+	a.callCount++
+	a.input = input
+	if a.err != nil {
+		return agent.CorrectionOutput{}, a.err
+	}
+
+	return agent.CorrectionOutput{
+		Result: model.CorrectionResult{
+			MessageID:     input.UserMessage.ID,
+			SessionID:     input.UserMessage.SessionID,
+			OriginalText:  input.UserMessage.Content,
+			CorrectedText: "I am studying computer science, and I have done a project.",
+			Errors: []model.CorrectionError{
+				{
+					Type:        model.CorrectionErrorTypeGrammar,
+					Span:        "am study",
+					Suggestion:  "am studying",
+					Explanation: "be 动词后应接现在分词。",
+				},
+				{
+					Type:        model.CorrectionErrorTypeGrammar,
+					Span:        "have did",
+					Suggestion:  "have done",
+					Explanation: "现在完成时中 have 后应接过去分词 done。",
+				},
+			},
+			BetterExpressions: []string{"I major in computer science."},
+		},
+	}, nil
+}
+
+type fakeScoringAgent struct {
+	err       error
+	callCount int
+	input     agent.ScoringInput
+}
+
+func (a *fakeScoringAgent) Score(input agent.ScoringInput) (agent.ScoringOutput, error) {
+	a.callCount++
+	a.input = input
+	if a.err != nil {
+		return agent.ScoringOutput{}, a.err
+	}
+
+	return agent.ScoringOutput{
+		Result: model.ScoreResult{
+			MessageID:  input.Correction.MessageID,
+			SessionID:  input.Correction.SessionID,
+			Fluency:    75,
+			Grammar:    72,
+			Expression: 80,
+			Vocabulary: 76,
+			Completion: 85,
+			TotalScore: 77,
+			Comment:    "stable score",
+		},
+	}, nil
 }
