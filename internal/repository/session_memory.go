@@ -18,16 +18,18 @@ var (
 
 // MemorySessionRepository 使用内存 map 保存训练 Session。
 type MemorySessionRepository struct {
-	mu       sync.RWMutex
-	nextID   int
-	sessions map[int]model.Session
+	mu            sync.RWMutex
+	nextID        int
+	nextMessageID int
+	sessions      map[int]model.Session
 }
 
 // NewMemorySessionRepository 创建空的内存 Session 仓库。
 func NewMemorySessionRepository() *MemorySessionRepository {
 	return &MemorySessionRepository{
-		nextID:   1,
-		sessions: make(map[int]model.Session),
+		nextID:        1,
+		nextMessageID: 1,
+		sessions:      make(map[int]model.Session),
 	}
 }
 
@@ -78,6 +80,33 @@ func (r *MemorySessionRepository) Finish(id int, endedAt time.Time) (model.Sessi
 
 	session.Status = model.SessionStatusFinished
 	session.EndedAt = &endedAt
+	r.sessions[id] = cloneSession(session)
+
+	return cloneSession(session), nil
+}
+
+// AppendTurn 原子地追加一轮用户消息和 AI 消息，并递增 Session 轮次。
+func (r *MemorySessionRepository) AppendTurn(id int, userMessage model.Message, aiMessage model.Message) (model.Session, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	session, ok := r.sessions[id]
+	if !ok {
+		return model.Session{}, ErrSessionNotFound
+	}
+	if session.Status == model.SessionStatusFinished {
+		return model.Session{}, ErrSessionAlreadyFinished
+	}
+
+	userMessage.ID = r.nextMessageID
+	r.nextMessageID++
+	userMessage.SessionID = id
+	aiMessage.ID = r.nextMessageID
+	r.nextMessageID++
+	aiMessage.SessionID = id
+
+	session.Messages = append(session.Messages, userMessage, aiMessage)
+	session.TurnCount++
 	r.sessions[id] = cloneSession(session)
 
 	return cloneSession(session), nil

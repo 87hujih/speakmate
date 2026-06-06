@@ -2,7 +2,7 @@
 
 本文档说明当前已实现的训练 Session 生命周期接口。前端可以用它完成创建训练、查看训练状态、结束训练这三个基础流程。
 
-消息发送、AI Mock 回复、轮次递增和课后报告不属于本模块。
+消息发送、AI Mock 回复和轮次递增由 Module 3 提供，接口契约见 [message-api-module3-api.md](message-api-module3-api.md)。课后报告不属于本模块。
 
 ## 基本信息
 
@@ -190,13 +190,14 @@ HTTP 状态码：`200`
 | `scenario.description` | string | 场景简介 |
 | `scenario.difficulty` | string | 场景难度 |
 | `status` | string | 当前状态，可能是 `running` 或 `finished` |
-| `turn_count` | number | 当前对话轮次，Module 2 阶段为 `0` |
-| `messages` | array | 消息列表，Module 2 阶段通常为空数组 |
-| `messages[].id` | number | 消息 ID，Module 3 后使用 |
-| `messages[].session_id` | number | 消息所属 Session ID，Module 3 后使用 |
-| `messages[].role` | string | 消息角色，Module 3 后使用 |
-| `messages[].content` | string | 消息内容，Module 3 后使用 |
-| `messages[].created_at` | string | 消息创建时间，Module 3 后使用 |
+| `turn_count` | number | 当前对话轮次。刚创建时为 `0`，每次成功发送消息后递增 |
+| `messages` | array | 消息列表。刚创建时为空，发送消息后包含用户消息和 AI 消息 |
+| `messages[].id` | number | 消息 ID |
+| `messages[].session_id` | number | 消息所属 Session ID |
+| `messages[].role` | string | 消息角色，当前为 `user` 或 `ai` |
+| `messages[].content` | string | 消息内容 |
+| `messages[].stage` | string | 消息所属训练阶段 |
+| `messages[].created_at` | string | 消息创建时间，RFC3339 格式 |
 | `created_at` | string | Session 创建时间，RFC3339 格式 |
 | `ended_at` | string/null | Session 结束时间，未结束时为 `null` |
 
@@ -381,7 +382,7 @@ curl -X POST http://localhost:8080/api/v1/sessions/abc/finish
 - 创建成功后保存 `session_id`，后续消息发送接口应使用这个 ID。
 - 创建响应中的 `opening_message` 可以直接渲染为 AI 的第一条开场消息。
 - 训练页刷新时调用 `GET /api/v1/sessions/:id` 恢复状态。
-- `messages` 在 Module 2 阶段为空数组，前端不要依赖它一定有开场白。
+- `messages` 刚创建时为空数组，发送消息后会保存用户消息和 AI Mock 回复；消息发送接口见 [message-api-module3-api.md](message-api-module3-api.md)。
 - `status === "finished"` 时应禁用输入框、发送按钮和结束按钮。
 - 调用结束接口后，以返回的 `ended_at` 作为最终结束时间展示。
 - 对 `409 / 2004` 可以提示“本次训练已结束”，不要再次重试结束请求。
@@ -397,7 +398,9 @@ curl -X POST http://localhost:8080/api/v1/sessions/abc/finish
 3. POST /api/v1/sessions
 4. 渲染 opening_message
 5. GET /api/v1/sessions/:id
-6. POST /api/v1/sessions/:id/finish
+6. POST /api/v1/sessions/:id/messages
+7. GET /api/v1/sessions/:id
+8. POST /api/v1/sessions/:id/finish
 ```
 
 ## 验证命令

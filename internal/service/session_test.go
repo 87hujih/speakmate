@@ -91,6 +91,105 @@ func TestSessionServiceRejectsAlreadyFinishedSession(t *testing.T) {
 	}
 }
 
+func TestSessionServiceSendsMessageAndPersistsMockReply(t *testing.T) {
+	scenarioReader := fakeScenarioReader{
+		scenarios: map[int]model.Scenario{
+			1: {
+				ID:   1,
+				Code: "interview",
+				Stages: []model.ScenarioStage{
+					{Name: "自我介绍"},
+					{Name: "项目经历"},
+				},
+			},
+		},
+	}
+	sessionRepo := newFakeSessionRepository()
+	created, err := sessionRepo.Create(model.Session{
+		ScenarioID: 1,
+		UserID:     1,
+		Status:     model.SessionStatusRunning,
+		CreatedAt:  time.Now(),
+		Messages:   []model.Message{},
+	})
+	if err != nil {
+		t.Fatalf("setup session returned error: %v", err)
+	}
+	sessionService := service.NewSessionService(scenarioReader, sessionRepo)
+
+	result, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.ID,
+		Content:   " I built a robot control project. ",
+	})
+	if err != nil {
+		t.Fatalf("SendMessage returned error: %v", err)
+	}
+
+	if result.UserMessage.Role != model.MessageRoleUser {
+		t.Fatalf("user role = %q, want %q", result.UserMessage.Role, model.MessageRoleUser)
+	}
+	if result.UserMessage.Content != "I built a robot control project." {
+		t.Fatalf("user content = %q, want trimmed content", result.UserMessage.Content)
+	}
+	if result.AIMessage.Role != model.MessageRoleAI {
+		t.Fatalf("ai role = %q, want %q", result.AIMessage.Role, model.MessageRoleAI)
+	}
+	if result.AIMessage.Content == "" {
+		t.Fatal("ai content is empty")
+	}
+	if result.Stage != "项目经历" {
+		t.Fatalf("stage = %q, want 项目经历", result.Stage)
+	}
+	if result.TurnCount != 1 {
+		t.Fatalf("turn_count = %d, want 1", result.TurnCount)
+	}
+
+	saved, err := sessionRepo.FindByID(created.ID)
+	if err != nil {
+		t.Fatalf("FindByID returned error: %v", err)
+	}
+	if saved.TurnCount != 1 {
+		t.Fatalf("saved turn_count = %d, want 1", saved.TurnCount)
+	}
+	if len(saved.Messages) != 2 {
+		t.Fatalf("saved messages length = %d, want 2", len(saved.Messages))
+	}
+}
+
+func TestSessionServiceRejectsBlankMessageContent(t *testing.T) {
+	sessionService := service.NewSessionService(fakeScenarioReader{}, newFakeSessionRepository())
+
+	_, err := sessionService.SendMessage(service.SendMessageInput{SessionID: 1, Content: "   "})
+
+	if !errors.Is(err, service.ErrMessageContentRequired) {
+		t.Fatalf("error = %v, want ErrMessageContentRequired", err)
+	}
+}
+
+func TestSessionServiceRejectsMessageForFinishedSession(t *testing.T) {
+	sessionRepo := newFakeSessionRepository()
+	created, err := sessionRepo.Create(model.Session{
+		ScenarioID: 1,
+		UserID:     1,
+		Status:     model.SessionStatusFinished,
+		CreatedAt:  time.Now(),
+		Messages:   []model.Message{},
+	})
+	if err != nil {
+		t.Fatalf("setup session returned error: %v", err)
+	}
+	sessionService := service.NewSessionService(fakeScenarioReader{}, sessionRepo)
+
+	_, err = sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.ID,
+		Content:   "Hello",
+	})
+
+	if !errors.Is(err, service.ErrSessionAlreadyFinished) {
+		t.Fatalf("error = %v, want ErrSessionAlreadyFinished", err)
+	}
+}
+
 type fakeScenarioReader struct {
 	scenarios map[int]model.Scenario
 }
@@ -105,15 +204,17 @@ func (r fakeScenarioReader) GetScenario(id int) (model.Scenario, error) {
 }
 
 type fakeSessionRepository struct {
-	nextID      int
-	createCount int
-	sessions    map[int]model.Session
+	nextID        int
+	nextMessageID int
+	createCount   int
+	sessions      map[int]model.Session
 }
 
 func newFakeSessionRepository() *fakeSessionRepository {
 	return &fakeSessionRepository{
-		nextID:   1,
-		sessions: make(map[int]model.Session),
+		nextID:        1,
+		nextMessageID: 1,
+		sessions:      make(map[int]model.Session),
 	}
 }
 
@@ -123,6 +224,28 @@ func (r *fakeSessionRepository) Create(session model.Session) (model.Session, er
 	session.SessionNo = "STEST"
 	r.nextID++
 	r.sessions[session.ID] = session
+
+	return session, nil
+}
+
+func (r *fakeSessionRepository) AppendTurn(id int, userMessage model.Message, aiMessage model.Message) (model.Session, error) {
+	session, ok := r.sessions[id]
+	if !ok {
+		return model.Session{}, repository.ErrSessionNotFound
+	}
+	if session.Status == model.SessionStatusFinished {
+		return model.Session{}, repository.ErrSessionAlreadyFinished
+	}
+
+	userMessage.ID = r.nextMessageID
+	r.nextMessageID++
+	userMessage.SessionID = id
+	aiMessage.ID = r.nextMessageID
+	r.nextMessageID++
+	aiMessage.SessionID = id
+	session.Messages = append(session.Messages, userMessage, aiMessage)
+	session.TurnCount++
+	r.sessions[id] = session
 
 	return session, nil
 }

@@ -128,7 +128,7 @@ Browser
 | 前端技术选型 | 已确定 | 正式前端工程使用 Vite + React + TypeScript |
 | 场景 API（Module 1） | 已完成 | 场景列表和详情接口，见 [docs/api文档/scenario-api-module1-api.md](docs/api文档/scenario-api-module1-api.md) |
 | 训练 Session API（Module 2） | 已完成 | 创建、查询、结束训练 Session，见 [docs/api文档/session-api-module2-api.md](docs/api文档/session-api-module2-api.md) |
-| 消息 API（Module 3） | 规划中 | 发送消息、AI Mock 回复和轮次更新 |
+| 消息 API（Module 3） | 已完成 | 发送文本、AI Mock 回复、轮次更新和消息历史查询，见 [docs/api文档/message-api-module3-api.md](docs/api文档/message-api-module3-api.md) |
 | AI 纠错与评分 | 规划中 | Conversation、Correction、Scoring、Summary Agent |
 | 语音能力 | 规划中 | 浏览器录音、ASR、WebSocket 音频分片 |
 
@@ -203,8 +203,7 @@ speakmate/
 
 ## 后续规划
 
-- 实现场景列表、训练 Session 和消息接口；
-- 接入 LLM，完成基于场景的 AI 追问；
+- 接入 LLM，完成基于场景的真实 AI 追问；
 - 增加 SSE 流式回复；
 - 实现表达纠错、评分和课后报告生成；
 - 接入 ASR，支持浏览器录音和语音识别；

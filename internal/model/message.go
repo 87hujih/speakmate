@@ -22,6 +22,8 @@ type Message struct {
 	Role MessageRole `json:"role"`
 	// Content 是消息文本内容。
 	Content string `json:"content"`
+	// Stage 是消息所属的训练阶段。
+	Stage string `json:"stage"`
 	// CreatedAt 是消息创建时间。
 	CreatedAt time.Time `json:"created_at"`
 }

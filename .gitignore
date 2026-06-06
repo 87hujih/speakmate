@@ -32,6 +32,7 @@ logs/
 /tasks/
 /PR提交规范.md
 /.cache/
+/.tmp/
 
 # Environment and local config
 .env

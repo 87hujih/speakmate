@@ -392,6 +392,8 @@ func TestSessionInvalidIDReturnsBadRequest(t *testing.T) {
 		{name: "get zero", method: http.MethodGet, path: "/api/v1/sessions/0"},
 		{name: "finish non-number", method: http.MethodPost, path: "/api/v1/sessions/abc/finish"},
 		{name: "finish zero", method: http.MethodPost, path: "/api/v1/sessions/0/finish"},
+		{name: "message non-number", method: http.MethodPost, path: "/api/v1/sessions/abc/messages"},
+		{name: "message zero", method: http.MethodPost, path: "/api/v1/sessions/0/messages"},
 	}
 
 	for _, tt := range tests {
@@ -473,6 +475,238 @@ func TestSessionFinishTwiceReturnsConflict(t *testing.T) {
 	engine.ServeHTTP(secondRec, secondReq)
 
 	assertErrorResponse(t, secondRec, http.StatusConflict, 2004, "session already finished")
+}
+
+// TestMessageSendCreatesMockReplyAndSessionHistory 验证发送文本消息后会保存用户消息、AI 回复和轮次。
+func TestMessageSendCreatesMockReplyAndSessionHistory(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/sessions/"+strconv.Itoa(sessionID)+"/messages",
+		bytes.NewBufferString(`{"content":" I worked on a robot control project. "}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var body struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Data    struct {
+			UserMessage messagePayload `json:"user_message"`
+			AIMessage   messagePayload `json:"ai_message"`
+			Stage       string         `json:"stage"`
+			TurnCount   int            `json:"turn_count"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+
+	if body.Code != 0 {
+		t.Fatalf("code = %d, want 0", body.Code)
+	}
+	if body.Message != "success" {
+		t.Fatalf("message = %q, want %q", body.Message, "success")
+	}
+	if body.Data.UserMessage.Role != "user" {
+		t.Fatalf("user role = %q, want user", body.Data.UserMessage.Role)
+	}
+	if body.Data.UserMessage.Content != "I worked on a robot control project." {
+		t.Fatalf("user content = %q, want trimmed content", body.Data.UserMessage.Content)
+	}
+	if body.Data.AIMessage.Role != "ai" {
+		t.Fatalf("ai role = %q, want ai", body.Data.AIMessage.Role)
+	}
+	if !strings.Contains(strings.ToLower(body.Data.AIMessage.Content), "project") {
+		t.Fatalf("ai content = %q, want interview project follow-up", body.Data.AIMessage.Content)
+	}
+	if body.Data.Stage == "" {
+		t.Fatal("stage is empty")
+	}
+	if body.Data.TurnCount != 1 {
+		t.Fatalf("turn_count = %d, want 1", body.Data.TurnCount)
+	}
+	assertRFC3339(t, body.Data.UserMessage.CreatedAt)
+	assertRFC3339(t, body.Data.AIMessage.CreatedAt)
+
+	detailReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+strconv.Itoa(sessionID), nil)
+	detailRec := httptest.NewRecorder()
+
+	engine.ServeHTTP(detailRec, detailReq)
+
+	if detailRec.Code != http.StatusOK {
+		t.Fatalf("detail status code = %d, want %d; body = %s", detailRec.Code, http.StatusOK, detailRec.Body.String())
+	}
+
+	var detailBody struct {
+		Data struct {
+			TurnCount int              `json:"turn_count"`
+			Messages  []messagePayload `json:"messages"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(detailRec.Body.Bytes(), &detailBody); err != nil {
+		t.Fatalf("detail response is not valid JSON: %v", err)
+	}
+	if detailBody.Data.TurnCount != 1 {
+		t.Fatalf("detail turn_count = %d, want 1", detailBody.Data.TurnCount)
+	}
+	if len(detailBody.Data.Messages) != 2 {
+		t.Fatalf("detail messages length = %d, want 2", len(detailBody.Data.Messages))
+	}
+	if detailBody.Data.Messages[0].Role != "user" || detailBody.Data.Messages[1].Role != "ai" {
+		t.Fatalf("detail message roles = %q/%q, want user/ai", detailBody.Data.Messages[0].Role, detailBody.Data.Messages[1].Role)
+	}
+}
+
+// TestMessageSendIncrementsTurnCountOnEachSuccessfulSend 验证多轮发送会持续递增轮次。
+func TestMessageSendIncrementsTurnCountOnEachSuccessfulSend(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 2)
+
+	first := postMessage(t, engine, sessionID, `{"content":"Could you recommend something light?"}`)
+	if first.Data.TurnCount != 1 {
+		t.Fatalf("first turn_count = %d, want 1", first.Data.TurnCount)
+	}
+
+	second := postMessage(t, engine, sessionID, `{"content":"I prefer chicken and no peanuts."}`)
+	if second.Data.TurnCount != 2 {
+		t.Fatalf("second turn_count = %d, want 2", second.Data.TurnCount)
+	}
+}
+
+// TestMessageSendRejectsInvalidRequest 验证消息请求体非法或内容为空时返回统一错误。
+func TestMessageSendRejectsInvalidRequest(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		wantCode   int
+		wantMsg    string
+		wantStatus int
+	}{
+		{name: "invalid json", body: `{`, wantStatus: http.StatusBadRequest, wantCode: 3001, wantMsg: "invalid message request"},
+		{name: "missing content", body: `{}`, wantStatus: http.StatusBadRequest, wantCode: 3001, wantMsg: "invalid message request"},
+		{name: "blank content", body: `{"content":"   "}`, wantStatus: http.StatusBadRequest, wantCode: 3002, wantMsg: "message content is required"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := New()
+			sessionID := createSession(t, engine, 1)
+
+			req := httptest.NewRequest(
+				http.MethodPost,
+				"/api/v1/sessions/"+strconv.Itoa(sessionID)+"/messages",
+				bytes.NewBufferString(tt.body),
+			)
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			engine.ServeHTTP(rec, req)
+
+			assertErrorResponse(t, rec, tt.wantStatus, tt.wantCode, tt.wantMsg)
+		})
+	}
+}
+
+// TestMessageSendReturnsNotFound 验证不存在的 Session 不能发送消息。
+func TestMessageSendReturnsNotFound(t *testing.T) {
+	engine := New()
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/sessions/999/messages",
+		bytes.NewBufferString(`{"content":"Hello"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	assertErrorResponse(t, rec, http.StatusNotFound, 2003, "session not found")
+}
+
+// TestMessageSendRejectsFinishedSession 验证已结束 Session 不允许继续发送消息。
+func TestMessageSendRejectsFinishedSession(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+
+	finishReq := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/finish", nil)
+	finishRec := httptest.NewRecorder()
+	engine.ServeHTTP(finishRec, finishReq)
+	if finishRec.Code != http.StatusOK {
+		t.Fatalf("finish status code = %d, want %d; body = %s", finishRec.Code, http.StatusOK, finishRec.Body.String())
+	}
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/sessions/"+strconv.Itoa(sessionID)+"/messages",
+		bytes.NewBufferString(`{"content":"Can we continue?"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	assertErrorResponse(t, rec, http.StatusConflict, 2004, "session already finished")
+}
+
+type messagePayload struct {
+	ID        int    `json:"id"`
+	SessionID int    `json:"session_id"`
+	Role      string `json:"role"`
+	Content   string `json:"content"`
+	Stage     string `json:"stage"`
+	CreatedAt string `json:"created_at"`
+}
+
+type postMessageResponse struct {
+	Data struct {
+		UserMessage messagePayload `json:"user_message"`
+		AIMessage   messagePayload `json:"ai_message"`
+		Stage       string         `json:"stage"`
+		TurnCount   int            `json:"turn_count"`
+	} `json:"data"`
+}
+
+func postMessage(t *testing.T, engine http.Handler, sessionID int, body string) postMessageResponse {
+	t.Helper()
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/sessions/"+strconv.Itoa(sessionID)+"/messages",
+		bytes.NewBufferString(body),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var parsed postMessageResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+
+	return parsed
+}
+
+func assertRFC3339(t *testing.T, value string) {
+	t.Helper()
+
+	if _, err := time.Parse(time.RFC3339, value); err != nil {
+		t.Fatalf("time %q is not RFC3339: %v", value, err)
+	}
 }
 
 func createSession(t *testing.T, engine http.Handler, scenarioID int) int {
