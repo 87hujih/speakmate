@@ -38,6 +38,9 @@ func New(configs ...config.Config) *gin.Engine {
 	)
 	sessionHandler := handler.NewSessionHandler(sessionService)
 	messageHandler := handler.NewMessageHandler(sessionService)
+	feedbackRepo := repository.NewMemoryFeedbackRepository()
+	feedbackService := service.NewFeedbackService(feedbackRepo)
+	feedbackHandler := handler.NewFeedbackHandler(feedbackService)
 
 	// v1 API 路由组承载场景、训练 Session 和消息等后续接口。
 	api := engine.Group("/api/v1")
@@ -47,6 +50,9 @@ func New(configs ...config.Config) *gin.Engine {
 	api.GET("/sessions/:id", sessionHandler.Detail)
 	api.POST("/sessions/:id/finish", sessionHandler.Finish)
 	api.POST("/sessions/:id/messages", messageHandler.Send)
+	api.GET("/sessions/:id/corrections", feedbackHandler.ListSessionCorrections)
+	api.GET("/sessions/:id/scores", feedbackHandler.GetSessionScore)
+	api.GET("/messages/:message_id/corrections", feedbackHandler.GetMessageCorrection)
 
 	return engine
 }

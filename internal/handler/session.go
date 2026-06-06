@@ -146,7 +146,12 @@ type finishSessionResponse struct {
 }
 
 func parsePositiveSessionID(c *gin.Context) (int, bool) {
-	id, err := strconv.Atoi(c.Param("id"))
+	rawID := c.Param("id")
+	if rawID == "" {
+		rawID = c.Param("session_id")
+	}
+
+	id, err := strconv.Atoi(rawID)
 	if err != nil || id <= 0 {
 		response.Error(c, http.StatusBadRequest, invalidSessionIDCode, "invalid session id")
 		return 0, false
