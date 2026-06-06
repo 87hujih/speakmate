@@ -57,11 +57,13 @@ func (h *MessageHandler) Send(c *gin.Context) {
 	}
 
 	response.Success(c, sendMessageResponse{
-		UserMessage: toMessageResponse(result.UserMessage),
-		AIMessage:   toMessageResponse(result.AIMessage),
-		Stage:       result.Stage,
-		NextGoal:    result.NextGoal,
-		TurnCount:   result.TurnCount,
+		UserMessage:       toMessageResponse(result.UserMessage),
+		AIMessage:         toMessageResponse(result.AIMessage),
+		Stage:             result.Stage,
+		NextGoal:          result.NextGoal,
+		TurnCount:         result.TurnCount,
+		CorrectionSummary: toCorrectionSummaryResponse(result.CorrectionSummary),
+		ScoreSummary:      toScoreSummaryResponse(result.ScoreSummary),
 	})
 }
 
@@ -70,11 +72,39 @@ type sendMessageRequest struct {
 }
 
 type sendMessageResponse struct {
-	UserMessage messageResponse `json:"user_message"`
-	AIMessage   messageResponse `json:"ai_message"`
-	Stage       string          `json:"stage"`
-	NextGoal    string          `json:"next_goal"`
-	TurnCount   int             `json:"turn_count"`
+	UserMessage       messageResponse           `json:"user_message"`
+	AIMessage         messageResponse           `json:"ai_message"`
+	Stage             string                    `json:"stage"`
+	NextGoal          string                    `json:"next_goal"`
+	TurnCount         int                       `json:"turn_count"`
+	CorrectionSummary correctionSummaryResponse `json:"correction_summary"`
+	ScoreSummary      scoreSummaryResponse      `json:"score_summary"`
+}
+
+type correctionSummaryResponse struct {
+	HasErrors  bool `json:"has_errors"`
+	ErrorCount int  `json:"error_count"`
+}
+
+type scoreSummaryResponse struct {
+	TotalScore int `json:"total_score"`
+	Grammar    int `json:"grammar"`
+	Expression int `json:"expression"`
+}
+
+func toCorrectionSummaryResponse(summary service.CorrectionSummary) correctionSummaryResponse {
+	return correctionSummaryResponse{
+		HasErrors:  summary.HasErrors,
+		ErrorCount: summary.ErrorCount,
+	}
+}
+
+func toScoreSummaryResponse(summary service.ScoreSummary) scoreSummaryResponse {
+	return scoreSummaryResponse{
+		TotalScore: summary.TotalScore,
+		Grammar:    summary.Grammar,
+		Expression: summary.Expression,
+	}
 }
 
 func writeMessageError(c *gin.Context, err error) {
