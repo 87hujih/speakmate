@@ -7,8 +7,9 @@ import (
 )
 
 type Config struct {
-	Port string
-	LLM  LLMConfig
+	Port     string
+	LLM      LLMConfig
+	Feedback FeedbackConfig
 }
 
 type LLMConfig struct {
@@ -18,6 +19,12 @@ type LLMConfig struct {
 	Model          string
 	TimeoutSeconds int
 	UseMock        bool
+}
+
+type FeedbackConfig struct {
+	CorrectionUseMock bool
+	ScoringUseMock    bool
+	FailOpen          bool
 }
 
 func Load() Config {
@@ -35,6 +42,11 @@ func Load() Config {
 			Model:          strings.TrimSpace(os.Getenv("LLM_MODEL")),
 			TimeoutSeconds: positiveIntEnv("LLM_TIMEOUT_SECONDS", 30),
 			UseMock:        boolEnv("LLM_USE_MOCK", true),
+		},
+		Feedback: FeedbackConfig{
+			CorrectionUseMock: boolEnv("CORRECTION_USE_MOCK", true),
+			ScoringUseMock:    boolEnv("SCORING_USE_MOCK", true),
+			FailOpen:          boolEnv("FEEDBACK_FAIL_OPEN", true),
 		},
 	}
 }

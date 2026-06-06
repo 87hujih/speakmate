@@ -256,6 +256,169 @@ func TestSessionServiceSendsMessageAndGeneratesFeedback(t *testing.T) {
 	}
 }
 
+func TestSessionServiceFailOpenKeepsMessageChainWhenCorrectionAgentFails(t *testing.T) {
+	scenarioReader, sessionRepo, created := setupFeedbackSession(t)
+	feedbackRepo := newFakeFeedbackRepository()
+	correctionAgent := &fakeCorrectionAgent{err: errors.New("fake correction failed")}
+	scoringAgent := &fakeScoringAgent{}
+	sessionService := service.NewSessionService(
+		scenarioReader,
+		sessionRepo,
+		service.WithFeedbackRepository(feedbackRepo),
+		service.WithCorrectionAgent(correctionAgent),
+		service.WithScoringAgent(scoringAgent),
+	)
+
+	result, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.ID,
+		Content:   "I am study computer science.",
+	})
+	if err != nil {
+		t.Fatalf("SendMessage returned error: %v", err)
+	}
+
+	if result.UserMessage.ID == 0 {
+		t.Fatal("user message id = 0, want saved user message")
+	}
+	if result.AIMessage.ID == 0 {
+		t.Fatal("ai message id = 0, want saved ai message")
+	}
+	if result.CorrectionSummary != (service.CorrectionSummary{}) {
+		t.Fatalf("correction summary = %+v, want empty summary", result.CorrectionSummary)
+	}
+	if result.ScoreSummary != (service.ScoreSummary{}) {
+		t.Fatalf("score summary = %+v, want empty summary", result.ScoreSummary)
+	}
+	if correctionAgent.callCount != 1 {
+		t.Fatalf("correction call count = %d, want 1", correctionAgent.callCount)
+	}
+	if scoringAgent.callCount != 0 {
+		t.Fatalf("scoring call count = %d, want 0", scoringAgent.callCount)
+	}
+	if feedbackRepo.callCount != 0 {
+		t.Fatalf("feedback repo call count = %d, want 0", feedbackRepo.callCount)
+	}
+
+	saved, findErr := sessionRepo.FindByID(created.ID)
+	if findErr != nil {
+		t.Fatalf("FindByID returned error: %v", findErr)
+	}
+	if len(saved.Messages) != 2 {
+		t.Fatalf("saved messages length = %d, want 2", len(saved.Messages))
+	}
+}
+
+func TestSessionServiceFailOpenKeepsCorrectionSummaryWhenScoringAgentFails(t *testing.T) {
+	scenarioReader, sessionRepo, created := setupFeedbackSession(t)
+	feedbackRepo := newFakeFeedbackRepository()
+	correctionAgent := &fakeCorrectionAgent{}
+	scoringAgent := &fakeScoringAgent{err: errors.New("fake scoring failed")}
+	sessionService := service.NewSessionService(
+		scenarioReader,
+		sessionRepo,
+		service.WithFeedbackRepository(feedbackRepo),
+		service.WithCorrectionAgent(correctionAgent),
+		service.WithScoringAgent(scoringAgent),
+	)
+
+	result, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.ID,
+		Content:   "I am study computer science and I have did a project.",
+	})
+	if err != nil {
+		t.Fatalf("SendMessage returned error: %v", err)
+	}
+
+	if result.CorrectionSummary.ErrorCount != 2 {
+		t.Fatalf("correction summary error_count = %d, want 2", result.CorrectionSummary.ErrorCount)
+	}
+	if result.ScoreSummary != (service.ScoreSummary{}) {
+		t.Fatalf("score summary = %+v, want empty summary", result.ScoreSummary)
+	}
+	if correctionAgent.callCount != 1 {
+		t.Fatalf("correction call count = %d, want 1", correctionAgent.callCount)
+	}
+	if scoringAgent.callCount != 1 {
+		t.Fatalf("scoring call count = %d, want 1", scoringAgent.callCount)
+	}
+	if _, ok := feedbackRepo.correctionsByMessageID[result.UserMessage.ID]; !ok {
+		t.Fatalf("saved correction for message %d not found", result.UserMessage.ID)
+	}
+	if _, ok := feedbackRepo.scoresBySessionID[created.ID]; ok {
+		t.Fatalf("saved score for session %d found, want none", created.ID)
+	}
+}
+
+func TestSessionServiceFailClosedReturnsFeedbackAgentFailureWhenCorrectionAgentFails(t *testing.T) {
+	scenarioReader, sessionRepo, created := setupFeedbackSession(t)
+	feedbackRepo := newFakeFeedbackRepository()
+	correctionAgent := &fakeCorrectionAgent{err: errors.New("fake correction failed")}
+	scoringAgent := &fakeScoringAgent{}
+	sessionService := service.NewSessionService(
+		scenarioReader,
+		sessionRepo,
+		service.WithFeedbackRepository(feedbackRepo),
+		service.WithCorrectionAgent(correctionAgent),
+		service.WithScoringAgent(scoringAgent),
+		service.WithFeedbackFailOpen(false),
+	)
+
+	_, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.ID,
+		Content:   "I am study computer science.",
+	})
+
+	if !errors.Is(err, service.ErrFeedbackAgentFailed) {
+		t.Fatalf("error = %v, want ErrFeedbackAgentFailed", err)
+	}
+	if scoringAgent.callCount != 0 {
+		t.Fatalf("scoring call count = %d, want 0", scoringAgent.callCount)
+	}
+	saved, findErr := sessionRepo.FindByID(created.ID)
+	if findErr != nil {
+		t.Fatalf("FindByID returned error: %v", findErr)
+	}
+	if len(saved.Messages) != 2 {
+		t.Fatalf("saved messages length = %d, want 2", len(saved.Messages))
+	}
+}
+
+func TestSessionServiceFailClosedReturnsFeedbackAgentFailureWhenScoringAgentFails(t *testing.T) {
+	scenarioReader, sessionRepo, created := setupFeedbackSession(t)
+	feedbackRepo := newFakeFeedbackRepository()
+	correctionAgent := &fakeCorrectionAgent{}
+	scoringAgent := &fakeScoringAgent{err: errors.New("fake scoring failed")}
+	sessionService := service.NewSessionService(
+		scenarioReader,
+		sessionRepo,
+		service.WithFeedbackRepository(feedbackRepo),
+		service.WithCorrectionAgent(correctionAgent),
+		service.WithScoringAgent(scoringAgent),
+		service.WithFeedbackFailOpen(false),
+	)
+
+	_, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.ID,
+		Content:   "I am study computer science and I have did a project.",
+	})
+
+	if !errors.Is(err, service.ErrFeedbackAgentFailed) {
+		t.Fatalf("error = %v, want ErrFeedbackAgentFailed", err)
+	}
+	if correctionAgent.callCount != 1 {
+		t.Fatalf("correction call count = %d, want 1", correctionAgent.callCount)
+	}
+	if scoringAgent.callCount != 1 {
+		t.Fatalf("scoring call count = %d, want 1", scoringAgent.callCount)
+	}
+	if len(feedbackRepo.correctionsByMessageID) != 1 {
+		t.Fatalf("saved corrections length = %d, want 1", len(feedbackRepo.correctionsByMessageID))
+	}
+	if len(feedbackRepo.scoresBySessionID) != 0 {
+		t.Fatalf("saved scores length = %d, want 0", len(feedbackRepo.scoresBySessionID))
+	}
+}
+
 func TestSessionServicePassesScenarioHistoryAndUserInputToConversationAgent(t *testing.T) {
 	scenarioReader := fakeScenarioReader{
 		scenarios: map[int]model.Scenario{
@@ -419,6 +582,36 @@ func TestSessionServiceRejectsMessageForFinishedSession(t *testing.T) {
 	if feedbackRepo.callCount != 0 {
 		t.Fatalf("feedback repo call count = %d, want 0", feedbackRepo.callCount)
 	}
+}
+
+func setupFeedbackSession(t *testing.T) (fakeScenarioReader, *fakeSessionRepository, model.Session) {
+	t.Helper()
+
+	scenarioReader := fakeScenarioReader{
+		scenarios: map[int]model.Scenario{
+			1: {
+				ID:   1,
+				Code: "interview",
+				Stages: []model.ScenarioStage{
+					{Name: "自我介绍"},
+					{Name: "项目经历"},
+				},
+			},
+		},
+	}
+	sessionRepo := newFakeSessionRepository()
+	created, err := sessionRepo.Create(model.Session{
+		ScenarioID: 1,
+		UserID:     1,
+		Status:     model.SessionStatusRunning,
+		CreatedAt:  time.Now(),
+		Messages:   []model.Message{},
+	})
+	if err != nil {
+		t.Fatalf("setup session returned error: %v", err)
+	}
+
+	return scenarioReader, sessionRepo, created
 }
 
 type fakeScenarioReader struct {

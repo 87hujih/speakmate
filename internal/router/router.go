@@ -39,6 +39,7 @@ func New(configs ...config.Config) *gin.Engine {
 		service.WithFeedbackRepository(feedbackRepo),
 		service.WithCorrectionAgent(NewCorrectionAgent(cfg)),
 		service.WithScoringAgent(NewScoringAgent(cfg)),
+		service.WithFeedbackFailOpen(cfg.Feedback.FailOpen),
 	)
 	sessionHandler := handler.NewSessionHandler(sessionService)
 	messageHandler := handler.NewMessageHandler(sessionService)
@@ -77,9 +78,23 @@ func NewConversationAgent(cfg config.Config) agent.ConversationAgent {
 }
 
 func NewCorrectionAgent(cfg config.Config) agent.CorrectionAgent {
+	if cfg.Feedback.CorrectionUseMock || !cfg.LLM.HasRequiredFields() {
+		return agent.NewMockCorrectionAgent()
+	}
+	if !strings.EqualFold(cfg.LLM.Provider, "openai-compatible") {
+		return agent.NewMockCorrectionAgent()
+	}
+
 	return agent.NewMockCorrectionAgent()
 }
 
 func NewScoringAgent(cfg config.Config) agent.ScoringAgent {
+	if cfg.Feedback.ScoringUseMock || !cfg.LLM.HasRequiredFields() {
+		return agent.NewMockScoringAgent()
+	}
+	if !strings.EqualFold(cfg.LLM.Provider, "openai-compatible") {
+		return agent.NewMockScoringAgent()
+	}
+
 	return agent.NewMockScoringAgent()
 }
