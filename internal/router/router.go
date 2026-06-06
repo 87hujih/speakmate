@@ -20,11 +20,17 @@ func New() *gin.Engine {
 	scenarioRepo := repository.NewMemoryScenarioRepository()
 	scenarioService := service.NewScenarioService(scenarioRepo)
 	scenarioHandler := handler.NewScenarioHandler(scenarioService)
+	sessionRepo := repository.NewMemorySessionRepository()
+	sessionService := service.NewSessionService(scenarioService, sessionRepo)
+	sessionHandler := handler.NewSessionHandler(sessionService)
 
 	// v1 API 路由组承载场景、训练 Session 和消息等后续接口。
 	api := engine.Group("/api/v1")
 	api.GET("/scenarios", scenarioHandler.List)
 	api.GET("/scenarios/:id", scenarioHandler.Detail)
+	api.POST("/sessions", sessionHandler.Create)
+	api.GET("/sessions/:id", sessionHandler.Detail)
+	api.POST("/sessions/:id/finish", sessionHandler.Finish)
 
 	return engine
 }
