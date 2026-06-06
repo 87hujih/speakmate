@@ -78,23 +78,33 @@ func NewConversationAgent(cfg config.Config) agent.ConversationAgent {
 }
 
 func NewCorrectionAgent(cfg config.Config) agent.CorrectionAgent {
-	if cfg.Feedback.CorrectionUseMock || !cfg.LLM.HasRequiredFields() {
+	if cfg.LLM.UseMock || cfg.Feedback.CorrectionUseMock || !cfg.LLM.HasRequiredFields() {
 		return agent.NewMockCorrectionAgent()
 	}
 	if !strings.EqualFold(cfg.LLM.Provider, "openai-compatible") {
 		return agent.NewMockCorrectionAgent()
 	}
 
-	return agent.NewMockCorrectionAgent()
+	client, err := llm.NewOpenAICompatibleClient(cfg.LLM)
+	if err != nil {
+		return agent.NewMockCorrectionAgent()
+	}
+
+	return agent.NewLLMCorrectionAgent(client, agent.WithCorrectionFallbackAgent(agent.NewMockCorrectionAgent()))
 }
 
 func NewScoringAgent(cfg config.Config) agent.ScoringAgent {
-	if cfg.Feedback.ScoringUseMock || !cfg.LLM.HasRequiredFields() {
+	if cfg.LLM.UseMock || cfg.Feedback.ScoringUseMock || !cfg.LLM.HasRequiredFields() {
 		return agent.NewMockScoringAgent()
 	}
 	if !strings.EqualFold(cfg.LLM.Provider, "openai-compatible") {
 		return agent.NewMockScoringAgent()
 	}
 
-	return agent.NewMockScoringAgent()
+	client, err := llm.NewOpenAICompatibleClient(cfg.LLM)
+	if err != nil {
+		return agent.NewMockScoringAgent()
+	}
+
+	return agent.NewLLMScoringAgent(client, agent.WithScoringFallbackAgent(agent.NewMockScoringAgent()))
 }
