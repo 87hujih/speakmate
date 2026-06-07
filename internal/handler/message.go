@@ -11,10 +11,12 @@ import (
 )
 
 const (
-	invalidMessageRequestCode   = 3001
-	messageContentRequiredCode  = 3002
-	conversationAgentFailedCode = 3003
-	feedbackAgentFailedCode     = 3004
+	invalidMessageRequestCode    = 3001
+	messageContentRequiredCode   = 3002
+	conversationAgentFailedCode  = 3003
+	feedbackAgentFailedCode      = 3004
+	sessionStateStoreFailedCode  = 8001
+	streamEventPublishFailedCode = 8002
 )
 
 // MessageService 定义消息 Handler 依赖的业务能力。
@@ -135,6 +137,14 @@ func writeMessageError(c *gin.Context, err error) {
 	}
 	if errors.Is(err, service.ErrFeedbackAgentFailed) {
 		response.Error(c, http.StatusBadGateway, feedbackAgentFailedCode, "feedback agent failed")
+		return
+	}
+	if errors.Is(err, service.ErrStateStoreFailed) {
+		response.Error(c, http.StatusServiceUnavailable, sessionStateStoreFailedCode, "session state store failed")
+		return
+	}
+	if errors.Is(err, service.ErrEventPublishFailed) {
+		response.Error(c, http.StatusServiceUnavailable, streamEventPublishFailedCode, "stream event publish failed")
 		return
 	}
 

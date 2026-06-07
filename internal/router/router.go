@@ -16,9 +16,11 @@ import (
 	infraasr "speakmate/internal/infra/asr"
 	"speakmate/internal/infra/database"
 	"speakmate/internal/infra/llm"
+	infraredis "speakmate/internal/infra/redis"
 	"speakmate/internal/middleware"
 	"speakmate/internal/repository"
 	"speakmate/internal/service"
+	"speakmate/internal/state"
 	"speakmate/internal/stream"
 )
 
@@ -58,7 +60,10 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	streamBus := stream.NewBus()
+	stateStore, eventBus, err := newRealtimeState(cfg)
+	if err != nil {
+		return nil, err
+	}
 	scenarioService := service.NewScenarioService(scenarioRepo)
 	scenarioHandler := handler.NewScenarioHandler(scenarioService)
 	sessionService := service.NewSessionService(
@@ -69,7 +74,8 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 		service.WithCorrectionAgent(NewCorrectionAgent(cfg)),
 		service.WithScoringAgent(NewScoringAgent(cfg)),
 		service.WithFeedbackFailOpen(cfg.Feedback.FailOpen),
-		service.WithEventPublisher(streamBus),
+		service.WithEventPublisher(eventBus),
+		service.WithStateStore(stateStore),
 	)
 	sessionHandler := handler.NewSessionHandler(sessionService)
 	messageHandler := handler.NewMessageHandler(sessionService)
@@ -83,6 +89,7 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 		sessionService,
 		asrClient,
 		service.WithAudioStreamPartialTranscription(audioStreamPartialTranscriptionEnabled(cfg)),
+		service.WithAudioStreamStateStore(stateStore),
 	)
 	audioWebSocketHandler := handler.NewAudioWebSocketHandler(audioStreamService)
 	feedbackService := service.NewFeedbackService(feedbackRepo)
@@ -93,12 +100,12 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 		feedbackRepo,
 		reportRepo,
 		service.WithSummaryAgent(NewSummaryAgent(cfg)),
-		service.WithReportEventPublisher(streamBus),
+		service.WithReportEventPublisher(eventBus),
 	)
 	reportHandler := handler.NewReportHandler(reportService)
 	historyService := service.NewHistoryService(scenarioService, sessionRepo, feedbackRepo, reportRepo)
 	historyHandler := handler.NewHistoryHandler(historyService)
-	streamHandler := handler.NewStreamHandler(streamBus)
+	streamHandler := handler.NewStreamHandler(eventBus)
 
 	// v1 API 路由组承载场景、训练 Session 和消息等后续接口。
 	api := engine.Group("/api/v1")
@@ -120,6 +127,24 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 	api.GET("/messages/:message_id/corrections", feedbackHandler.GetMessageCorrection)
 
 	return engine, nil
+}
+
+type realtimeEventBus interface {
+	service.EventPublisher
+	handler.EventSubscriber
+}
+
+func newRealtimeState(cfg config.Config) (state.SessionStateStore, realtimeEventBus, error) {
+	if cfg.Redis.Enabled {
+		client, err := infraredis.OpenClient(context.Background(), cfg.Redis)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return state.NewRedisSessionStateStore(client), stream.NewRedisBus(client), nil
+	}
+
+	return state.NewMemorySessionStateStore(), stream.NewBus(), nil
 }
 
 type sessionStore interface {

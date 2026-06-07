@@ -122,7 +122,7 @@ Browser
 |---|---|---|
 | Gin 服务骨架 | 已完成 | `cmd/server` 启动 HTTP 服务 |
 | 健康检查接口 | 已完成 | `GET /health` 返回统一 JSON 响应 |
-| 配置加载 | 已完成 | 支持 `APP_PORT`、LLM、ASR、反馈 Mock 和存储模式环境变量，默认端口 `8080` |
+| 配置加载 | 已完成 | 支持 `APP_PORT`、LLM、ASR、Redis、反馈 Mock 和存储模式环境变量，默认端口 `8080` |
 | 统一响应结构 | 已完成 | 成功响应格式为 `{ code, message, data }` |
 | 前端原型 | 已完成 | `web/preview.html` 作为本地静态原型参考 |
 | 正式前端应用 | 已完成（第一版） | `web/` 已接入 Vite + React + TypeScript，覆盖场景选择、文本训练、反馈评分、报告和历史记录 |
@@ -132,10 +132,11 @@ Browser
 | 反馈 API（Module 4） | 已完成（第一版） | 消息发送后同步生成纠错/评分摘要，支持单条消息纠错、Session 纠错列表和当前评分查询，见 [docs/api文档/feedback-api.md](docs/api文档/feedback-api.md) |
 | 课后报告 API（Module 5） | 已完成（第一版） | 训练结束后可基于消息、纠错和评分生成结构化报告，支持重复查询，见 [docs/api文档/report-api.md](docs/api文档/report-api.md) |
 | MySQL 持久化与历史记录 | 已完成（第一版） | 支持 `memory` / `mysql` 存储模式切换，Session、Message、Correction、Score、Report 可落库，历史列表见 [docs/api文档/history-api.md](docs/api文档/history-api.md) |
-| SSE 流式事件 | 已完成 | 支持 `GET /api/v1/sessions/:id/stream`，真实 LLM 模式推送模型 delta，Mock/fallback 模式推送本地 fake delta，并继续推送纠错、评分、报告和错误事件，见 [docs/api文档/sse-api.md](docs/api文档/sse-api.md) |
+| SSE 流式事件 | 已完成 | 支持 `GET /api/v1/sessions/:id/stream`，真实 LLM 模式推送模型 delta，Mock/fallback 模式推送本地 fake delta，并继续推送纠错、评分、报告和错误事件；`REDIS_ENABLED=true` 时使用 Redis Pub/Sub + 短期事件 List，见 [docs/api文档/sse-api.md](docs/api文档/sse-api.md) |
 | Conversation Agent | 已接入 | 默认使用 Mock fake streaming；配置 API Key 且关闭 Mock 后使用 OpenAI-compatible LLM streaming，按 `LLM_FALLBACK_TO_MOCK` 决定失败时是否降级 Mock |
 | AI 纠错、评分与总结 | 已完成（第一版） | Correction / Scoring / Summary 模型、Mock/LLM Agent、内存 Feedback/Report Repository、fail-open 降级和查询 API 已接入 |
-| 语音能力 | 已完成（Mock / 腾讯云 ASR） | 训练页支持浏览器录音、WebSocket 分片和单段上传 fallback；后端可使用 Mock ASR 或腾讯云 `FlashRecognizer` 生成 final transcript 后复用消息训练链路，见 [docs/api文档/audio-api.md](docs/api文档/audio-api.md) 和 [docs/api文档/audio-websocket-api.md](docs/api文档/audio-websocket-api.md) |
+| 语音能力 | 已完成（Mock / 腾讯云 ASR） | 训练页支持浏览器录音、WebSocket 分片和单段上传 fallback；后端可使用 Mock ASR 或腾讯云 `FlashRecognizer` 生成 final transcript 后复用消息训练链路；WebSocket 连接状态可写入 Redis 并自动过期，见 [docs/api文档/audio-api.md](docs/api文档/audio-api.md) 和 [docs/api文档/audio-websocket-api.md](docs/api文档/audio-websocket-api.md) |
+| Redis 会话与事件状态 | 已完成 | `REDIS_ENABLED=false` 使用 memory state store；`REDIS_ENABLED=true` 时训练上下文快照、当前阶段/轮次、临时评分、纠错摘要、SSE 事件和 WebSocket 连接状态写入 Redis，所有 key 均设置 TTL |
 
 ## 技术栈
 
@@ -188,12 +189,49 @@ curl http://localhost:8080/health
 | 服务 | `APP_PORT`、`REQUEST_TIMEOUT_SECONDS` |
 | 跨域 | `CORS_ALLOWED_ORIGINS`、`CORS_ALLOWED_METHODS`、`CORS_ALLOWED_HEADERS`、`CORS_ALLOW_CREDENTIALS` |
 | MySQL | `STORAGE_MODE=mysql`、`MYSQL_DSN` |
-| Redis 预留 | `REDIS_ENABLED`、`REDIS_ADDR`、`REDIS_PASSWORD`、`REDIS_DB` |
+| Redis 短期状态 | `REDIS_ENABLED`、`REDIS_ADDR`、`REDIS_PASSWORD`、`REDIS_DB`、`REDIS_CONNECT_TIMEOUT_SECONDS` |
 | 外部服务超时 | `EXTERNAL_SERVICE_TIMEOUT_SECONDS`，可被 `LLM_TIMEOUT_SECONDS` / `ASR_TIMEOUT_SECONDS` 覆盖 |
 | Mock / fallback | `LLM_USE_MOCK`、`LLM_FALLBACK_TO_MOCK`、`CORRECTION_USE_MOCK`、`SCORING_USE_MOCK`、`SUMMARY_USE_MOCK`、`ASR_USE_MOCK` |
 | 腾讯云 ASR | `ASR_PROVIDER=tencent`、`TENCENT_ASR_APP_ID`、`TENCENT_ASR_SECRET_ID`、`TENCENT_ASR_SECRET_KEY`、`TENCENT_ASR_ENGINE_TYPE` |
 
-本分支支持真实 LLM streaming 和腾讯云 ASR 文件识别极速版。Redis 只完成配置和 Compose 服务预留，尚未用于会话状态存储。
+本分支支持真实 LLM streaming、腾讯云 ASR 文件识别极速版，以及可配置 Redis 短期状态与事件总线。Redis 只管理训练过程中的短期状态，不替代 MySQL 长期仓库。
+
+### Redis 会话状态与事件
+
+默认本地开发和自动测试使用 memory 模式：
+
+```bash
+REDIS_ENABLED=false
+```
+
+开启 Redis 模式：
+
+```bash
+REDIS_ENABLED=true
+REDIS_ADDR=127.0.0.1:6379
+REDIS_PASSWORD=
+REDIS_DB=0
+REDIS_CONNECT_TIMEOUT_SECONDS=30
+```
+
+Redis 模式下，服务启动时会 ping Redis；连接失败或 `REDIS_ADDR` 缺失会直接启动失败，不会静默降级到 memory。运行过程中 Redis 状态写入或事件发布失败会返回明确错误，例如 `session state store failed` 或 `stream event publish failed`。Compose 默认让后端依赖健康的 Redis 服务，本地单独验证可先执行：
+
+```bash
+docker compose up -d redis
+```
+
+短期 key 设计：
+
+| Key | 类型 | TTL | 说明 |
+|---|---|---:|---|
+| `session:{id}:messages` | List | 2h | 当前训练上下文快照 |
+| `session:{id}:state` | Hash | 2h | 当前阶段、轮次、状态 |
+| `session:{id}:partial_score` | Hash | 2h | 当前临时分项评分 |
+| `session:{id}:corrections` | List | 2h | 临时纠错摘要 |
+| `session:{id}:events` | Pub/Sub channel + List | 30m | SSE / WebSocket 事件分发与短期留存 |
+| `ws:{session_id}:connection` | Hash | 30m | WebSocket 连接状态 |
+
+MySQL 仍负责 Session、Message、Correction、Score、Report 等长期数据。Redis 中的状态可以过期或清空，不应作为历史记录来源。
 
 ### 前端启动
 
@@ -276,6 +314,7 @@ docker compose down -v
 ```
 
 部署时建议保持前端 `VITE_API_BASE_URL=/api/v1`，由 Nginx 反向代理到后端；如果前后端分域部署，需要把前端域名加入 `CORS_ALLOWED_ORIGINS`。
+后端 Compose 默认设置 `REDIS_ENABLED=true` 并连接 `redis:6379`，因此 Redis 健康检查失败时后端不会启动。
 
 ### LLM Streaming / ASR Provider
 
@@ -363,7 +402,8 @@ speakmate/
 │   ├── repository/          # memory/mysql 仓库实现
 │   ├── response/            # 统一响应结构
 │   ├── security/            # 日志敏感信息脱敏
-│   ├── stream/              # Session 级 SSE 事件模型和内存事件总线
+│   ├── state/               # Session 短期状态 store，支持 memory / Redis
+│   ├── stream/              # Session 级 SSE 事件模型和 memory / Redis 事件总线
 │   └── router/              # Gin 路由
 ├── migrations/              # MySQL 表结构和默认场景 seed
 ├── web/                     # Vite + React + TypeScript 前端应用
@@ -384,4 +424,4 @@ speakmate/
 - 评估腾讯云 `SpeechRecognizer` 实现真实 partial transcript；
 - 增加后端转码以兼容只支持 `webm/opus` 的浏览器；
 - 补充迁移执行工具和部署环境数据库初始化流程；
-- 使用 Redis 管理训练过程中的上下文和临时状态。
+- 为 Redis 模式补充更多 Demo QA 脚本和多实例联调记录。

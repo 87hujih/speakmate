@@ -110,6 +110,10 @@ func writeReportError(c *gin.Context, err error) {
 		response.Error(c, http.StatusBadGateway, summaryAgentFailedCode, "summary agent failed")
 		return
 	}
+	if errors.Is(err, service.ErrEventPublishFailed) {
+		response.Error(c, http.StatusServiceUnavailable, streamEventPublishFailedCode, "stream event publish failed")
+		return
+	}
 
 	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "internal server error")
 }

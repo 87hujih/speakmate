@@ -229,6 +229,10 @@ func writeSessionError(c *gin.Context, err error) {
 		response.Error(c, http.StatusConflict, sessionAlreadyFinishedCode, "session already finished")
 		return
 	}
+	if errors.Is(err, service.ErrStateStoreFailed) {
+		response.Error(c, http.StatusServiceUnavailable, sessionStateStoreFailedCode, "session state store failed")
+		return
+	}
 
 	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "internal server error")
 }

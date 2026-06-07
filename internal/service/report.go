@@ -178,7 +178,9 @@ func (s *ReportService) GenerateReport(sessionID int) (model.Report, error) {
 	if err := s.reportRepo.Save(report); err != nil {
 		return model.Report{}, s.publishReportError(sessionID, err)
 	}
-	s.publishReportDone(report)
+	if err := s.publishReportDone(report); err != nil {
+		return model.Report{}, err
+	}
 
 	return report, nil
 }
@@ -220,12 +222,12 @@ func stringListOrEmpty(values []string) []string {
 	return append([]string(nil), values...)
 }
 
-func (s *ReportService) publishReportDone(report model.Report) {
+func (s *ReportService) publishReportDone(report model.Report) error {
 	if s.events == nil {
-		return
+		return nil
 	}
 
-	_ = s.events.Publish(stream.Event{
+	if err := s.events.Publish(stream.Event{
 		Type:      stream.EventTypeReportDone,
 		SessionID: report.SessionID,
 		Payload: stream.ReportDonePayload{
@@ -233,7 +235,11 @@ func (s *ReportService) publishReportDone(report model.Report) {
 			Summary:    report.Summary,
 		},
 		CreatedAt: s.now(),
-	})
+	}); err != nil {
+		return fmt.Errorf("%w: %v", ErrEventPublishFailed, err)
+	}
+
+	return nil
 }
 
 func (s *ReportService) publishReportError(sessionID int, err error) error {
