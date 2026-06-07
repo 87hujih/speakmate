@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestLoadDefaultsToPort8080(t *testing.T) {
 	t.Setenv("APP_PORT", "")
@@ -304,6 +307,96 @@ func TestLoadReadsInfrastructureEnvironment(t *testing.T) {
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Config.Validate returned error for valid infrastructure env: %v", err)
+	}
+}
+
+func TestLoadReadsDotEnvWhenProcessEnvironmentUnset(t *testing.T) {
+	clearLLMEnv(t)
+	clearStorageEnv(t)
+	clearInfrastructureEnv(t)
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile(".env", []byte(`
+ASR_PROVIDER=tencent
+ASR_USE_MOCK=false
+TENCENT_ASR_APP_ID=1250000000
+TENCENT_ASR_SECRET_ID=test-secret-id
+TENCENT_ASR_SECRET_KEY=test-secret-key
+TENCENT_ASR_ENGINE_TYPE=16k_en
+`), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+
+	cfg := Load()
+
+	if cfg.ASR.Provider != "tencent" {
+		t.Fatalf("ASR.Provider = %q, want tencent", cfg.ASR.Provider)
+	}
+	if cfg.ASR.UseMock {
+		t.Fatal("ASR.UseMock = true, want false from .env")
+	}
+	if !cfg.ASR.HasTencentRequiredFields() {
+		t.Fatal("ASR.HasTencentRequiredFields() = false, want true from .env")
+	}
+}
+
+func TestLoadPrefersProcessEnvironmentOverDotEnv(t *testing.T) {
+	clearLLMEnv(t)
+	clearStorageEnv(t)
+	clearInfrastructureEnv(t)
+	t.Setenv("ASR_PROVIDER", "mock")
+	t.Setenv("ASR_USE_MOCK", "true")
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile(".env", []byte(`
+ASR_PROVIDER=tencent
+ASR_USE_MOCK=false
+`), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+
+	cfg := Load()
+
+	if cfg.ASR.Provider != "mock" {
+		t.Fatalf("ASR.Provider = %q, want process env mock", cfg.ASR.Provider)
+	}
+	if !cfg.ASR.UseMock {
+		t.Fatal("ASR.UseMock = false, want process env true")
+	}
+}
+
+func TestLoadDisablesLLMFallbackByDefaultWhenRealLLMIsConfigured(t *testing.T) {
+	clearLLMEnv(t)
+	clearStorageEnv(t)
+	clearInfrastructureEnv(t)
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile(".env", []byte(`
+LLM_PROVIDER=openai-compatible
+LLM_BASE_URL=https://llm.example.com/v1
+LLM_API_KEY=test-key
+LLM_MODEL=test-model
+LLM_USE_MOCK=false
+CORRECTION_USE_MOCK=false
+SCORING_USE_MOCK=false
+SUMMARY_USE_MOCK=false
+`), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+
+	cfg := Load()
+
+	if cfg.LLM.UseMock {
+		t.Fatal("LLM.UseMock = true, want false from .env")
+	}
+	if cfg.LLM.FallbackToMock {
+		t.Fatal("LLM.FallbackToMock = true, want false when real LLM mode is requested")
+	}
+	if cfg.Feedback.CorrectionUseMock {
+		t.Fatal("Feedback.CorrectionUseMock = true, want false from .env")
+	}
+	if cfg.Feedback.ScoringUseMock {
+		t.Fatal("Feedback.ScoringUseMock = true, want false from .env")
+	}
+	if !cfg.LLM.HasRequiredFields() {
+		t.Fatal("LLM.HasRequiredFields() = false, want true from .env")
 	}
 }
 

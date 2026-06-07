@@ -102,12 +102,16 @@ type RedisConfig struct {
 }
 
 func Load() Config {
+	loadDotEnvIntoProcessEnv(".env")
+
 	port := os.Getenv("APP_PORT")
 	if port == "" {
 		port = "8080"
 	}
 
 	externalServiceTimeoutSeconds := positiveIntEnv("EXTERNAL_SERVICE_TIMEOUT_SECONDS", 30)
+	llmUseMock := boolEnv("LLM_USE_MOCK", true)
+	llmFallbackToMock := boolEnv("LLM_FALLBACK_TO_MOCK", llmUseMock)
 
 	return Config{
 		Port: port,
@@ -129,8 +133,8 @@ func Load() Config {
 			APIKey:         strings.TrimSpace(os.Getenv("LLM_API_KEY")),
 			Model:          strings.TrimSpace(os.Getenv("LLM_MODEL")),
 			TimeoutSeconds: positiveIntEnv("LLM_TIMEOUT_SECONDS", externalServiceTimeoutSeconds),
-			UseMock:        boolEnv("LLM_USE_MOCK", true),
-			FallbackToMock: boolEnv("LLM_FALLBACK_TO_MOCK", true),
+			UseMock:        llmUseMock,
+			FallbackToMock: llmFallbackToMock,
 		},
 		ASR: ASRConfig{
 			Provider:               stringEnv("ASR_PROVIDER", "mock"),
@@ -317,4 +321,28 @@ func listEnv(key string, fallback []string) []string {
 	}
 
 	return items
+}
+
+func loadDotEnvIntoProcessEnv(path string) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+
+	for _, rawLine := range strings.Split(string(content), "\n") {
+		line := strings.TrimSpace(strings.TrimSuffix(rawLine, "\r"))
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		key, value, ok := strings.Cut(line, "=")
+		key = strings.TrimSpace(key)
+		if !ok || key == "" || strings.TrimSpace(os.Getenv(key)) != "" {
+			continue
+		}
+
+		value = strings.TrimSpace(value)
+		value = strings.Trim(value, `"'`)
+		_ = os.Setenv(key, value)
+	}
 }
