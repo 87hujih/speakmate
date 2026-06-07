@@ -116,7 +116,7 @@ export function HomePage() {
           <div className="relative">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3 py-2 text-[13px] font-black">
               <Sparkles className="h-4 w-4" />
-              AI Speaking Coach · REST / SSE Ready
+              SpeakMate 场景化英语训练
             </span>
             <h1 className="mb-4 mt-6 max-w-[640px] text-[40px] font-black leading-[1.05] tracking-[-0.04em] md:text-[54px]">
               在真实场景中练英语，让 AI 帮你说得更自然
@@ -160,7 +160,7 @@ export function HomePage() {
       ) : scenarios.length === 0 ? (
         <section className="rounded-panel border border-line bg-white/85 p-8 text-center shadow-soft">
           <h3 className="m-0 text-xl font-black text-ink">暂无可训练场景</h3>
-          <p className="mt-2 text-sm font-semibold text-muted">请确认后端场景 seed 已加载。</p>
+          <p className="mt-2 text-sm font-semibold text-muted">当前没有可用训练场景，请稍后重试。</p>
         </section>
       ) : (
         <section className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -179,7 +179,7 @@ export function HomePage() {
         {[
           { icon: Bot, title: "AI 主动追问", text: "根据当前阶段继续追问，让练习保持真实任务感。" },
           { icon: CheckCircle2, title: "低打断纠错", text: "对话中给轻量提示，结束后集中生成结构化报告。" },
-          { icon: ArrowRight, title: "后端接口友好", text: "页面已接入 Gin API，支持本地 Mock Agent 联调。" },
+          { icon: ArrowRight, title: "训练记录闭环", text: "练习过程、即时反馈和课后报告保持同步，方便持续复盘表现变化。" },
         ].map((item) => {
           const Icon = item.icon;
           return (

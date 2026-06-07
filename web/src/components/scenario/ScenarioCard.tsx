@@ -25,7 +25,7 @@ export function ScenarioCard({ scenario, isStarting = false, onStart }: Scenario
   );
 
   return (
-    <article className="group relative overflow-hidden rounded-[28px] border border-line bg-white/90 p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-panel">
+    <article className="group relative flex h-full flex-col overflow-hidden rounded-[28px] border border-line bg-white/90 p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-panel">
       <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-brand-blue to-brand-purple" />
       <div className="mb-5 grid h-14 w-14 place-items-center rounded-[20px] bg-blue-50 text-brand-blue">
         <Icon className="h-7 w-7" strokeWidth={1.8} />
@@ -38,10 +38,10 @@ export function ScenarioCard({ scenario, isStarting = false, onStart }: Scenario
           难度：{scenario.difficultyLabel}
         </Badge>
       </div>
-      <ul className="mb-6 grid gap-2 text-sm leading-6 text-muted">
+      <ul className="mb-6 grid flex-1 content-start gap-2 text-sm leading-6 text-muted">
         {scenario.goals.map((goal) => (
-          <li key={goal} className="flex items-center gap-2">
-            <span className="grid h-5 w-5 place-items-center rounded-full bg-emerald-50 text-xs font-black text-emerald-600">
+          <li key={goal} className="flex items-start gap-2">
+            <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-50 text-xs font-black text-emerald-600">
               ✓
             </span>
             {goal}
@@ -49,11 +49,11 @@ export function ScenarioCard({ scenario, isStarting = false, onStart }: Scenario
         ))}
       </ul>
       {onStart ? (
-        <Button className="w-full justify-between disabled:cursor-not-allowed disabled:opacity-70" disabled={isStarting} onClick={() => onStart(scenario)}>
+        <Button className="mt-auto w-full justify-between disabled:cursor-not-allowed disabled:opacity-70" disabled={isStarting} onClick={() => onStart(scenario)}>
           {startContent}
         </Button>
       ) : (
-        <ButtonLink to={`/training/${scenario.sessionId}`} className="w-full justify-between">
+        <ButtonLink to={`/training/${scenario.sessionId}`} className="mt-auto w-full justify-between">
           {startContent}
         </ButtonLink>
       )}
