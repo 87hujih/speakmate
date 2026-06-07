@@ -63,6 +63,8 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 	messageHandler := handler.NewMessageHandler(sessionService)
 	audioService := service.NewAudioService(sessionService, NewASRClient(cfg))
 	audioHandler := handler.NewAudioHandler(audioService)
+	audioStreamService := service.NewAudioStreamService(sessionService, NewASRClient(cfg))
+	audioWebSocketHandler := handler.NewAudioWebSocketHandler(audioStreamService)
 	feedbackService := service.NewFeedbackService(feedbackRepo)
 	feedbackHandler := handler.NewFeedbackHandler(feedbackService)
 	reportService := service.NewReportService(
@@ -90,6 +92,7 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 	api.POST("/sessions/:id/finish", sessionHandler.Finish)
 	api.POST("/sessions/:id/messages", messageHandler.Send)
 	api.POST("/sessions/:id/audio", audioHandler.Upload)
+	api.GET("/sessions/:id/audio/ws", audioWebSocketHandler.Stream)
 	api.GET("/sessions/:id/corrections", feedbackHandler.ListSessionCorrections)
 	api.GET("/sessions/:id/scores", feedbackHandler.GetSessionScore)
 	api.POST("/sessions/:id/report", reportHandler.Generate)

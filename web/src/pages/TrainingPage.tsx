@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { createAudioWebSocketUrl, parseAudioWebSocketEvent, type AudioWebSocketEvent } from "../api/audioWebSocket";
 import { ApiError } from "../api/client";
 import { finishTrainingSession, loadTrainingSessionState, sendTrainingAudio, sendTrainingText } from "../api/loaders";
 import { connectSessionStream, type SessionStreamEvent } from "../api/sessionStream";
@@ -35,6 +36,9 @@ export function TrainingPage() {
   const streamErrorShown = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const voiceSocketRef = useRef<WebSocket | null>(null);
+  const voiceSocketReadyRef = useRef(false);
+  const voiceSocketChunkSentRef = useRef(false);
   const audioChunksRef = useRef<Blob[]>([]);
 
   async function reload(nextGoal?: string) {
@@ -67,6 +71,7 @@ export function TrainingPage() {
         recorder.onstop = null;
         recorder.stop();
       }
+      closeVoiceSocket();
       stopMediaStream();
     };
   }, []);
@@ -139,6 +144,16 @@ export function TrainingPage() {
     mediaStreamRef.current = null;
   }
 
+  function closeVoiceSocket() {
+    const socket = voiceSocketRef.current;
+    voiceSocketRef.current = null;
+    voiceSocketReadyRef.current = false;
+    voiceSocketChunkSentRef.current = false;
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.close();
+    }
+  }
+
   function supportedAudioMimeType() {
     if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
       return "";
@@ -196,7 +211,99 @@ export function TrainingPage() {
     }
   }
 
+  function handleAudioWebSocketEvent(event: AudioWebSocketEvent) {
+    if (event.type === "start") {
+      setStreamNotice("实时语音通道已连接。");
+      return;
+    }
+    if (event.type === "partial_transcript") {
+      setVoiceTranscript(event.transcript);
+      return;
+    }
+    if (event.type === "final_transcript") {
+      setVoiceStatus("thinking");
+      setVoiceTranscript(event.transcript);
+      void reload(event.next_goal);
+      return;
+    }
+    if (event.type === "correction" || event.type === "score_updated") {
+      void reload();
+      return;
+    }
+    if (event.type === "end") {
+      setIsSending(false);
+      setVoiceStatus("idle");
+      closeVoiceSocket();
+      return;
+    }
+    if (event.type === "error") {
+      setIsSending(false);
+      setVoiceStatus("idle");
+      setVoiceError(event.message);
+    }
+  }
+
+  function openVoiceSocket(sessionId: number, mimeType: string) {
+    if (typeof WebSocket === "undefined") {
+      return null;
+    }
+
+    const socket = new WebSocket(createAudioWebSocketUrl(sessionId));
+    voiceSocketRef.current = socket;
+    voiceSocketReadyRef.current = false;
+    voiceSocketChunkSentRef.current = false;
+    socket.onopen = () => {
+      voiceSocketReadyRef.current = true;
+      socket.send(
+        JSON.stringify({
+          type: "start",
+          payload: { content_type: mimeType || "audio/webm" },
+        }),
+      );
+    };
+    socket.onmessage = (event) => {
+      handleAudioWebSocketEvent(parseAudioWebSocketEvent(String(event.data)));
+    };
+    socket.onerror = () => {
+      voiceSocketReadyRef.current = false;
+      setStreamNotice("实时语音连接失败，结束后将使用整段上传。");
+    };
+    socket.onclose = () => {
+      voiceSocketRef.current = null;
+      voiceSocketReadyRef.current = false;
+    };
+
+    return socket;
+  }
+
+  function sendAudioChunkOverSocket(blob: Blob) {
+    const socket = voiceSocketRef.current;
+    if (!socket || !voiceSocketReadyRef.current || socket.readyState !== WebSocket.OPEN || blob.size === 0) {
+      return;
+    }
+
+    socket.send(blob);
+    voiceSocketChunkSentRef.current = true;
+  }
+
+  function finishRealtimeAudioOrUpload(blob: Blob, mimeType: string) {
+    const socket = voiceSocketRef.current;
+    if (socket && voiceSocketReadyRef.current && voiceSocketChunkSentRef.current && socket.readyState === WebSocket.OPEN) {
+      setIsSending(true);
+      setSendError("");
+      setVoiceError("");
+      socket.send(JSON.stringify({ type: "end" }));
+      return;
+    }
+
+    closeVoiceSocket();
+    void uploadRecordedAudio(blob, mimeType);
+  }
+
   async function startRecording() {
+    if (!numericSessionId) {
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setVoiceError("当前浏览器不支持录音上传。");
       return;
@@ -209,18 +316,20 @@ export function TrainingPage() {
       audioChunksRef.current = [];
       mediaStreamRef.current = stream;
       mediaRecorderRef.current = recorder;
+      openVoiceSocket(numericSessionId, mimeType || "audio/webm");
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
+          sendAudioChunkOverSocket(event.data);
         }
       };
       recorder.onstop = () => {
         const type = recorder.mimeType || mimeType || "audio/webm";
         const blob = new Blob(audioChunksRef.current, { type });
         stopMediaStream();
-        void uploadRecordedAudio(blob, type);
+        finishRealtimeAudioOrUpload(blob, type);
       };
-      recorder.start();
+      recorder.start(700);
       setVoiceTranscript("");
       setVoiceError("");
       setVoiceStatus("recording");

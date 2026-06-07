@@ -1,12 +1,13 @@
 # Audio Upload API 接口文档
 
-本文档说明单段音频上传接口。当前版本只做浏览器录音后的整段上传，后端使用 Mock ASR 生成稳定 transcript，然后复用现有文本消息训练链路。
+本文档说明单段音频上传接口。浏览器也可以使用实时 WebSocket 音频分片接口，见 [audio-websocket-api.md](audio-websocket-api.md)。
+单段上传后端使用 Mock ASR 生成稳定 transcript，然后复用现有文本消息训练链路。
 
 ```text
 浏览器录音 -> 上传音频 -> Mock ASR 转文本 -> SendMessage -> AI 回复 -> 纠错评分
 ```
 
-当前版本不做实时音频分片、不做音素级发音评分，也不请求真实 ASR 服务。
+当前版本不做音素级发音评分，也不请求真实 ASR 服务。
 
 ## 基本信息
 
@@ -29,7 +30,7 @@
 | 转写后进入训练链路 | 支持，复用 `SendMessage` |
 | 纠错和评分 | 支持，行为与文本消息一致 |
 | 真实 ASR Provider | 未接入 |
-| WebSocket 音频分片 | 未包含在本接口 |
+| WebSocket 音频分片 | 支持，见 [audio-websocket-api.md](audio-websocket-api.md) |
 | 音素级发音评分 | 未包含在本接口 |
 
 ## 文件限制
@@ -154,6 +155,7 @@ curl -X POST http://localhost:8080/api/v1/sessions/1/audio \
 - 成功后用 `transcript` 展示转写文本，用 `user_message` / `ai_message` 更新对话 UI。
 - 收到 `409 / 2004` 后禁用录音入口，并提示训练已结束。
 - SSE 已连接时，音频上传同样会触发 `ai_message_delta`、`ai_message_done`、`correction_done`、`score_updated` 事件。
+- 如果浏览器支持 WebSocket，训练页会优先使用实时音频分片；连接失败时可回退到本单段上传接口。
 
 ## 验证命令
 

@@ -4,7 +4,7 @@
 
 SpeakMate AI 不是一个开放闲聊机器人。它更像一个有训练目标的英语陪练教练：先给用户一个具体场景，再通过 AI 追问推动对话，最后把用户的表达问题整理成可执行的练习建议。
 
-本项目面向七牛云 XEngineer 暑期实训营「AI 英语口语陪练」议题设计。当前仓库已完成 Go + Gin 后端基础骨架、正式 Vite + React + TypeScript 前端应用、文本训练闭环和单段录音上传入口。完整技术方案见 [docs/project-blueprint.md](docs/project-blueprint.md)。
+本项目面向七牛云 XEngineer 暑期实训营「AI 英语口语陪练」议题设计。当前仓库已完成 Go + Gin 后端基础骨架、正式 Vite + React + TypeScript 前端应用、文本训练闭环、单段录音上传和实时音频 WebSocket 分片入口。完整技术方案见 [docs/project-blueprint.md](docs/project-blueprint.md)。
 
 ## 项目背景
 
@@ -135,7 +135,7 @@ Browser
 | SSE 流式事件 | 已完成（第一版） | 支持 `GET /api/v1/sessions/:id/stream`，推送 AI 回复分片、纠错、评分、报告和错误事件，见 [docs/api文档/sse-api.md](docs/api文档/sse-api.md) |
 | Conversation Agent | 已接入 | 默认使用 Mock；配置 API Key 且关闭 Mock 后使用 OpenAI-compatible LLM，失败时降级 Mock |
 | AI 纠错、评分与总结 | 已完成（第一版） | Correction / Scoring / Summary 模型、Mock/LLM Agent、内存 Feedback/Report Repository、fail-open 降级和查询 API 已接入 |
-| 语音能力 | 已完成（单段上传第一版） | 训练页支持浏览器录音并上传，后端使用 Mock ASR 转写后复用消息训练链路，见 [docs/api文档/audio-api.md](docs/api文档/audio-api.md) |
+| 语音能力 | 已完成（Mock 第一版） | 训练页支持浏览器录音、WebSocket 分片实时 partial transcript 和单段上传 fallback，后端使用 Mock ASR 转写后复用消息训练链路，见 [docs/api文档/audio-api.md](docs/api文档/audio-api.md) 和 [docs/api文档/audio-websocket-api.md](docs/api文档/audio-websocket-api.md) |
 
 ## 技术栈
 
@@ -239,7 +239,7 @@ npm run dev
 3. 在浏览器打开 `http://localhost:5173`，验证完整训练闭环：
 
 ```text
-选择场景 -> 创建训练 -> 发送文本或录音上传 -> AI 回复 -> 查看纠错评分 -> 结束训练 -> 生成报告 -> 查询历史记录 -> 回到报告/训练详情
+选择场景 -> 创建训练 -> 发送文本或实时录音/录音上传 -> AI 回复 -> 查看纠错评分 -> 结束训练 -> 生成报告 -> 查询历史记录 -> 回到报告/训练详情
 ```
 
 ### 存储配置
@@ -317,15 +317,16 @@ go run ./cmd/server
 `FEEDBACK_FAIL_OPEN=true` 表示反馈生成失败时不阻断主对话链路；设置为 `false` 时，纠错或评分失败会让消息接口返回 `502 / 3004 feedback agent failed`。
 课后报告的 Summary Agent 自带 Mock fallback；模型调用或 JSON 解析失败时会尽量返回 Mock 报告内容。关闭 `SUMMARY_USE_MOCK` 且 LLM 配置完整时才会请求真实模型。
 
-### ASR / 录音上传
+### ASR / 录音
 
-当前语音第一版只支持浏览器录制单段音频后上传：
+当前语音能力使用 Mock ASR，不需要真实 ASR API Key，也不会请求外部 ASR 服务。浏览器优先使用 WebSocket 分片，连接失败时可以回退到单段上传：
 
 ```text
-录音 -> POST /api/v1/sessions/:id/audio -> Mock ASR transcript -> SendMessage
+录音分片 -> GET /api/v1/sessions/:id/audio/ws -> partial/final transcript -> SendMessage
+录音整段 -> POST /api/v1/sessions/:id/audio -> Mock ASR transcript -> SendMessage
 ```
 
-后端当前固定使用 Mock ASR，不需要真实 ASR API Key，也不会请求外部 ASR 服务。真实 ASR Provider 配置和 WebSocket 音频分片留到后续分支实现。接口说明见 [docs/api文档/audio-api.md](docs/api文档/audio-api.md)。
+接口说明见 [docs/api文档/audio-api.md](docs/api文档/audio-api.md) 和 [docs/api文档/audio-websocket-api.md](docs/api文档/audio-websocket-api.md)。真实 ASR Provider 配置仍留作后续扩展。
 
 查看静态前端原型参考：
 
@@ -365,6 +366,6 @@ speakmate/
 
 - 接入 LLM，完成基于场景的真实 AI 追问；
 - 将当前模拟 AI 回复分片升级为真实 LLM streaming；
-- 接入真实 ASR Provider，并扩展 WebSocket 音频分片；
+- 接入真实 ASR Provider，并将 Mock partial transcript 升级为真实流式转写；
 - 补充迁移执行工具和部署环境数据库初始化流程；
 - 使用 Redis 管理训练过程中的上下文和临时状态。
