@@ -163,7 +163,7 @@ function toCorrectionCategory(type: BackendCorrectionError["type"]): Correction[
 }
 
 export function mapCorrections(corrections: BackendCorrectionResult[]): Correction[] {
-  return corrections.flatMap((correction) => {
+  return newestCorrectionsFirst(corrections).flatMap((correction) => {
     const errors = arrayOrEmpty(correction.errors);
     const betterExpressions = arrayOrEmpty(correction.better_expressions);
 
@@ -189,6 +189,10 @@ export function mapCorrections(corrections: BackendCorrectionResult[]): Correcti
       issues: error.span && error.suggestion ? [`${error.span} -> ${error.suggestion}`] : betterExpressions,
     }));
   });
+}
+
+function newestCorrectionsFirst(corrections: BackendCorrectionResult[]) {
+  return [...corrections].sort((first, second) => second.message_id - first.message_id);
 }
 
 function deriveTasks(scenario: Scenario, currentStage: string, status: BackendSessionDetail["status"]): TrainingTask[] {
@@ -226,8 +230,8 @@ function deriveProgress(tasks: TrainingSession["tasks"]) {
 }
 
 function latestBetterExpression(corrections: BackendCorrectionResult[]) {
-  for (let index = corrections.length - 1; index >= 0; index -= 1) {
-    const expressions = arrayOrEmpty(corrections[index].better_expressions);
+  for (const correction of newestCorrectionsFirst(corrections)) {
+    const expressions = arrayOrEmpty(correction.better_expressions);
     const expression = expressions[expressions.length - 1];
     if (expression) {
       return expression;

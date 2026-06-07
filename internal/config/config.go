@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -102,7 +103,7 @@ type RedisConfig struct {
 }
 
 func Load() Config {
-	loadDotEnvIntoProcessEnv(".env")
+	loadDotEnvIntoProcessEnv(findDotEnvPath(".env"))
 
 	port := os.Getenv("APP_PORT")
 	if port == "" {
@@ -146,7 +147,7 @@ func Load() Config {
 			TencentAppID:           strings.TrimSpace(os.Getenv("TENCENT_ASR_APP_ID")),
 			TencentSecretID:        strings.TrimSpace(os.Getenv("TENCENT_ASR_SECRET_ID")),
 			TencentSecretKey:       strings.TrimSpace(os.Getenv("TENCENT_ASR_SECRET_KEY")),
-			TencentEngineType:      strings.TrimSpace(os.Getenv("TENCENT_ASR_ENGINE_TYPE")),
+			TencentEngineType:      stringEnv("TENCENT_ASR_ENGINE_TYPE", stringEnv("TENCENT_ASR_ENGINE_MODEL_TYPE", "16k_en")),
 			TencentVoiceFormat:     stringEnv("TENCENT_ASR_VOICE_FORMAT", "ogg-opus"),
 			TencentHotwordID:       strings.TrimSpace(os.Getenv("TENCENT_ASR_HOTWORD_ID")),
 			TencentHotwordList:     strings.TrimSpace(os.Getenv("TENCENT_ASR_HOTWORD_LIST")),
@@ -324,6 +325,9 @@ func listEnv(key string, fallback []string) []string {
 }
 
 func loadDotEnvIntoProcessEnv(path string) {
+	if path == "" {
+		return
+	}
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return
@@ -344,5 +348,31 @@ func loadDotEnvIntoProcessEnv(path string) {
 		value = strings.TrimSpace(value)
 		value = strings.Trim(value, `"'`)
 		_ = os.Setenv(key, value)
+	}
+}
+
+func findDotEnvPath(name string) string {
+	if filepath.IsAbs(name) {
+		if _, err := os.Stat(name); err == nil {
+			return name
+		}
+		return ""
+	}
+
+	dir, err := os.Getwd()
+	if err != nil {
+		return name
+	}
+	for {
+		candidate := filepath.Join(dir, name)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
 	}
 }

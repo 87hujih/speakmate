@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -9,6 +10,7 @@ func TestLoadDefaultsToPort8080(t *testing.T) {
 	t.Setenv("APP_PORT", "")
 	clearLLMEnv(t)
 	clearStorageEnv(t)
+	withoutDotEnv(t)
 
 	cfg := Load()
 
@@ -104,6 +106,7 @@ func TestLoadDefaultsToPort8080(t *testing.T) {
 }
 
 func TestLoadReadsLLMEnvironment(t *testing.T) {
+	withoutDotEnv(t)
 	t.Setenv("APP_PORT", "9090")
 	t.Setenv("LLM_PROVIDER", "openai-compatible")
 	t.Setenv("LLM_BASE_URL", "https://llm.example.com/v1")
@@ -159,6 +162,7 @@ func TestLoadReadsLLMEnvironment(t *testing.T) {
 
 func TestLoadReadsStorageEnvironment(t *testing.T) {
 	clearLLMEnv(t)
+	withoutDotEnv(t)
 	t.Setenv("STORAGE_MODE", "mysql")
 	t.Setenv("MYSQL_DSN", "speakmate:secret@tcp(127.0.0.1:3306)/speakmate?parseTime=true")
 
@@ -179,6 +183,7 @@ func TestLoadReadsInfrastructureEnvironment(t *testing.T) {
 	clearLLMEnv(t)
 	clearStorageEnv(t)
 	clearInfrastructureEnv(t)
+	withoutDotEnv(t)
 	t.Setenv("REQUEST_TIMEOUT_SECONDS", "12")
 	t.Setenv("REQUEST_BODY_LIMIT_BYTES", "2048")
 	t.Setenv("RATE_LIMIT_REQUESTS", "9")
@@ -363,6 +368,59 @@ ASR_USE_MOCK=false
 	}
 }
 
+func TestLoadFindsDotEnvInParentDirectory(t *testing.T) {
+	clearLLMEnv(t)
+	clearStorageEnv(t)
+	clearInfrastructureEnv(t)
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".env"), []byte(`
+ASR_PROVIDER=tencent
+ASR_USE_MOCK=false
+TENCENT_ASR_APP_ID=1250000000
+TENCENT_ASR_SECRET_ID=test-secret-id
+TENCENT_ASR_SECRET_KEY=test-secret-key
+TENCENT_ASR_ENGINE_TYPE=16k_en
+`), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	binDir := filepath.Join(root, "bin")
+	if err := os.Mkdir(binDir, 0o755); err != nil {
+		t.Fatalf("make bin dir: %v", err)
+	}
+	t.Chdir(binDir)
+
+	cfg := Load()
+
+	if cfg.ASR.Provider != "tencent" {
+		t.Fatalf("ASR.Provider = %q, want tencent from parent .env", cfg.ASR.Provider)
+	}
+	if cfg.ASR.UseMock {
+		t.Fatal("ASR.UseMock = true, want false from parent .env")
+	}
+}
+
+func TestLoadReadsTencentEngineModelTypeAlias(t *testing.T) {
+	clearLLMEnv(t)
+	clearStorageEnv(t)
+	clearInfrastructureEnv(t)
+	withoutDotEnv(t)
+	t.Setenv("ASR_PROVIDER", "tencent")
+	t.Setenv("ASR_USE_MOCK", "false")
+	t.Setenv("TENCENT_ASR_APP_ID", "1250000000")
+	t.Setenv("TENCENT_ASR_SECRET_ID", "test-secret-id")
+	t.Setenv("TENCENT_ASR_SECRET_KEY", "test-secret-key")
+	t.Setenv("TENCENT_ASR_ENGINE_MODEL_TYPE", "16k_zh")
+
+	cfg := Load()
+
+	if cfg.ASR.TencentEngineType != "16k_zh" {
+		t.Fatalf("ASR.TencentEngineType = %q, want alias engine model type", cfg.ASR.TencentEngineType)
+	}
+	if !cfg.ASR.HasTencentRequiredFields() {
+		t.Fatal("ASR.HasTencentRequiredFields() = false, want true from engine alias")
+	}
+}
+
 func TestLoadDisablesLLMFallbackByDefaultWhenRealLLMIsConfigured(t *testing.T) {
 	clearLLMEnv(t)
 	clearStorageEnv(t)
@@ -433,6 +491,7 @@ func TestASRConfigHasTencentRequiredFields(t *testing.T) {
 func TestExternalServiceTimeoutFeedsLLMAndASRDefaults(t *testing.T) {
 	clearLLMEnv(t)
 	clearInfrastructureEnv(t)
+	withoutDotEnv(t)
 	t.Setenv("EXTERNAL_SERVICE_TIMEOUT_SECONDS", "11")
 
 	cfg := Load()
@@ -480,6 +539,7 @@ func TestStorageValidateRejectsUnknownMode(t *testing.T) {
 
 func TestLoadFallsBackForInvalidLLMTimeoutAndMockFlag(t *testing.T) {
 	clearLLMEnv(t)
+	withoutDotEnv(t)
 	t.Setenv("LLM_TIMEOUT_SECONDS", "not-a-number")
 	t.Setenv("LLM_USE_MOCK", "not-a-bool")
 	t.Setenv("LLM_FALLBACK_TO_MOCK", "not-a-bool")
@@ -529,6 +589,12 @@ func clearLLMEnv(t *testing.T) {
 	t.Setenv("FEEDBACK_FAIL_OPEN", "")
 }
 
+func withoutDotEnv(t *testing.T) {
+	t.Helper()
+
+	t.Chdir(t.TempDir())
+}
+
 func clearStorageEnv(t *testing.T) {
 	t.Helper()
 
@@ -563,6 +629,7 @@ func clearInfrastructureEnv(t *testing.T) {
 	t.Setenv("TENCENT_ASR_SECRET_ID", "")
 	t.Setenv("TENCENT_ASR_SECRET_KEY", "")
 	t.Setenv("TENCENT_ASR_ENGINE_TYPE", "")
+	t.Setenv("TENCENT_ASR_ENGINE_MODEL_TYPE", "")
 	t.Setenv("TENCENT_ASR_VOICE_FORMAT", "")
 	t.Setenv("TENCENT_ASR_HOTWORD_ID", "")
 	t.Setenv("TENCENT_ASR_HOTWORD_LIST", "")

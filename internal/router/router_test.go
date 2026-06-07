@@ -29,6 +29,8 @@ import (
 
 func TestMain(m *testing.M) {
 	_ = os.Setenv("LLM_USE_MOCK", "true")
+	_ = os.Setenv("ASR_PROVIDER", "mock")
+	_ = os.Setenv("ASR_USE_MOCK", "true")
 	os.Exit(m.Run())
 }
 

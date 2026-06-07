@@ -176,6 +176,87 @@ describe("api adapters", () => {
     expect(session.naturalExpression).toBe("完成一轮输入后，这里会显示更自然的替代表达。");
   });
 
+  it("orders mapped corrections with the latest user message first for realtime feedback", () => {
+    const sessionDetail: BackendSessionDetail = {
+      session_id: 7,
+      session_no: "S202606070001",
+      scenario: {
+        id: 1,
+        code: "interview",
+        name: "英语面试",
+        description: "练习自我介绍、项目经历和技术追问",
+        difficulty: "medium",
+      },
+      status: "running",
+      turn_count: 2,
+      messages: [
+        {
+          id: 10,
+          session_id: 7,
+          role: "user",
+          content: "I am study computer science.",
+          stage: "自我介绍",
+          created_at: "2026-06-07T03:01:00Z",
+        },
+        {
+          id: 12,
+          session_id: 7,
+          role: "user",
+          content: "I have did a project.",
+          stage: "项目经历",
+          created_at: "2026-06-07T03:02:00Z",
+        },
+      ],
+      created_at: "2026-06-07T03:00:00Z",
+      ended_at: null,
+    };
+    const corrections: BackendCorrectionResult[] = [
+      {
+        message_id: 10,
+        session_id: 7,
+        original_text: "I am study computer science.",
+        corrected_text: "I am studying computer science.",
+        errors: [
+          {
+            type: "grammar",
+            span: "am study",
+            suggestion: "am studying",
+            explanation: "be 动词后应接现在分词。",
+          },
+        ],
+        better_expressions: ["I major in computer science."],
+      },
+      {
+        message_id: 12,
+        session_id: 7,
+        original_text: "I have did a project.",
+        corrected_text: "I have done a project.",
+        errors: [
+          {
+            type: "grammar",
+            span: "have did",
+            suggestion: "have done",
+            explanation: "现在完成时中 have 后应接过去分词。",
+          },
+        ],
+        better_expressions: ["I completed a project that solved a real user problem."],
+      },
+    ];
+
+    const session = mapSessionDetailToTrainingSession({
+      session: sessionDetail,
+      scenario: scenarioDetail,
+      corrections,
+      now: new Date("2026-06-07T03:03:00Z"),
+    });
+
+    expect(session.corrections[0]).toMatchObject({
+      original: "have did",
+      suggestion: "have done",
+    });
+    expect(session.naturalExpression).toBe("I completed a project that solved a real user problem.");
+  });
+
   it("maps backend scores to all five UI dimensions", () => {
     expect(mapSessionScore(score).map((item) => [item.key, item.score])).toEqual([
       ["fluency", 75],

@@ -42,17 +42,13 @@ logs/
 /web/preview.html
 
 # Local workspace notes and task files
-/docs/*
-!/docs/demo-readiness.md
-!/docs/troubleshooting.md
-!/docs/api文档/
-/docs/api文档/*
-!/docs/api文档/*.md
+/docs/
 /AGENT.md
 /tasks/
 /PR提交规范.md
 /.cache/
 /.tmp/
+/scripts/
 
 # Environment and local config
 .env
