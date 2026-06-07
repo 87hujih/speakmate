@@ -5,6 +5,7 @@ import "testing"
 func TestLoadDefaultsToPort8080(t *testing.T) {
 	t.Setenv("APP_PORT", "")
 	clearLLMEnv(t)
+	clearStorageEnv(t)
 
 	cfg := Load()
 
@@ -45,6 +46,15 @@ func TestLoadDefaultsToPort8080(t *testing.T) {
 	}
 	if !cfg.Feedback.FailOpen {
 		t.Fatal("Feedback.FailOpen = false, want true by default")
+	}
+	if cfg.Storage.Mode != StorageModeMemory {
+		t.Fatalf("Storage.Mode = %q, want %q", cfg.Storage.Mode, StorageModeMemory)
+	}
+	if cfg.Storage.MySQLDSN != "" {
+		t.Fatalf("Storage.MySQLDSN = %q, want empty", cfg.Storage.MySQLDSN)
+	}
+	if err := cfg.Storage.Validate(); err != nil {
+		t.Fatalf("Storage.Validate returned error for default memory mode: %v", err)
 	}
 }
 
@@ -98,6 +108,44 @@ func TestLoadReadsLLMEnvironment(t *testing.T) {
 	}
 }
 
+func TestLoadReadsStorageEnvironment(t *testing.T) {
+	clearLLMEnv(t)
+	t.Setenv("STORAGE_MODE", "mysql")
+	t.Setenv("MYSQL_DSN", "speakmate:secret@tcp(127.0.0.1:3306)/speakmate?parseTime=true")
+
+	cfg := Load()
+
+	if cfg.Storage.Mode != StorageModeMySQL {
+		t.Fatalf("Storage.Mode = %q, want %q", cfg.Storage.Mode, StorageModeMySQL)
+	}
+	if cfg.Storage.MySQLDSN != "speakmate:secret@tcp(127.0.0.1:3306)/speakmate?parseTime=true" {
+		t.Fatalf("Storage.MySQLDSN = %q, want configured DSN", cfg.Storage.MySQLDSN)
+	}
+	if err := cfg.Storage.Validate(); err != nil {
+		t.Fatalf("Storage.Validate returned error for valid mysql mode: %v", err)
+	}
+}
+
+func TestStorageValidateRejectsMissingMySQLDSN(t *testing.T) {
+	cfg := StorageConfig{Mode: StorageModeMySQL}
+
+	err := cfg.Validate()
+
+	if err == nil {
+		t.Fatal("Validate returned nil, want missing MySQL DSN error")
+	}
+}
+
+func TestStorageValidateRejectsUnknownMode(t *testing.T) {
+	cfg := StorageConfig{Mode: "postgres", MySQLDSN: "dsn"}
+
+	err := cfg.Validate()
+
+	if err == nil {
+		t.Fatal("Validate returned nil, want unknown storage mode error")
+	}
+}
+
 func TestLoadFallsBackForInvalidLLMTimeoutAndMockFlag(t *testing.T) {
 	clearLLMEnv(t)
 	t.Setenv("LLM_TIMEOUT_SECONDS", "not-a-number")
@@ -142,4 +190,11 @@ func clearLLMEnv(t *testing.T) {
 	t.Setenv("SCORING_USE_MOCK", "")
 	t.Setenv("SUMMARY_USE_MOCK", "")
 	t.Setenv("FEEDBACK_FAIL_OPEN", "")
+}
+
+func clearStorageEnv(t *testing.T) {
+	t.Helper()
+
+	t.Setenv("STORAGE_MODE", "")
+	t.Setenv("MYSQL_DSN", "")
 }
