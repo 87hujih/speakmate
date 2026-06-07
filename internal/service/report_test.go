@@ -9,6 +9,7 @@ import (
 	"speakmate/internal/model"
 	"speakmate/internal/repository"
 	"speakmate/internal/service"
+	"speakmate/internal/stream"
 )
 
 func TestReportServiceGeneratesFinishedSessionReport(t *testing.T) {
@@ -92,6 +93,91 @@ func TestReportServiceGeneratesFinishedSessionReport(t *testing.T) {
 	}
 	if saved.Summary != report.Summary {
 		t.Fatalf("saved summary = %q, want generated report summary", saved.Summary)
+	}
+}
+
+func TestReportServicePublishesReportDoneEvent(t *testing.T) {
+	scenarioReader, sessionRepo, created := setupReportSession(t, model.SessionStatusFinished)
+	feedbackRepo := newFakeFeedbackRepository()
+	feedbackRepo.correctionsBySessionID[created.ID] = []model.CorrectionResult{sampleCorrection(created.ID)}
+	feedbackRepo.scoresBySessionID[created.ID] = sampleScore(created.ID)
+	publisher := &fakeEventPublisher{}
+	reportService := service.NewReportService(
+		scenarioReader,
+		sessionRepo,
+		feedbackRepo,
+		newFakeReportRepository(),
+		service.WithSummaryAgent(&fakeSummaryAgent{
+			output: agent.SummaryOutput{
+				Summary:          "本次训练能够说明项目背景。",
+				MajorProblems:    []string{"动词形式不稳定"},
+				FrequentErrors:   []string{"am study -> am studying"},
+				NextPracticePlan: []string{"复述项目经历。"},
+			},
+		}),
+		service.WithReportEventPublisher(publisher),
+	)
+
+	report, err := reportService.GenerateReport(created.ID)
+	if err != nil {
+		t.Fatalf("GenerateReport returned error: %v", err)
+	}
+
+	if len(publisher.events) != 1 {
+		t.Fatalf("published events length = %d, want 1: %+v", len(publisher.events), publisher.events)
+	}
+	event := publisher.events[0]
+	if event.Type != stream.EventTypeReportDone {
+		t.Fatalf("event type = %q, want %q", event.Type, stream.EventTypeReportDone)
+	}
+	if event.SessionID != created.ID {
+		t.Fatalf("event session id = %d, want %d", event.SessionID, created.ID)
+	}
+	payload, ok := event.Payload.(stream.ReportDonePayload)
+	if !ok {
+		t.Fatalf("payload type = %T, want ReportDonePayload", event.Payload)
+	}
+	if payload.TotalScore != report.TotalScore || payload.Summary != report.Summary {
+		t.Fatalf("payload = %+v, want report total/summary", payload)
+	}
+}
+
+func TestReportServicePublishesErrorEventWhenGenerationFails(t *testing.T) {
+	scenarioReader, sessionRepo, created := setupReportSession(t, model.SessionStatusFinished)
+	feedbackRepo := newFakeFeedbackRepository()
+	feedbackRepo.correctionsBySessionID[created.ID] = []model.CorrectionResult{sampleCorrection(created.ID)}
+	feedbackRepo.scoresBySessionID[created.ID] = sampleScore(created.ID)
+	publisher := &fakeEventPublisher{}
+	reportService := service.NewReportService(
+		scenarioReader,
+		sessionRepo,
+		feedbackRepo,
+		newFakeReportRepository(),
+		service.WithSummaryAgent(&fakeSummaryAgent{err: errors.New("summary failed")}),
+		service.WithReportEventPublisher(publisher),
+	)
+
+	_, err := reportService.GenerateReport(created.ID)
+
+	if !errors.Is(err, service.ErrSummaryAgentFailed) {
+		t.Fatalf("GenerateReport error = %v, want ErrSummaryAgentFailed", err)
+	}
+	if len(publisher.events) != 1 {
+		t.Fatalf("published events length = %d, want 1: %+v", len(publisher.events), publisher.events)
+	}
+	event := publisher.events[0]
+	if event.Type != stream.EventTypeError {
+		t.Fatalf("event type = %q, want %q", event.Type, stream.EventTypeError)
+	}
+	if event.SessionID != created.ID {
+		t.Fatalf("event session id = %d, want %d", event.SessionID, created.ID)
+	}
+	payload, ok := event.Payload.(stream.ErrorPayload)
+	if !ok {
+		t.Fatalf("payload type = %T, want ErrorPayload", event.Payload)
+	}
+	if payload.Code != "summary_agent_failed" || payload.Message != "summary agent failed" {
+		t.Fatalf("payload = %+v, want summary failure", payload)
 	}
 }
 

@@ -35,6 +35,8 @@
 - Session 当前评分；
 - Summary Agent 输出。
 
+如果前端已建立 `GET /api/v1/sessions/:id/stream` 连接，报告生成成功后会收到 `report_done` 事件；生成失败时会收到 `error` 事件。事件结构见 [sse-api.md](sse-api.md)。
+
 ## Mock / LLM 配置
 
 本地开发和自动测试默认使用 Mock / Fake，不请求真实 LLM：
@@ -232,6 +234,7 @@ curl http://localhost:8080/api/v1/sessions/1/report
 
 - 用户点击“结束训练”后，先调用 `POST /api/v1/sessions/:id/finish`。
 - 结束成功后调用 `POST /api/v1/sessions/:id/report` 生成报告。
+- 如果报告页已接入 SSE，可在收到 `report_done` 后刷新报告数据。
 - 报告页刷新时调用 `GET /api/v1/sessions/:id/report`。
 - 收到 `404 / 5003` 时展示“报告尚未生成”，可提供生成按钮。
 - 收到 `409 / 5002` 时提示用户先结束训练。

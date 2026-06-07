@@ -13,6 +13,7 @@ import (
 	"speakmate/internal/infra/llm"
 	"speakmate/internal/repository"
 	"speakmate/internal/service"
+	"speakmate/internal/stream"
 )
 
 // New 创建并配置 Gin 路由引擎。
@@ -45,6 +46,7 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 	if err != nil {
 		return nil, err
 	}
+	streamBus := stream.NewBus()
 	scenarioService := service.NewScenarioService(scenarioRepo)
 	scenarioHandler := handler.NewScenarioHandler(scenarioService)
 	sessionService := service.NewSessionService(
@@ -55,6 +57,7 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 		service.WithCorrectionAgent(NewCorrectionAgent(cfg)),
 		service.WithScoringAgent(NewScoringAgent(cfg)),
 		service.WithFeedbackFailOpen(cfg.Feedback.FailOpen),
+		service.WithEventPublisher(streamBus),
 	)
 	sessionHandler := handler.NewSessionHandler(sessionService)
 	messageHandler := handler.NewMessageHandler(sessionService)
@@ -66,10 +69,12 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 		feedbackRepo,
 		reportRepo,
 		service.WithSummaryAgent(NewSummaryAgent(cfg)),
+		service.WithReportEventPublisher(streamBus),
 	)
 	reportHandler := handler.NewReportHandler(reportService)
 	historyService := service.NewHistoryService(scenarioService, sessionRepo, feedbackRepo, reportRepo)
 	historyHandler := handler.NewHistoryHandler(historyService)
+	streamHandler := handler.NewStreamHandler(streamBus)
 
 	// v1 API 路由组承载场景、训练 Session 和消息等后续接口。
 	api := engine.Group("/api/v1")
@@ -79,6 +84,7 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 	api.GET("/users/:user_id/sessions", historyHandler.ListByUser)
 	api.POST("/sessions", sessionHandler.Create)
 	api.GET("/sessions/:id", sessionHandler.Detail)
+	api.GET("/sessions/:id/stream", streamHandler.Stream)
 	api.POST("/sessions/:id/finish", sessionHandler.Finish)
 	api.POST("/sessions/:id/messages", messageHandler.Send)
 	api.GET("/sessions/:id/corrections", feedbackHandler.ListSessionCorrections)

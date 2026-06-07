@@ -1,6 +1,7 @@
 package router
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"net/http"
@@ -840,6 +841,62 @@ func TestSessionCorrectionsRouteReturnsCorrectionNotFound(t *testing.T) {
 	assertErrorResponse(t, rec, http.StatusNotFound, 4002, "correction not found")
 }
 
+// TestSessionStreamRouteIsRegistered 验证 Session SSE 路由已注册并返回流式响应头。
+func TestSessionStreamRouteIsRegistered(t *testing.T) {
+	server := httptest.NewServer(New())
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/api/v1/sessions/1/stream")
+	if err != nil {
+		t.Fatalf("GET stream returned error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got := resp.Header.Get("Content-Type"); !strings.HasPrefix(got, "text/event-stream") {
+		t.Fatalf("content-type = %q, want text/event-stream", got)
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	if reader == nil {
+		t.Fatal("stream reader is nil")
+	}
+}
+
+// TestSessionStreamReceivesMessageFeedbackEvents 验证发送消息后 SSE 能收到 AI、纠错和评分事件。
+func TestSessionStreamReceivesMessageFeedbackEvents(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+	server := httptest.NewServer(engine)
+	defer server.Close()
+
+	client := server.Client()
+	client.Timeout = 2 * time.Second
+	resp, err := client.Get(server.URL + "/api/v1/sessions/" + strconv.Itoa(sessionID) + "/stream")
+	if err != nil {
+		t.Fatalf("GET stream returned error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	postMessage(t, engine, sessionID, `{"content":"I am study computer science and I have did a project."}`)
+
+	reader := bufio.NewReader(resp.Body)
+	gotTypes := readSSEEventTypes(t, reader, 4)
+	wantTypes := []string{
+		"ai_message_delta",
+		"ai_message_done",
+		"correction_done",
+		"score_updated",
+	}
+	for i, wantType := range wantTypes {
+		if gotTypes[i] != wantType {
+			t.Fatalf("event type[%d] = %q, want %q; all types = %#v", i, gotTypes[i], wantType, gotTypes)
+		}
+	}
+}
+
 // TestReportRoutesGenerateAndReturnReport 验证结束训练后可以生成并重复查询课后报告。
 func TestReportRoutesGenerateAndReturnReport(t *testing.T) {
 	engine := New()
@@ -917,6 +974,32 @@ func TestReportRoutesGenerateAndReturnReport(t *testing.T) {
 	}
 	if getBody.Data.Summary != generateBody.Data.Summary {
 		t.Fatalf("get summary = %q, want generated summary", getBody.Data.Summary)
+	}
+}
+
+// TestSessionStreamReceivesReportDoneEvent 验证报告生成后 SSE 能收到 report_done。
+func TestSessionStreamReceivesReportDoneEvent(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+	postMessage(t, engine, sessionID, `{"content":"I am study computer science and I have did a project."}`)
+	finishSession(t, engine, sessionID)
+	server := httptest.NewServer(engine)
+	defer server.Close()
+
+	client := server.Client()
+	client.Timeout = 2 * time.Second
+	resp, err := client.Get(server.URL + "/api/v1/sessions/" + strconv.Itoa(sessionID) + "/stream")
+	if err != nil {
+		t.Fatalf("GET stream returned error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	generateReport(t, engine, sessionID)
+
+	reader := bufio.NewReader(resp.Body)
+	gotTypes := readSSEEventTypes(t, reader, 1)
+	if gotTypes[0] != "report_done" {
+		t.Fatalf("event type = %q, want report_done", gotTypes[0])
 	}
 }
 
@@ -1166,6 +1249,24 @@ func assertRFC3339(t *testing.T, value string) {
 	if _, err := time.Parse(time.RFC3339, value); err != nil {
 		t.Fatalf("time %q is not RFC3339: %v", value, err)
 	}
+}
+
+func readSSEEventTypes(t *testing.T, reader *bufio.Reader, count int) []string {
+	t.Helper()
+
+	types := make([]string, 0, count)
+	for len(types) < count {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("ReadString returned error after %d events: %v", len(types), err)
+		}
+		line = strings.TrimRight(line, "\r\n")
+		if strings.HasPrefix(line, "event: ") {
+			types = append(types, strings.TrimPrefix(line, "event: "))
+		}
+	}
+
+	return types
 }
 
 func createSession(t *testing.T, engine http.Handler, scenarioID int) int {

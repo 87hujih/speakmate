@@ -8,6 +8,7 @@ import (
 	"speakmate/internal/agent"
 	"speakmate/internal/model"
 	"speakmate/internal/repository"
+	"speakmate/internal/stream"
 )
 
 var (
@@ -47,6 +48,7 @@ type ReportService struct {
 	feedbackRepo   ReportFeedbackReader
 	reportRepo     ReportRepository
 	summary        agent.SummaryAgent
+	events         EventPublisher
 	now            func() time.Time
 }
 
@@ -91,6 +93,14 @@ func WithReportNow(now func() time.Time) ReportOption {
 	}
 }
 
+func WithReportEventPublisher(publisher EventPublisher) ReportOption {
+	return func(service *ReportService) {
+		if publisher != nil {
+			service.events = publisher
+		}
+	}
+}
+
 // GenerateReport 基于已结束训练和反馈数据生成并保存课后报告。
 func (s *ReportService) GenerateReport(sessionID int) (model.Report, error) {
 	if sessionID <= 0 {
@@ -100,35 +110,35 @@ func (s *ReportService) GenerateReport(sessionID int) (model.Report, error) {
 	session, err := s.sessionRepo.FindByID(sessionID)
 	if err != nil {
 		if errors.Is(err, repository.ErrSessionNotFound) {
-			return model.Report{}, ErrSessionNotFound
+			return model.Report{}, s.publishReportError(sessionID, ErrSessionNotFound)
 		}
 
-		return model.Report{}, err
+		return model.Report{}, s.publishReportError(sessionID, err)
 	}
 	if session.Status != model.SessionStatusFinished {
-		return model.Report{}, ErrSessionNotFinished
+		return model.Report{}, s.publishReportError(sessionID, ErrSessionNotFinished)
 	}
 
 	scenario, err := s.scenarioReader.GetScenario(session.ScenarioID)
 	if err != nil {
-		return model.Report{}, err
+		return model.Report{}, s.publishReportError(sessionID, err)
 	}
 
 	corrections, err := s.feedbackRepo.ListCorrectionsBySessionID(session.ID)
 	if err != nil {
 		if errors.Is(err, repository.ErrCorrectionNotFound) || errors.Is(err, ErrCorrectionNotFound) {
-			return model.Report{}, ErrReportFeedbackMissing
+			return model.Report{}, s.publishReportError(sessionID, ErrReportFeedbackMissing)
 		}
 
-		return model.Report{}, err
+		return model.Report{}, s.publishReportError(sessionID, err)
 	}
 	score, err := s.feedbackRepo.FindCurrentScoreBySessionID(session.ID)
 	if err != nil {
 		if errors.Is(err, repository.ErrScoreNotFound) || errors.Is(err, ErrScoreNotFound) {
-			return model.Report{}, ErrReportFeedbackMissing
+			return model.Report{}, s.publishReportError(sessionID, ErrReportFeedbackMissing)
 		}
 
-		return model.Report{}, err
+		return model.Report{}, s.publishReportError(sessionID, err)
 	}
 
 	summaryAgent := s.summary
@@ -143,7 +153,7 @@ func (s *ReportService) GenerateReport(sessionID int) (model.Report, error) {
 		Score:       score,
 	})
 	if err != nil {
-		return model.Report{}, fmt.Errorf("%w: %v", ErrSummaryAgentFailed, err)
+		return model.Report{}, s.publishReportError(sessionID, fmt.Errorf("%w: %v", ErrSummaryAgentFailed, err))
 	}
 
 	report := model.Report{
@@ -166,8 +176,9 @@ func (s *ReportService) GenerateReport(sessionID int) (model.Report, error) {
 		CreatedAt:         s.now(),
 	}
 	if err := s.reportRepo.Save(report); err != nil {
-		return model.Report{}, err
+		return model.Report{}, s.publishReportError(sessionID, err)
 	}
+	s.publishReportDone(report)
 
 	return report, nil
 }
@@ -207,4 +218,54 @@ func stringListOrEmpty(values []string) []string {
 	}
 
 	return append([]string(nil), values...)
+}
+
+func (s *ReportService) publishReportDone(report model.Report) {
+	if s.events == nil {
+		return
+	}
+
+	_ = s.events.Publish(stream.Event{
+		Type:      stream.EventTypeReportDone,
+		SessionID: report.SessionID,
+		Payload: stream.ReportDonePayload{
+			TotalScore: report.TotalScore,
+			Summary:    report.Summary,
+		},
+		CreatedAt: s.now(),
+	})
+}
+
+func (s *ReportService) publishReportError(sessionID int, err error) error {
+	if s.events == nil {
+		return err
+	}
+
+	code, message := reportErrorPayload(err)
+	_ = s.events.Publish(stream.Event{
+		Type:      stream.EventTypeError,
+		SessionID: sessionID,
+		Payload: stream.ErrorPayload{
+			Code:    code,
+			Message: message,
+		},
+		CreatedAt: s.now(),
+	})
+
+	return err
+}
+
+func reportErrorPayload(err error) (string, string) {
+	switch {
+	case errors.Is(err, ErrSessionNotFound):
+		return "session_not_found", "session not found"
+	case errors.Is(err, ErrSessionNotFinished):
+		return "session_not_finished", "session not finished"
+	case errors.Is(err, ErrReportFeedbackMissing):
+		return "report_feedback_missing", "report feedback missing"
+	case errors.Is(err, ErrSummaryAgentFailed):
+		return "summary_agent_failed", "summary agent failed"
+	default:
+		return "report_generation_failed", "report generation failed"
+	}
 }
