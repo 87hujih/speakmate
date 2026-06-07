@@ -130,3 +130,43 @@ func TestNewScoringAgentReturnsMockWhenLLMMockEnabled(t *testing.T) {
 		t.Fatalf("agent type = %T, want *agent.MockScoringAgent", got)
 	}
 }
+
+func TestNewSummaryAgentReturnsLLMAgentWhenConfigured(t *testing.T) {
+	got := NewSummaryAgent(config.Config{
+		LLM: config.LLMConfig{
+			UseMock:        false,
+			Provider:       "openai-compatible",
+			BaseURL:        "https://llm.example.com/v1",
+			APIKey:         "test-key",
+			Model:          "test-model",
+			TimeoutSeconds: 30,
+		},
+		Feedback: config.FeedbackConfig{
+			SummaryUseMock: false,
+		},
+	})
+
+	if _, ok := got.(*agent.LLMSummaryAgent); !ok {
+		t.Fatalf("agent type = %T, want *agent.LLMSummaryAgent", got)
+	}
+}
+
+func TestNewSummaryAgentReturnsMockWhenSummaryMockEnabled(t *testing.T) {
+	got := NewSummaryAgent(config.Config{
+		LLM: config.LLMConfig{
+			UseMock:        false,
+			Provider:       "openai-compatible",
+			BaseURL:        "https://llm.example.com/v1",
+			APIKey:         "test-key",
+			Model:          "test-model",
+			TimeoutSeconds: 30,
+		},
+		Feedback: config.FeedbackConfig{
+			SummaryUseMock: true,
+		},
+	})
+
+	if _, ok := got.(*agent.MockSummaryAgent); !ok {
+		t.Fatalf("agent type = %T, want *agent.MockSummaryAgent", got)
+	}
+}

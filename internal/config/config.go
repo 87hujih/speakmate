@@ -24,6 +24,7 @@ type LLMConfig struct {
 type FeedbackConfig struct {
 	CorrectionUseMock bool
 	ScoringUseMock    bool
+	SummaryUseMock    bool
 	FailOpen          bool
 }
 
@@ -46,6 +47,7 @@ func Load() Config {
 		Feedback: FeedbackConfig{
 			CorrectionUseMock: boolEnv("CORRECTION_USE_MOCK", true),
 			ScoringUseMock:    boolEnv("SCORING_USE_MOCK", true),
+			SummaryUseMock:    boolEnv("SUMMARY_USE_MOCK", true),
 			FailOpen:          boolEnv("FEEDBACK_FAIL_OPEN", true),
 		},
 	}

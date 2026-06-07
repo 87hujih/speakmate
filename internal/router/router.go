@@ -45,6 +45,15 @@ func New(configs ...config.Config) *gin.Engine {
 	messageHandler := handler.NewMessageHandler(sessionService)
 	feedbackService := service.NewFeedbackService(feedbackRepo)
 	feedbackHandler := handler.NewFeedbackHandler(feedbackService)
+	reportRepo := repository.NewMemoryReportRepository()
+	reportService := service.NewReportService(
+		scenarioService,
+		sessionRepo,
+		feedbackRepo,
+		reportRepo,
+		service.WithSummaryAgent(NewSummaryAgent(cfg)),
+	)
+	reportHandler := handler.NewReportHandler(reportService)
 
 	// v1 API 路由组承载场景、训练 Session 和消息等后续接口。
 	api := engine.Group("/api/v1")
@@ -56,6 +65,8 @@ func New(configs ...config.Config) *gin.Engine {
 	api.POST("/sessions/:id/messages", messageHandler.Send)
 	api.GET("/sessions/:id/corrections", feedbackHandler.ListSessionCorrections)
 	api.GET("/sessions/:id/scores", feedbackHandler.GetSessionScore)
+	api.POST("/sessions/:id/report", reportHandler.Generate)
+	api.GET("/sessions/:id/report", reportHandler.Get)
 	api.GET("/messages/:message_id/corrections", feedbackHandler.GetMessageCorrection)
 
 	return engine
@@ -107,4 +118,20 @@ func NewScoringAgent(cfg config.Config) agent.ScoringAgent {
 	}
 
 	return agent.NewLLMScoringAgent(client, agent.WithScoringFallbackAgent(agent.NewMockScoringAgent()))
+}
+
+func NewSummaryAgent(cfg config.Config) agent.SummaryAgent {
+	if cfg.LLM.UseMock || cfg.Feedback.SummaryUseMock || !cfg.LLM.HasRequiredFields() {
+		return agent.NewMockSummaryAgent()
+	}
+	if !strings.EqualFold(cfg.LLM.Provider, "openai-compatible") {
+		return agent.NewMockSummaryAgent()
+	}
+
+	client, err := llm.NewOpenAICompatibleClient(cfg.LLM)
+	if err != nil {
+		return agent.NewMockSummaryAgent()
+	}
+
+	return agent.NewLLMSummaryAgent(client, agent.WithSummaryFallbackAgent(agent.NewMockSummaryAgent()))
 }

@@ -840,6 +840,133 @@ func TestSessionCorrectionsRouteReturnsCorrectionNotFound(t *testing.T) {
 	assertErrorResponse(t, rec, http.StatusNotFound, 4002, "correction not found")
 }
 
+// TestReportRoutesGenerateAndReturnReport 验证结束训练后可以生成并重复查询课后报告。
+func TestReportRoutesGenerateAndReturnReport(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+	postMessage(t, engine, sessionID, `{"content":"I am study computer science and I have did a project."}`)
+
+	finishReq := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/finish", nil)
+	finishRec := httptest.NewRecorder()
+	engine.ServeHTTP(finishRec, finishReq)
+	if finishRec.Code != http.StatusOK {
+		t.Fatalf("finish status code = %d, want %d; body = %s", finishRec.Code, http.StatusOK, finishRec.Body.String())
+	}
+
+	generateReq := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/report", nil)
+	generateRec := httptest.NewRecorder()
+	engine.ServeHTTP(generateRec, generateReq)
+
+	if generateRec.Code != http.StatusOK {
+		t.Fatalf("generate status code = %d, want %d; body = %s", generateRec.Code, http.StatusOK, generateRec.Body.String())
+	}
+	var generateBody struct {
+		Code int `json:"code"`
+		Data struct {
+			SessionID        int      `json:"session_id"`
+			TotalScore       int      `json:"total_score"`
+			Summary          string   `json:"summary"`
+			FrequentErrors   []string `json:"frequent_errors"`
+			NextPracticePlan []string `json:"next_practice_plan"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(generateRec.Body.Bytes(), &generateBody); err != nil {
+		t.Fatalf("generate response is not valid JSON: %v", err)
+	}
+	if generateBody.Code != 0 {
+		t.Fatalf("generate code = %d, want 0", generateBody.Code)
+	}
+	if generateBody.Data.SessionID != sessionID {
+		t.Fatalf("report session_id = %d, want %d", generateBody.Data.SessionID, sessionID)
+	}
+	if generateBody.Data.TotalScore != 77 {
+		t.Fatalf("report total_score = %d, want 77", generateBody.Data.TotalScore)
+	}
+	if generateBody.Data.Summary == "" {
+		t.Fatal("report summary is empty")
+	}
+	if len(generateBody.Data.FrequentErrors) == 0 {
+		t.Fatal("report frequent_errors is empty")
+	}
+	if len(generateBody.Data.NextPracticePlan) == 0 {
+		t.Fatal("report next_practice_plan is empty")
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/report", nil)
+	getRec := httptest.NewRecorder()
+	engine.ServeHTTP(getRec, getReq)
+
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("get status code = %d, want %d; body = %s", getRec.Code, http.StatusOK, getRec.Body.String())
+	}
+	var getBody struct {
+		Code int `json:"code"`
+		Data struct {
+			SessionID int    `json:"session_id"`
+			Summary   string `json:"summary"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(getRec.Body.Bytes(), &getBody); err != nil {
+		t.Fatalf("get response is not valid JSON: %v", err)
+	}
+	if getBody.Code != 0 {
+		t.Fatalf("get code = %d, want 0", getBody.Code)
+	}
+	if getBody.Data.SessionID != sessionID {
+		t.Fatalf("get session_id = %d, want %d", getBody.Data.SessionID, sessionID)
+	}
+	if getBody.Data.Summary != generateBody.Data.Summary {
+		t.Fatalf("get summary = %q, want generated summary", getBody.Data.Summary)
+	}
+}
+
+// TestReportRoutesReturnNotFoundBeforeGeneration 验证未生成报告时查询返回明确错误。
+func TestReportRoutesReturnNotFoundBeforeGeneration(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/report", nil)
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	assertErrorResponse(t, rec, http.StatusNotFound, 5003, "report not found")
+}
+
+// TestReportRoutesRequireFinishedSession 验证 running 状态不能生成课后报告。
+func TestReportRoutesRequireFinishedSession(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+	postMessage(t, engine, sessionID, `{"content":"I am study computer science."}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/report", nil)
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	assertErrorResponse(t, rec, http.StatusConflict, 5002, "session not finished")
+}
+
+// TestReportRoutesRequireFeedbackData 验证缺少纠错或评分时报告生成失败。
+func TestReportRoutesRequireFeedbackData(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+
+	finishReq := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/finish", nil)
+	finishRec := httptest.NewRecorder()
+	engine.ServeHTTP(finishRec, finishReq)
+	if finishRec.Code != http.StatusOK {
+		t.Fatalf("finish status code = %d, want %d; body = %s", finishRec.Code, http.StatusOK, finishRec.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/report", nil)
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	assertErrorResponse(t, rec, http.StatusConflict, 5004, "report feedback missing")
+}
+
 type messagePayload struct {
 	ID        int    `json:"id"`
 	SessionID int    `json:"session_id"`
