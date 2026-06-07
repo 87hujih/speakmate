@@ -20,7 +20,7 @@ export function VoiceRecorder({ status, transcript, error, isDisabled = false, o
   const isButtonDisabled = isDisabled || status === "recognizing" || status === "thinking" || status === "speaking";
 
   return (
-    <div className="border-t border-line bg-white px-5 py-4">
+    <div className="shrink-0 border-t border-line bg-white px-5 py-4">
       <div className="grid grid-cols-1 items-center gap-4 rounded-[24px] border border-line bg-slate-50/90 p-4 shadow-soft md:grid-cols-[minmax(180px,0.9fr)_minmax(180px,1fr)_88px]">
         <div className="flex min-w-0 items-center gap-4">
           <div

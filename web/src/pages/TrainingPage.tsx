@@ -646,9 +646,9 @@ export function TrainingPage() {
   }
 
   return (
-    <PageContainer size="full" className="flex min-h-[calc(100vh-72px)] flex-col gap-3 overflow-hidden">
+    <PageContainer size="full" className="flex min-h-[calc(100vh-72px)] flex-col gap-3 xl:h-[calc(100vh-72px)] xl:min-h-0 xl:overflow-hidden">
       <TrainingHeader session={session} isFinishing={isFinishing} onFinish={handleFinish} />
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[260px_minmax(0,1fr)_360px]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[260px_minmax(0,1fr)_360px] xl:overflow-hidden">
         <TaskPanel
           scenario={session.scenario}
           tasks={session.tasks}

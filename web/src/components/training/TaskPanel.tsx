@@ -12,7 +12,7 @@ interface TaskPanelProps {
 
 export function TaskPanel({ scenario, tasks, progress, focusTags }: TaskPanelProps) {
   return (
-    <aside className="h-full overflow-hidden rounded-panel border border-line bg-white/95 p-3.5 shadow-panel">
+    <aside className="h-full min-h-0 overflow-hidden rounded-panel border border-line bg-white/95 p-3.5 shadow-panel">
       <div className="mb-3 rounded-[22px] border border-blue-100 bg-blue-50/80 p-3.5">
         <div className="mb-2.5 flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-[16px] bg-white text-brand-blue shadow-soft">

@@ -61,7 +61,7 @@ export function ConversationPanel({
   }
 
   return (
-    <section className="flex min-h-0 flex-col overflow-hidden rounded-panel border border-line bg-white/95 shadow-panel">
+    <section className="flex h-[calc(100vh-120px)] max-h-[760px] min-h-[520px] flex-col overflow-hidden rounded-panel border border-line bg-white/95 shadow-panel xl:h-full xl:min-h-0 xl:max-h-none">
       <div className="flex min-h-[62px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 md:px-5">
         <div className="flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-[16px] bg-blue-50 text-brand-blue">
@@ -78,7 +78,7 @@ export function ConversationPanel({
         </div>
       </div>
 
-      <div ref={scrollRef} className="chat-scroll flex-1 overflow-auto px-4 py-5 md:px-6">
+      <div ref={scrollRef} className="chat-scroll min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-6">
         {messages.length ? (
           messages.map((message) => <ChatMessage key={message.id} message={message} />)
         ) : (
@@ -91,7 +91,7 @@ export function ConversationPanel({
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="border-t border-line bg-white px-4 py-4 md:px-5">
+      <form onSubmit={handleSubmit} className="shrink-0 border-t border-line bg-white px-4 py-4 md:px-5">
         {streamNotice ? <div className="mb-2 rounded-2xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">{streamNotice}</div> : null}
         {error ? <div className="mb-2 rounded-2xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">{error}</div> : null}
         <div className="grid grid-cols-[minmax(0,1fr)_52px] items-end gap-3 rounded-[24px] border border-line bg-slate-50/90 p-3 shadow-soft">

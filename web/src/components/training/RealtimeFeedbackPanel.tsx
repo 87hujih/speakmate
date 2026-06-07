@@ -12,7 +12,7 @@ export function RealtimeFeedbackPanel({ session }: RealtimeFeedbackPanelProps) {
   const latestCorrection = session.corrections[0];
 
   return (
-    <aside className="coach-scroll h-full overflow-auto rounded-panel border border-line bg-white/95 p-3 shadow-panel">
+    <aside className="coach-scroll h-full min-h-0 overflow-y-auto rounded-panel border border-line bg-white/95 p-3 shadow-panel">
       <div className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-[0.08em] text-slate-400">
         <Gauge className="h-4 w-4" />
         实时反馈
