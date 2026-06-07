@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError, type BackendScenario, type BackendSessionDetail } from "./client";
-import { loadReportState, loadTrainingSessionState } from "./loaders";
+import { loadReportState, loadTrainingSessionState, sendTrainingAudio } from "./loaders";
 
 const scenario: BackendScenario = {
   id: 1,
@@ -63,5 +63,60 @@ describe("api loaders", () => {
     const result = await loadReportState(7, client);
 
     expect(result.status).toBe("missing");
+  });
+
+  it("uploads audio and reloads the training state with the returned next goal", async () => {
+    const file = new File(["audio"], "answer.webm", { type: "audio/webm" });
+    const client = {
+      uploadAudioMessage: vi.fn(async () => ({
+        transcript: "I am study computer science and I have did a project.",
+        user_message: {
+          id: 10,
+          session_id: 7,
+          role: "user" as const,
+          content: "I am study computer science and I have did a project.",
+          stage: "自我介绍",
+          created_at: "2026-06-07T03:00:00Z",
+        },
+        ai_message: {
+          id: 11,
+          session_id: 7,
+          role: "ai" as const,
+          content: "Could you explain your role?",
+          stage: "项目经历",
+          created_at: "2026-06-07T03:00:01Z",
+        },
+        stage: "项目经历",
+        next_goal: "ask project details",
+        turn_count: 1,
+        correction_summary: { has_errors: true, error_count: 2 },
+        score_summary: { total_score: 77, grammar: 72, expression: 80 },
+      })),
+      getSession: vi.fn(async () => ({
+        ...session,
+        turn_count: 1,
+        messages: [
+          {
+            id: 10,
+            session_id: 7,
+            role: "user" as const,
+            content: "I am study computer science and I have did a project.",
+            stage: "自我介绍",
+            created_at: "2026-06-07T03:00:00Z",
+          },
+        ],
+      })),
+      getScenario: vi.fn(async () => scenario),
+      listSessionCorrections: vi.fn(async () => []),
+      getSessionScore: vi.fn(async () => {
+        throw new ApiError("score not found", 4003, 404);
+      }),
+    };
+
+    const result = await sendTrainingAudio(7, file, client);
+
+    expect(client.uploadAudioMessage).toHaveBeenCalledWith(7, file);
+    expect(result.result.transcript).toBe("I am study computer science and I have did a project.");
+    expect(result.session.coachSummary).toBe("ask project details");
   });
 });
