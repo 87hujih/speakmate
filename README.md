@@ -122,7 +122,7 @@ Browser
 |---|---|---|
 | Gin 服务骨架 | 已完成 | `cmd/server` 启动 HTTP 服务 |
 | 健康检查接口 | 已完成 | `GET /health` 返回统一 JSON 响应 |
-| 配置加载 | 已完成 | 支持 `APP_PORT` 和 LLM 相关环境变量，默认端口 `8080` |
+| 配置加载 | 已完成 | 支持 `APP_PORT`、LLM、反馈 Mock 和存储模式环境变量，默认端口 `8080` |
 | 统一响应结构 | 已完成 | 成功响应格式为 `{ code, message, data }` |
 | 前端原型 | 已完成 | [web/preview.html](web/preview.html) 展示训练、对话、报告和历史记录页面 |
 | 前端技术选型 | 已确定 | 正式前端工程使用 Vite + React + TypeScript |
@@ -131,6 +131,7 @@ Browser
 | 消息 API（Module 3） | 已完成 | 发送文本、AI 回复、轮次更新和消息历史查询，见 [docs/api文档/message-api-module3-api.md](docs/api文档/message-api-module3-api.md) |
 | 反馈 API（Module 4） | 已完成（第一版） | 消息发送后同步生成纠错/评分摘要，支持单条消息纠错、Session 纠错列表和当前评分查询，见 [docs/api文档/feedback-api.md](docs/api文档/feedback-api.md) |
 | 课后报告 API（Module 5） | 已完成（第一版） | 训练结束后可基于消息、纠错和评分生成结构化报告，支持重复查询，见 [docs/api文档/report-api.md](docs/api文档/report-api.md) |
+| MySQL 持久化与历史记录 | 已完成（第一版） | 支持 `memory` / `mysql` 存储模式切换，Session、Message、Correction、Score、Report 可落库，历史列表见 [docs/api文档/history-api.md](docs/api文档/history-api.md) |
 | Conversation Agent | 已接入 | 默认使用 Mock；配置 API Key 且关闭 Mock 后使用 OpenAI-compatible LLM，失败时降级 Mock |
 | AI 纠错、评分与总结 | 已完成（第一版） | Correction / Scoring / Summary 模型、Mock/LLM Agent、内存 Feedback/Report Repository、fail-open 降级和查询 API 已接入 |
 | 语音能力 | 规划中 | 浏览器录音、ASR、WebSocket 音频分片 |
@@ -148,9 +149,10 @@ Browser
 
 ## 快速开始
 
-默认配置会使用本地 Mock Agent，不需要 API Key：
+默认配置会使用本地 Mock Agent 和内存存储，不需要 API Key 或数据库：
 
 ```bash
+STORAGE_MODE=memory
 LLM_USE_MOCK=true
 go run ./cmd/server
 ```
@@ -184,6 +186,33 @@ curl http://localhost:8080/health
 ```bash
 go test ./...
 ```
+
+### 存储配置
+
+默认 `STORAGE_MODE=memory`，适合本地开发和自动测试；服务重启后训练数据会丢失。
+
+```bash
+STORAGE_MODE=memory
+go run ./cmd/server
+```
+
+切换 MySQL 持久化前，先创建数据库并按顺序执行 migrations：
+
+```bash
+mysql -u root -p -e 'CREATE DATABASE IF NOT EXISTS speakmate DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'
+mysql -u root -p speakmate < migrations/001_create_core_tables.sql
+mysql -u root -p speakmate < migrations/002_seed_default_scenarios.sql
+```
+
+然后设置 DSN 启动服务：
+
+```bash
+STORAGE_MODE=mysql
+MYSQL_DSN='speakmate:password@tcp(127.0.0.1:3306)/speakmate?parseTime=true&loc=UTC'
+go run ./cmd/server
+```
+
+`STORAGE_MODE=mysql` 但 `MYSQL_DSN` 为空时，服务会在启动阶段返回明确配置错误。示例环境变量见 [.env.example](.env.example)。
 
 ### LLM 配置
 
@@ -250,9 +279,12 @@ speakmate/
 │   ├── config/              # 环境配置
 │   ├── agent/               # Conversation Agent、Prompt 和 Mock/LLM 实现
 │   ├── handler/             # HTTP Handler
+│   ├── infra/database/      # MySQL 连接初始化
 │   ├── infra/llm/           # OpenAI-compatible LLM HTTP Client
+│   ├── repository/          # memory/mysql 仓库实现
 │   ├── response/            # 统一响应结构
 │   └── router/              # Gin 路由
+├── migrations/              # MySQL 表结构和默认场景 seed
 ├── web/                     # 前端目录，后续使用 Vite + React + TypeScript
 │   └── preview.html         # 当前静态交互原型
 ├── docs/project-blueprint.md # 完整产品与技术方案
@@ -266,5 +298,5 @@ speakmate/
 - 接入 LLM，完成基于场景的真实 AI 追问；
 - 增加 SSE 流式回复；
 - 接入 ASR，支持浏览器录音和语音识别；
-- 使用 MySQL 保存训练记录和报告；
+- 补充迁移执行工具和部署环境数据库初始化流程；
 - 使用 Redis 管理训练过程中的上下文和临时状态。

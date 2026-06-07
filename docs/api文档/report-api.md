@@ -2,7 +2,7 @@
 
 本文档说明当前已实现的课后报告接口。前端可以在用户结束训练后生成结构化报告，并重复查询已生成报告。
 
-当前版本使用内存 Report Repository。服务重启后 Session、消息、纠错、评分和报告都会丢失。报告生成依赖已保存的纠错和当前评分，因此需要先完成至少一轮消息发送并成功生成反馈。
+当前版本支持内存和 MySQL 两种 Report Repository。`STORAGE_MODE=memory` 时服务重启后 Session、消息、纠错、评分和报告都会丢失；`STORAGE_MODE=mysql` 时会持久化到 MySQL。报告生成依赖已保存的纠错和当前评分，因此需要先完成至少一轮消息发送并成功生成反馈。
 
 ## 基本信息
 
@@ -12,7 +12,7 @@
 | 响应格式 | JSON |
 | 成功响应结构 | `{ "code": 0, "message": "success", "data": ... }` |
 | 错误响应结构 | `{ "code": 业务错误码, "message": "错误说明" }` |
-| 当前数据来源 | 后端内存数据 |
+| 当前数据来源 | `STORAGE_MODE=memory` 时使用内存仓库；`STORAGE_MODE=mysql` 时使用 MySQL |
 | 是否需要登录 | 当前版本不需要 |
 | 生成前置条件 | Session 必须是 `finished`，且已有纠错和评分数据 |
 
@@ -238,7 +238,7 @@ curl http://localhost:8080/api/v1/sessions/1/report
 - 收到 `409 / 5004` 时提示“暂无足够反馈数据”，通常需要用户先完成至少一轮消息练习。
 - `scores.total_score` 和顶层 `total_score` 当前一致，列表卡片可直接使用顶层字段。
 - `frequent_errors`、`better_expressions`、`next_practice_plan` 都应兼容空数组。
-- 当前存储是内存数据，服务重启后 not found 属于预期开发行为。
+- `memory` 模式下服务重启后 not found 属于预期开发行为；`mysql` 模式下应优先检查报告是否已生成并落库。
 
 ## 验证命令
 

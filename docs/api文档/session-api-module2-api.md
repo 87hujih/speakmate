@@ -12,7 +12,7 @@
 | 响应格式 | JSON |
 | 成功响应结构 | `{ "code": 0, "message": "success", "data": ... }` |
 | 错误响应结构 | `{ "code": 业务错误码, "message": "错误说明" }` |
-| 当前数据来源 | 后端内存数据 |
+| 当前数据来源 | `STORAGE_MODE=memory` 时使用内存仓库；`STORAGE_MODE=mysql` 时使用 MySQL |
 | 是否需要登录 | 当前版本不需要 |
 | 默认用户 | 未传 `user_id` 时后端使用 `1` |
 
@@ -36,7 +36,7 @@ running -> finished
 - 创建成功后状态直接是 `running`。
 - 只有 `running` 状态可以结束。
 - 已经 `finished` 的 Session 再次结束会返回 `409`。
-- 当前使用内存存储，服务重启后 Session 数据会丢失。
+- `memory` 模式下服务重启后 Session 数据会丢失；`mysql` 模式下数据会持久化。
 
 ## 错误码
 
@@ -386,7 +386,7 @@ curl -X POST http://localhost:8080/api/v1/sessions/abc/finish
 - `status === "finished"` 时应禁用输入框、发送按钮和结束按钮。
 - 调用结束接口后，以返回的 `ended_at` 作为最终结束时间展示。
 - 对 `409 / 2004` 可以提示“本次训练已结束”，不要再次重试结束请求。
-- 对 `404 / 2003` 可以提示“训练不存在或服务已重启”，因为当前版本使用内存存储。
+- 对 `404 / 2003` 可以提示“训练不存在”；如果当前是 `memory` 模式，也可能是服务重启后内存数据已清空。
 - 对 `400 / 2002` 应检查前端路由参数，避免把非数字 ID 传给接口。
 - 前端统一按 `{ code, message, data }` 解析成功响应，按 `{ code, message }` 解析错误响应。
 

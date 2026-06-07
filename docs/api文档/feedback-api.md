@@ -2,7 +2,7 @@
 
 本文档说明当前已实现的 AI 纠错与评分接口。前端可以通过消息发送响应拿到轻量反馈摘要，也可以查询单条消息纠错、整场训练纠错列表和当前 Session 评分。
 
-当前版本使用内存 Feedback Repository。服务重启后 Session、消息、纠错和评分都会丢失。多轮发送时，纠错列表会按 Session 累积，`GET /api/v1/sessions/:id/scores` 返回最近一轮成功保存的当前评分。
+当前版本支持内存和 MySQL 两种 Feedback Repository。`STORAGE_MODE=memory` 时服务重启后 Session、消息、纠错和评分都会丢失；`STORAGE_MODE=mysql` 时会持久化到 MySQL。多轮发送时，纠错列表会按 Session 累积，`GET /api/v1/sessions/:id/scores` 返回最近一轮成功保存的当前评分。
 
 ## 基本信息
 
@@ -12,7 +12,7 @@
 | 响应格式 | JSON |
 | 成功响应结构 | `{ "code": 0, "message": "success", "data": ... }` |
 | 错误响应结构 | `{ "code": 业务错误码, "message": "错误说明" }` |
-| 当前数据来源 | 后端内存数据 |
+| 当前数据来源 | `STORAGE_MODE=memory` 时使用内存仓库；`STORAGE_MODE=mysql` 时使用 MySQL |
 | 是否需要登录 | 当前版本不需要 |
 | 反馈生成时机 | `POST /api/v1/sessions/:id/messages` 成功保存用户消息和 AI 消息后同步生成 |
 
@@ -398,7 +398,7 @@ curl http://localhost:8080/api/v1/sessions/1/scores
 - 评分卡片调用 `GET /api/v1/sessions/:id/scores`，前端不要重复计算 `total_score`。
 - 查询接口返回 `404 / 4002` 或 `404 / 4003` 时，展示“暂无反馈”或“反馈生成中”，不要作为页面级错误。
 - `errors` 和 `better_expressions` 都可能为空数组，前端应兼容空状态。
-- 当前存储是内存数据，服务重启后 not found 属于预期开发行为。
+- `memory` 模式下服务重启后 not found 属于预期开发行为；`mysql` 模式下应优先检查数据是否已落库。
 
 ## 验证命令
 
