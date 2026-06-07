@@ -1,6 +1,9 @@
-.PHONY: fmt fmt-check tidy tidy-check vet test build ci clean
+.PHONY: fmt fmt-check tidy tidy-check vet test build build-migrate migrate ci clean
 
 APP_BIN ?= bin/speakmate
+MIGRATE_BIN ?= bin/migrate
+MIGRATIONS_DIR ?= migrations
+MIGRATE_TIMEOUT ?= 60
 GO_PACKAGES := ./...
 
 fmt:
@@ -30,7 +33,13 @@ test:
 build:
 	go build -trimpath -o $(APP_BIN) ./cmd/server
 
-ci: fmt-check tidy-check vet test build
+build-migrate:
+	go build -trimpath -o $(MIGRATE_BIN) ./cmd/migrate
+
+migrate:
+	go run ./cmd/migrate -dir $(MIGRATIONS_DIR) -timeout $(MIGRATE_TIMEOUT)
+
+ci: fmt-check tidy-check vet test build build-migrate
 
 clean:
 	rm -rf bin coverage.out
