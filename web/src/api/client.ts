@@ -85,6 +85,10 @@ export interface BackendSendMessageResult {
   score_summary: BackendScoreSummary;
 }
 
+export interface BackendUploadAudioResult extends BackendSendMessageResult {
+  transcript: string;
+}
+
 export interface BackendCorrectionError {
   type: "grammar" | "vocabulary" | "expression" | "structure" | "scenario";
   span: string;
@@ -205,6 +209,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return payload.data;
 }
 
+async function requestForm<T>(path: string, body: FormData): Promise<T> {
+  const response = await fetch(buildApiUrl(path), {
+    method: "POST",
+    body,
+  });
+  const payload = await readPayload<T>(response);
+
+  if (!response.ok || payload.code !== 0) {
+    throw new ApiError(payload.message || "request failed", payload.code, response.status);
+  }
+  if (payload.data === undefined) {
+    throw new ApiError("response data missing", payload.code, response.status);
+  }
+
+  return payload.data;
+}
+
 function withPagination(path: string, page: number, pageSize: number) {
   const params = new URLSearchParams();
   params.set("page", String(page));
@@ -237,6 +258,12 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify({ content }),
     }),
+  uploadAudioMessage: (sessionId: number, file: File) => {
+    const body = new FormData();
+    body.append("audio", file);
+
+    return requestForm<BackendUploadAudioResult>(`/sessions/${sessionId}/audio`, body);
+  },
   listSessionCorrections: (sessionId: number) => request<BackendCorrectionResult[]>(`/sessions/${sessionId}/corrections`),
   getMessageCorrections: (messageId: number) => request<BackendCorrectionResult>(`/messages/${messageId}/corrections`),
   getSessionScore: (sessionId: number) => request<BackendScoreResult>(`/sessions/${sessionId}/scores`),

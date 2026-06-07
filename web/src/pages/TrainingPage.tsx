@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
-import { finishTrainingSession, loadTrainingSessionState, sendTrainingText } from "../api/loaders";
+import { finishTrainingSession, loadTrainingSessionState, sendTrainingAudio, sendTrainingText } from "../api/loaders";
 import { connectSessionStream, type SessionStreamEvent } from "../api/sessionStream";
 import { PageContainer } from "../components/layout/PageContainer";
 import { ConversationPanel } from "../components/training/ConversationPanel";
@@ -9,7 +9,7 @@ import { RealtimeFeedbackPanel } from "../components/training/RealtimeFeedbackPa
 import { TaskPanel } from "../components/training/TaskPanel";
 import { TrainingHeader } from "../components/training/TrainingHeader";
 import { buttonClasses } from "../components/ui/Button";
-import type { TrainingSession } from "../types";
+import type { TrainingSession, VoiceStatus } from "../types";
 
 function parseRouteSessionId(value: string | undefined) {
   const numeric = Number(value);
@@ -29,7 +29,13 @@ export function TrainingPage() {
   const [loadError, setLoadError] = useState("");
   const [sendError, setSendError] = useState("");
   const [streamNotice, setStreamNotice] = useState("");
+  const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [voiceError, setVoiceError] = useState("");
   const streamErrorShown = useRef(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   async function reload(nextGoal?: string) {
     if (!numericSessionId) {
@@ -53,6 +59,17 @@ export function TrainingPage() {
   useEffect(() => {
     void reload();
   }, [numericSessionId]);
+
+  useEffect(() => {
+    return () => {
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== "inactive") {
+        recorder.onstop = null;
+        recorder.stop();
+      }
+      stopMediaStream();
+    };
+  }, []);
 
   useEffect(() => {
     if (!numericSessionId || session?.status !== "running") {
@@ -89,7 +106,7 @@ export function TrainingPage() {
   }, [numericSessionId, session?.status]);
 
   async function handleSend() {
-    if (!numericSessionId || isSending) {
+    if (!numericSessionId || isSending || voiceStatus !== "idle") {
       return;
     }
 
@@ -115,6 +132,129 @@ export function TrainingPage() {
     } finally {
       setIsSending(false);
     }
+  }
+
+  function stopMediaStream() {
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+  }
+
+  function supportedAudioMimeType() {
+    if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+      return "";
+    }
+
+    const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+    return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "";
+  }
+
+  function extensionForMimeType(mimeType: string) {
+    if (mimeType.includes("mp4")) {
+      return "m4a";
+    }
+    if (mimeType.includes("ogg")) {
+      return "ogg";
+    }
+    if (mimeType.includes("wav")) {
+      return "wav";
+    }
+
+    return "webm";
+  }
+
+  async function uploadRecordedAudio(blob: Blob, mimeType: string) {
+    if (!numericSessionId) {
+      return;
+    }
+    if (blob.size === 0) {
+      setVoiceStatus("idle");
+      setVoiceError("录音为空，请重新录制。");
+      return;
+    }
+
+    const fileType = mimeType || blob.type || "audio/webm";
+    const file = new File([blob], `answer-${Date.now()}.${extensionForMimeType(fileType)}`, { type: fileType });
+
+    setIsSending(true);
+    setSendError("");
+    setVoiceError("");
+    setVoiceTranscript("");
+    try {
+      const result = await sendTrainingAudio(numericSessionId, file);
+      setSession(result.session);
+      setVoiceTranscript(result.result.transcript);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 2004) {
+        setVoiceError("本次训练已结束，不能继续发送语音。");
+        void reload();
+      } else {
+        setVoiceError(error instanceof Error ? error.message : "音频上传失败，请稍后重试。");
+      }
+    } finally {
+      setIsSending(false);
+      setVoiceStatus("idle");
+    }
+  }
+
+  async function startRecording() {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setVoiceError("当前浏览器不支持录音上传。");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = supportedAudioMimeType();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      audioChunksRef.current = [];
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      recorder.onstop = () => {
+        const type = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(audioChunksRef.current, { type });
+        stopMediaStream();
+        void uploadRecordedAudio(blob, type);
+      };
+      recorder.start();
+      setVoiceTranscript("");
+      setVoiceError("");
+      setVoiceStatus("recording");
+    } catch (error) {
+      stopMediaStream();
+      setVoiceStatus("idle");
+      setVoiceError(error instanceof Error ? error.message : "无法启动录音，请检查麦克风权限。");
+    }
+  }
+
+  function stopRecording() {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") {
+      setVoiceStatus("idle");
+      return;
+    }
+
+    setVoiceStatus("recognizing");
+    recorder.stop();
+  }
+
+  function handleVoiceToggle() {
+    if (!numericSessionId || session?.status === "finished" || isFinishing) {
+      return;
+    }
+    if (voiceStatus === "recording") {
+      stopRecording();
+      return;
+    }
+    if (voiceStatus !== "idle" || isSending) {
+      return;
+    }
+
+    void startRecording();
   }
 
   async function handleFinish() {
@@ -191,8 +331,13 @@ export function TrainingPage() {
           isDisabled={session.status === "finished"}
           error={sendError}
           streamNotice={streamNotice}
+          voiceStatus={voiceStatus}
+          voiceTranscript={voiceTranscript}
+          voiceError={voiceError}
+          isVoiceDisabled={session.status === "finished" || isFinishing || (isSending && voiceStatus !== "recording")}
           onDraftChange={setDraft}
           onSend={handleSend}
+          onVoiceToggle={handleVoiceToggle}
         />
         <RealtimeFeedbackPanel session={session} />
       </div>

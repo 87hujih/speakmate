@@ -20,6 +20,7 @@ import {
 type ScenarioClient = Pick<typeof apiClient, "listScenarios" | "getScenario" | "createSession">;
 type TrainingClient = Pick<typeof apiClient, "getSession" | "getScenario" | "listSessionCorrections" | "getSessionScore">;
 type MessageClient = TrainingClient & Pick<typeof apiClient, "sendTextMessage">;
+type AudioClient = TrainingClient & Pick<typeof apiClient, "uploadAudioMessage">;
 type FinishClient = Pick<typeof apiClient, "finishSession">;
 type ReportClient = Pick<typeof apiClient, "getReport">;
 type GenerateReportClient = Pick<typeof apiClient, "generateReport">;
@@ -113,6 +114,16 @@ export async function loadTrainingSessionState(sessionId: number, client: Traini
 
 export async function sendTrainingText(sessionId: number, content: string, client: MessageClient = apiClient) {
   const result = await client.sendTextMessage(sessionId, content);
+  const state = await loadTrainingSessionState(sessionId, client, result.next_goal);
+
+  return {
+    result,
+    ...state,
+  };
+}
+
+export async function sendTrainingAudio(sessionId: number, file: File, client: AudioClient = apiClient) {
+  const result = await client.uploadAudioMessage(sessionId, file);
   const state = await loadTrainingSessionState(sessionId, client, result.next_goal);
 
   return {
