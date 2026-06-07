@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"os"
 	"strconv"
 	"strings"
@@ -401,6 +403,8 @@ func TestSessionInvalidIDReturnsBadRequest(t *testing.T) {
 		{name: "finish zero", method: http.MethodPost, path: "/api/v1/sessions/0/finish"},
 		{name: "message non-number", method: http.MethodPost, path: "/api/v1/sessions/abc/messages"},
 		{name: "message zero", method: http.MethodPost, path: "/api/v1/sessions/0/messages"},
+		{name: "audio non-number", method: http.MethodPost, path: "/api/v1/sessions/abc/audio"},
+		{name: "audio zero", method: http.MethodPost, path: "/api/v1/sessions/0/audio"},
 	}
 
 	for _, tt := range tests {
@@ -574,6 +578,59 @@ func TestMessageSendCreatesMockReplyAndSessionHistory(t *testing.T) {
 	}
 	if detailBody.Data.Messages[0].Role != "user" || detailBody.Data.Messages[1].Role != "ai" {
 		t.Fatalf("detail message roles = %q/%q, want user/ai", detailBody.Data.Messages[0].Role, detailBody.Data.Messages[1].Role)
+	}
+}
+
+// TestAudioUploadRouteTranscribesAndRunsMessageFlow 验证音频上传会转写文本并复用消息训练链路。
+func TestAudioUploadRouteTranscribesAndRunsMessageFlow(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+
+	body, contentType := multipartAudioBody(t, "answer.webm", "audio/webm", []byte{0x01, 0x02})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/audio", body)
+	req.Header.Set("Content-Type", contentType)
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var parsed struct {
+		Code int `json:"code"`
+		Data struct {
+			Transcript        string            `json:"transcript"`
+			UserMessage       messagePayload    `json:"user_message"`
+			AIMessage         messagePayload    `json:"ai_message"`
+			TurnCount         int               `json:"turn_count"`
+			CorrectionSummary correctionSummary `json:"correction_summary"`
+			ScoreSummary      scoreSummary      `json:"score_summary"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if parsed.Code != 0 {
+		t.Fatalf("code = %d, want 0", parsed.Code)
+	}
+	if parsed.Data.Transcript != "I am study computer science and I have did a project." {
+		t.Fatalf("transcript = %q, want mock ASR transcript", parsed.Data.Transcript)
+	}
+	if parsed.Data.UserMessage.Content != parsed.Data.Transcript {
+		t.Fatalf("user content = %q, want transcript", parsed.Data.UserMessage.Content)
+	}
+	if parsed.Data.AIMessage.Content == "" {
+		t.Fatal("ai message content is empty")
+	}
+	if !parsed.Data.CorrectionSummary.HasErrors || parsed.Data.CorrectionSummary.ErrorCount != 2 {
+		t.Fatalf("correction summary = %+v, want two mock errors", parsed.Data.CorrectionSummary)
+	}
+	if parsed.Data.ScoreSummary.TotalScore != 77 {
+		t.Fatalf("score total = %d, want 77", parsed.Data.ScoreSummary.TotalScore)
+	}
+	if parsed.Data.TurnCount != 1 {
+		t.Fatalf("turn count = %d, want 1", parsed.Data.TurnCount)
 	}
 }
 
@@ -1241,6 +1298,28 @@ func postMessage(t *testing.T, engine http.Handler, sessionID int, body string) 
 	}
 
 	return parsed
+}
+
+func multipartAudioBody(t *testing.T, filename string, contentType string, data []byte) (*bytes.Buffer, string) {
+	t.Helper()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreatePart(textproto.MIMEHeader{
+		"Content-Disposition": {`form-data; name="audio"; filename="` + filename + `"`},
+		"Content-Type":        {contentType},
+	})
+	if err != nil {
+		t.Fatalf("CreatePart returned error: %v", err)
+	}
+	if _, err := part.Write(data); err != nil {
+		t.Fatalf("part.Write returned error: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("writer.Close returned error: %v", err)
+	}
+
+	return body, writer.FormDataContentType()
 }
 
 func assertRFC3339(t *testing.T, value string) {
