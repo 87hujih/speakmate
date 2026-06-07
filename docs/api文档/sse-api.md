@@ -56,14 +56,21 @@ data: {"type":"ai_message_done","session_id":1,"payload":{"message_id":2,"conten
 
 | 事件 | 触发时机 | payload |
 |---|---|---|
-| `ai_message_delta` | AI 回复保存后模拟发送回复分片 | `{ "message_id": number, "delta": string }` |
+| `ai_message_delta` | AI 回复生成过程中的真实模型 delta；Mock/fallback 模式为本地 fake delta | `{ "message_id": number, "delta": string }` |
 | `ai_message_done` | AI 完整回复保存后 | `{ "message_id": number, "content": string, "stage": string }` |
 | `correction_done` | 本轮纠错保存后 | `{ "message_id": number, "has_errors": boolean, "error_count": number }` |
 | `score_updated` | 当前评分保存后 | `{ "message_id": number, "total_score": number, "grammar": number, "expression": number }` |
 | `report_done` | 课后报告生成并保存后 | `{ "total_score": number, "summary": string }` |
 | `error` | 消息反馈或报告生成失败时 | `{ "code": string, "message": string }` |
 
-第一版不要求真实 LLM streaming。`ai_message_delta` 会先以单个完整回复文本作为模拟分片发送，后续可替换为真实模型 token/句子分片，事件结构保持不变。
+真实 LLM 模式下，`ai_message_delta` 来自 OpenAI-compatible 上游 `stream=true` 的增量内容。由于完整 AI 消息会在生成结束后一次性落库，生成过程中的 delta 可能携带 `message_id: 0`；客户端应把它视为临时 AI 消息，并以随后 `ai_message_done.message_id` 中的真实消息 ID 和完整内容校准。Mock 模式或真实模型 fallback 成功时也会发送多个 fake delta，方便无 API Key 演示。
+
+如果 streaming 失败且未配置 fallback，服务端会发送：
+
+```text
+event: error
+data: {"type":"error","session_id":1,"payload":{"code":"conversation_agent_failed","message":"conversation agent failed"},"created_at":"2026-06-07T03:00:00Z"}
+```
 
 ## 客户端示例
 
@@ -105,7 +112,7 @@ source.addEventListener('error', (event) => {
 1. POST /api/v1/sessions 创建 Session
 2. GET /api/v1/sessions/:id/stream 建立 SSE
 3. POST /api/v1/sessions/:id/messages 发送文本消息，或 POST /api/v1/sessions/:id/audio 上传单段音频
-4. SSE 接收 ai_message_delta、ai_message_done、correction_done、score_updated
+4. SSE 接收多个 ai_message_delta，再接收 ai_message_done、correction_done、score_updated
 5. POST /api/v1/sessions/:id/finish 结束训练
 6. POST /api/v1/sessions/:id/report 生成报告
 7. SSE 接收 report_done

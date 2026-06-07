@@ -132,8 +132,8 @@ Browser
 | 反馈 API（Module 4） | 已完成（第一版） | 消息发送后同步生成纠错/评分摘要，支持单条消息纠错、Session 纠错列表和当前评分查询，见 [docs/api文档/feedback-api.md](docs/api文档/feedback-api.md) |
 | 课后报告 API（Module 5） | 已完成（第一版） | 训练结束后可基于消息、纠错和评分生成结构化报告，支持重复查询，见 [docs/api文档/report-api.md](docs/api文档/report-api.md) |
 | MySQL 持久化与历史记录 | 已完成（第一版） | 支持 `memory` / `mysql` 存储模式切换，Session、Message、Correction、Score、Report 可落库，历史列表见 [docs/api文档/history-api.md](docs/api文档/history-api.md) |
-| SSE 流式事件 | 已完成（第一版） | 支持 `GET /api/v1/sessions/:id/stream`，推送 AI 回复分片、纠错、评分、报告和错误事件，见 [docs/api文档/sse-api.md](docs/api文档/sse-api.md) |
-| Conversation Agent | 已接入 | 默认使用 Mock；配置 API Key 且关闭 Mock 后使用 OpenAI-compatible LLM，失败时降级 Mock |
+| SSE 流式事件 | 已完成 | 支持 `GET /api/v1/sessions/:id/stream`，真实 LLM 模式推送模型 delta，Mock/fallback 模式推送本地 fake delta，并继续推送纠错、评分、报告和错误事件，见 [docs/api文档/sse-api.md](docs/api文档/sse-api.md) |
+| Conversation Agent | 已接入 | 默认使用 Mock fake streaming；配置 API Key 且关闭 Mock 后使用 OpenAI-compatible LLM streaming，按 `LLM_FALLBACK_TO_MOCK` 决定失败时是否降级 Mock |
 | AI 纠错、评分与总结 | 已完成（第一版） | Correction / Scoring / Summary 模型、Mock/LLM Agent、内存 Feedback/Report Repository、fail-open 降级和查询 API 已接入 |
 | 语音能力 | 已完成（Mock 第一版） | 训练页支持浏览器录音、WebSocket 分片实时 partial transcript 和单段上传 fallback，后端使用 Mock ASR 转写后复用消息训练链路，见 [docs/api文档/audio-api.md](docs/api文档/audio-api.md) 和 [docs/api文档/audio-websocket-api.md](docs/api文档/audio-websocket-api.md) |
 
@@ -190,9 +190,9 @@ curl http://localhost:8080/health
 | MySQL | `STORAGE_MODE=mysql`、`MYSQL_DSN` |
 | Redis 预留 | `REDIS_ENABLED`、`REDIS_ADDR`、`REDIS_PASSWORD`、`REDIS_DB` |
 | 外部服务超时 | `EXTERNAL_SERVICE_TIMEOUT_SECONDS`，可被 `LLM_TIMEOUT_SECONDS` / `ASR_TIMEOUT_SECONDS` 覆盖 |
-| Mock | `LLM_USE_MOCK`、`CORRECTION_USE_MOCK`、`SCORING_USE_MOCK`、`SUMMARY_USE_MOCK`、`ASR_USE_MOCK` |
+| Mock / fallback | `LLM_USE_MOCK`、`LLM_FALLBACK_TO_MOCK`、`CORRECTION_USE_MOCK`、`SCORING_USE_MOCK`、`SUMMARY_USE_MOCK`、`ASR_USE_MOCK` |
 
-本分支不实现真实 LLM Streaming、真实 ASR Provider 或 Redis 会话状态存储。Redis 只完成配置和 Compose 服务预留；ASR 默认仍是 Mock。
+本分支实现真实 LLM streaming。真实 ASR Provider 和 Redis 会话状态存储仍不在本分支范围内；Redis 只完成配置和 Compose 服务预留，ASR 默认仍是 Mock。
 
 ### 前端启动
 
@@ -276,19 +276,31 @@ docker compose down -v
 
 部署时建议保持前端 `VITE_API_BASE_URL=/api/v1`，由 Nginx 反向代理到后端；如果前后端分域部署，需要把前端域名加入 `CORS_ALLOWED_ORIGINS`。
 
-### LLM / ASR Mock
+### LLM Streaming / ASR Mock
 
 自动测试和默认本地运行不请求真实模型：
 
 ```bash
 LLM_USE_MOCK=true
+LLM_FALLBACK_TO_MOCK=true
 CORRECTION_USE_MOCK=true
 SCORING_USE_MOCK=true
 SUMMARY_USE_MOCK=true
 ASR_USE_MOCK=true
 ```
 
-现有 Conversation / Correction / Scoring / Summary 的非流式 OpenAI-compatible 调用仍在 Mock/fallback 开关后面；本分支不新增真实 streaming。真实 ASR Provider 只预留配置项，后端仍使用 Mock ASR。
+开启真实 LLM streaming 时需要配置：
+
+```bash
+LLM_USE_MOCK=false
+LLM_PROVIDER=openai-compatible
+LLM_BASE_URL=https://your-provider.example.com/v1
+LLM_API_KEY=your-api-key
+LLM_MODEL=your-model
+LLM_FALLBACK_TO_MOCK=true
+```
+
+`GET /api/v1/sessions/:id/stream` 会推送真实模型 delta；如果 `LLM_FALLBACK_TO_MOCK=true` 且上游失败，会降级为本地 fake streaming，保证演示链路继续可用。设置 `LLM_FALLBACK_TO_MOCK=false` 时，上游 streaming 失败会通过 SSE `error` 事件和普通 JSON 错误返回。Correction / Scoring / Summary 仍通过各自 Mock 开关控制，真实 ASR Provider 只预留配置项，后端仍使用 Mock ASR。
 
 ### 前后端联调路径
 
@@ -352,8 +364,7 @@ speakmate/
 
 ## 后续规划
 
-- 接入 LLM，完成基于场景的真实 AI 追问；
-- 将当前模拟 AI 回复分片升级为真实 LLM streaming；
+- 扩展更多 LLM Provider，并细化真实模型联调配置；
 - 接入真实 ASR Provider，并将 Mock partial transcript 升级为真实流式转写；
 - 补充迁移执行工具和部署环境数据库初始化流程；
 - 使用 Redis 管理训练过程中的上下文和临时状态。

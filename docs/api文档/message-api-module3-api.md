@@ -6,7 +6,7 @@
 创建 Session -> 发送用户文本 -> 收到 Conversation Agent 回复 -> 生成纠错/评分摘要 -> 查询消息历史 -> 结束训练
 ```
 
-当前版本支持文本消息的普通 JSON 响应，并提供可选 SSE 流式事件增强。服务默认使用本地 Mock Agent，配置完整且关闭 Mock 时可切换到 OpenAI-compatible LLM Agent。语音输入通过单独的音频上传接口接入，见 [audio-api.md](audio-api.md)。
+当前版本支持文本消息的普通 JSON 响应，并提供可选 SSE 流式事件增强。服务默认使用本地 Mock Agent 和 fake streaming，配置完整且关闭 Mock 时可切换到 OpenAI-compatible LLM streaming。语音输入通过单独的音频上传接口接入，见 [audio-api.md](audio-api.md)。
 
 ## 基本信息
 
@@ -34,7 +34,9 @@
 
 ## Conversation Agent 规则
 
-消息发送业务依赖 `internal/agent` 下的 `ConversationAgent` 接口。默认使用本地 Mock Agent，不请求外部模型；当配置 `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL` 且关闭 `LLM_USE_MOCK` 后，启动装配会使用真实 LLM Agent，并在 LLM 调用失败时降级为 Mock 回复。
+消息发送业务依赖 `internal/agent` 下的 `ConversationAgent` 接口。默认使用本地 Mock Agent，不请求外部模型；当配置 `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL` 且关闭 `LLM_USE_MOCK` 后，启动装配会使用真实 LLM Agent。SSE 场景下 Agent 会优先调用 streaming 接口并逐段发布 `ai_message_delta`；普通 JSON 响应仍在完整回复生成、落库和反馈处理后返回。
+
+`LLM_FALLBACK_TO_MOCK=true` 时，真实 LLM 调用失败会降级为本地 Mock/fake streaming；设置为 `false` 时，失败会返回 `502 / 3003 conversation agent failed`，并通过 SSE 发布 `error` 事件。
 
 | 场景编码 | 回复方向 |
 |---|---|
@@ -59,7 +61,7 @@
 
 如果前端已建立 `GET /api/v1/sessions/:id/stream` 连接，消息发送成功后会收到：
 
-- `ai_message_delta`：第一版使用完整 AI 回复作为模拟分片；
+- `ai_message_delta`：真实 LLM 模式下为上游模型 delta；Mock/fallback 模式下为本地 fake delta，落库前 `message_id` 可能为 `0`；
 - `ai_message_done`：AI 回复已生成并保存；
 - `correction_done`：本轮纠错已保存；
 - `score_updated`：当前评分已更新；
@@ -340,7 +342,7 @@ curl -X POST http://localhost:8080/api/v1/sessions/1/messages \
 - 如果需要实时体验，进入训练页后先建立 `GET /api/v1/sessions/:id/stream`，再发送消息。
 - 发送前前端也应做一次 `content.trim()` 校验，避免空内容请求。
 - 发送中禁用输入框和发送按钮，避免用户重复点击造成连续轮次递增。
-- 成功后把 `user_message` 和 `ai_message` 直接追加到本地消息列表，不需要立即重新拉取 Session；如果已接入 SSE，可用 `ai_message_delta` 渐进展示并用 JSON 响应兜底校准最终状态。
+- 成功后把 `user_message` 和 `ai_message` 直接追加到本地消息列表，不需要立即重新拉取 Session；如果已接入 SSE，可用 `ai_message_delta` 渐进展示临时 AI 消息，并用 `ai_message_done` 或 JSON 响应兜底校准最终消息 ID 和完整内容。
 - 成功后可以先用 `correction_summary` 和 `score_summary` 更新轻量反馈区。
 - 需要纠错详情或累计反馈时，调用 [feedback-api.md](feedback-api.md) 中的反馈查询接口。
 - 如果需要恢复页面状态，调用 `GET /api/v1/sessions/:id`，使用返回的 `messages` 和 `turn_count` 重新渲染。
