@@ -3,7 +3,9 @@ package router
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 func TestMain(m *testing.M) {
@@ -631,6 +635,101 @@ func TestAudioUploadRouteTranscribesAndRunsMessageFlow(t *testing.T) {
 	}
 	if parsed.Data.TurnCount != 1 {
 		t.Fatalf("turn count = %d, want 1", parsed.Data.TurnCount)
+	}
+}
+
+// TestAudioWebSocketRouteStreamsTranscriptsAndRunsMessageFlow 验证实时音频分片会返回 partial/final 转写并复用训练消息链路。
+func TestAudioWebSocketRouteStreamsTranscriptsAndRunsMessageFlow(t *testing.T) {
+	engine := New()
+	sessionID := createSession(t, engine, 1)
+	server := httptest.NewServer(engine)
+	defer server.Close()
+
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL(server.URL, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/audio/ws"), nil)
+	if err != nil {
+		t.Fatalf("websocket dial returned error: %v", err)
+	}
+	defer conn.Close()
+
+	sendAudioWSJSON(t, conn, map[string]any{
+		"type": "start",
+		"payload": map[string]any{
+			"content_type": "audio/webm",
+		},
+	})
+	readAudioWSEvent(t, conn, "start")
+
+	sendAudioWSJSON(t, conn, map[string]any{
+		"type": "audio_chunk",
+		"payload": map[string]any{
+			"sequence":     1,
+			"audio_base64": base64.StdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03}),
+		},
+	})
+	partialEvent := readAudioWSEvent(t, conn, "partial_transcript")
+	var partialPayload struct {
+		Transcript string `json:"transcript"`
+		Sequence   int    `json:"sequence"`
+	}
+	unmarshalWSPayload(t, partialEvent.Payload, &partialPayload)
+	if partialPayload.Transcript == "" {
+		t.Fatal("partial transcript is empty")
+	}
+	if partialPayload.Sequence != 1 {
+		t.Fatalf("partial sequence = %d, want 1", partialPayload.Sequence)
+	}
+
+	sendAudioWSJSON(t, conn, map[string]any{"type": "end"})
+
+	finalEvent := readAudioWSEvent(t, conn, "final_transcript")
+	var finalPayload struct {
+		Transcript  string         `json:"transcript"`
+		UserMessage messagePayload `json:"user_message"`
+		AIMessage   messagePayload `json:"ai_message"`
+		Stage       string         `json:"stage"`
+		NextGoal    string         `json:"next_goal"`
+		TurnCount   int            `json:"turn_count"`
+	}
+	unmarshalWSPayload(t, finalEvent.Payload, &finalPayload)
+	if finalPayload.Transcript != "I am study computer science and I have did a project." {
+		t.Fatalf("final transcript = %q, want mock ASR transcript", finalPayload.Transcript)
+	}
+	if finalPayload.UserMessage.Content != finalPayload.Transcript {
+		t.Fatalf("user content = %q, want final transcript", finalPayload.UserMessage.Content)
+	}
+	if finalPayload.AIMessage.Content == "" {
+		t.Fatal("ai message content is empty")
+	}
+	if finalPayload.Stage == "" {
+		t.Fatal("stage is empty")
+	}
+	if finalPayload.NextGoal == "" {
+		t.Fatal("next goal is empty")
+	}
+	if finalPayload.TurnCount != 1 {
+		t.Fatalf("turn count = %d, want 1", finalPayload.TurnCount)
+	}
+
+	correctionEvent := readAudioWSEvent(t, conn, "correction")
+	var correctionPayload correctionSummary
+	unmarshalWSPayload(t, correctionEvent.Payload, &correctionPayload)
+	if !correctionPayload.HasErrors || correctionPayload.ErrorCount != 2 {
+		t.Fatalf("correction payload = %+v, want two mock errors", correctionPayload)
+	}
+
+	scoreEvent := readAudioWSEvent(t, conn, "score_updated")
+	var scorePayload scoreSummary
+	unmarshalWSPayload(t, scoreEvent.Payload, &scorePayload)
+	if scorePayload.TotalScore != 77 {
+		t.Fatalf("score total = %d, want 77", scorePayload.TotalScore)
+	}
+
+	readAudioWSEvent(t, conn, "end")
+	assertAudioWSClose(t, conn, websocket.CloseNormalClosure)
+
+	sent := postMessage(t, engine, sessionID, `{"content":"I built another project."}`)
+	if sent.Data.TurnCount != 2 {
+		t.Fatalf("text message turn count = %d, want 2", sent.Data.TurnCount)
 	}
 }
 
@@ -1346,6 +1445,68 @@ func readSSEEventTypes(t *testing.T, reader *bufio.Reader, count int) []string {
 	}
 
 	return types
+}
+
+type audioWSEvent struct {
+	Type      string          `json:"type"`
+	SessionID int             `json:"session_id"`
+	Payload   json.RawMessage `json:"payload"`
+}
+
+func wsURL(serverURL string, path string) string {
+	return "ws" + strings.TrimPrefix(serverURL, "http") + path
+}
+
+func sendAudioWSJSON(t *testing.T, conn *websocket.Conn, payload any) {
+	t.Helper()
+
+	if err := conn.WriteJSON(payload); err != nil {
+		t.Fatalf("WriteJSON returned error: %v", err)
+	}
+}
+
+func readAudioWSEvent(t *testing.T, conn *websocket.Conn, wantType string) audioWSEvent {
+	t.Helper()
+
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline returned error: %v", err)
+	}
+	var event audioWSEvent
+	if err := conn.ReadJSON(&event); err != nil {
+		t.Fatalf("ReadJSON returned error while waiting for %q: %v", wantType, err)
+	}
+	if event.Type != wantType {
+		t.Fatalf("websocket event type = %q, want %q; payload = %s", event.Type, wantType, string(event.Payload))
+	}
+
+	return event
+}
+
+func unmarshalWSPayload(t *testing.T, payload json.RawMessage, target any) {
+	t.Helper()
+
+	if err := json.Unmarshal(payload, target); err != nil {
+		t.Fatalf("websocket payload is not valid JSON: %v; payload = %s", err, string(payload))
+	}
+}
+
+func assertAudioWSClose(t *testing.T, conn *websocket.Conn, wantCode int) {
+	t.Helper()
+
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline returned error: %v", err)
+	}
+	_, _, err := conn.ReadMessage()
+	if err == nil {
+		t.Fatalf("ReadMessage succeeded after end, want close code %d", wantCode)
+	}
+	var closeErr *websocket.CloseError
+	if !errors.As(err, &closeErr) {
+		t.Fatalf("ReadMessage returned %T, want websocket close error %d: %v", err, wantCode, err)
+	}
+	if closeErr.Code != wantCode {
+		t.Fatalf("close code = %d, want %d; err = %v", closeErr.Code, wantCode, err)
+	}
 }
 
 func createSession(t *testing.T, engine http.Handler, scenarioID int) int {
