@@ -84,6 +84,15 @@ go run ./cmd/server
 | `404` | `4003` | `score not found` | 没有找到对应 Session 的当前评分 |
 | `500` | `500` | `internal server error` | 非预期服务端错误 |
 
+所有 HTTP 接口还可能由基础 middleware 返回：
+
+| HTTP 状态码 | 业务错误码 | message | 说明 |
+|---|---:|---|---|
+| `500` | `9001` | `internal server error` | panic 被 recover 后的统一错误 |
+| `504` | `9002` | `request timeout` | 普通请求超过 `REQUEST_TIMEOUT_SECONDS` |
+| `413` | `9003` | `request body too large` | 请求体超过 `REQUEST_BODY_LIMIT_BYTES` |
+| `429` | `9004` | `rate limit exceeded` | 同一客户端超过基础限流窗口 |
+
 ## 字段结构
 
 ### 纠错结果

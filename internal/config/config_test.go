@@ -56,6 +56,15 @@ func TestLoadDefaultsToPort8080(t *testing.T) {
 	if cfg.Server.RequestTimeoutSeconds != 30 {
 		t.Fatalf("Server.RequestTimeoutSeconds = %d, want 30", cfg.Server.RequestTimeoutSeconds)
 	}
+	if cfg.Server.RequestBodyLimitBytes != 12*1024*1024 {
+		t.Fatalf("Server.RequestBodyLimitBytes = %d, want 12MiB", cfg.Server.RequestBodyLimitBytes)
+	}
+	if cfg.Server.RateLimitRequests != 120 {
+		t.Fatalf("Server.RateLimitRequests = %d, want 120", cfg.Server.RateLimitRequests)
+	}
+	if cfg.Server.RateLimitWindowSeconds != 60 {
+		t.Fatalf("Server.RateLimitWindowSeconds = %d, want 60", cfg.Server.RateLimitWindowSeconds)
+	}
 	if len(cfg.CORS.AllowedOrigins) != 2 {
 		t.Fatalf("CORS.AllowedOrigins length = %d, want 2", len(cfg.CORS.AllowedOrigins))
 	}
@@ -168,6 +177,9 @@ func TestLoadReadsInfrastructureEnvironment(t *testing.T) {
 	clearStorageEnv(t)
 	clearInfrastructureEnv(t)
 	t.Setenv("REQUEST_TIMEOUT_SECONDS", "12")
+	t.Setenv("REQUEST_BODY_LIMIT_BYTES", "2048")
+	t.Setenv("RATE_LIMIT_REQUESTS", "9")
+	t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "3")
 	t.Setenv("EXTERNAL_SERVICE_TIMEOUT_SECONDS", "19")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173, https://app.example.com ")
 	t.Setenv("CORS_ALLOWED_METHODS", "GET,POST,OPTIONS")
@@ -202,6 +214,15 @@ func TestLoadReadsInfrastructureEnvironment(t *testing.T) {
 
 	if cfg.Server.RequestTimeoutSeconds != 12 {
 		t.Fatalf("Server.RequestTimeoutSeconds = %d, want 12", cfg.Server.RequestTimeoutSeconds)
+	}
+	if cfg.Server.RequestBodyLimitBytes != 2048 {
+		t.Fatalf("Server.RequestBodyLimitBytes = %d, want 2048", cfg.Server.RequestBodyLimitBytes)
+	}
+	if cfg.Server.RateLimitRequests != 9 {
+		t.Fatalf("Server.RateLimitRequests = %d, want 9", cfg.Server.RateLimitRequests)
+	}
+	if cfg.Server.RateLimitWindowSeconds != 3 {
+		t.Fatalf("Server.RateLimitWindowSeconds = %d, want 3", cfg.Server.RateLimitWindowSeconds)
 	}
 	if cfg.ExternalServiceTimeoutSeconds != 19 {
 		t.Fatalf("ExternalServiceTimeoutSeconds = %d, want 19", cfg.ExternalServiceTimeoutSeconds)
@@ -426,6 +447,9 @@ func clearInfrastructureEnv(t *testing.T) {
 	t.Helper()
 
 	t.Setenv("REQUEST_TIMEOUT_SECONDS", "")
+	t.Setenv("REQUEST_BODY_LIMIT_BYTES", "")
+	t.Setenv("RATE_LIMIT_REQUESTS", "")
+	t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "")
 	t.Setenv("EXTERNAL_SERVICE_TIMEOUT_SECONDS", "")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("CORS_ALLOWED_METHODS", "")

@@ -1,6 +1,7 @@
 import { LoaderCircle } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { demoErrorMessage } from "../api/errors";
 import { generateReportState, loadReportState } from "../api/loaders";
 import { ErrorAnalysisCard } from "../components/report/ErrorAnalysisCard";
 import { PracticePlanCard } from "../components/report/PracticePlanCard";
@@ -45,7 +46,7 @@ export function ReportPage() {
         setIsMissing(true);
       }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "报告加载失败");
+      setError(demoErrorMessage(loadError, "报告加载失败"));
     } finally {
       setIsLoading(false);
     }
@@ -67,7 +68,7 @@ export function ReportPage() {
       setReport(generated);
       setIsMissing(false);
     } catch (generateError) {
-      setError(generateError instanceof Error ? generateError.message : "报告生成失败");
+      setError(demoErrorMessage(generateError, "报告生成失败"));
     } finally {
       setIsGenerating(false);
     }

@@ -43,6 +43,8 @@ logs/
 
 # Local workspace notes and task files
 /docs/*
+!/docs/demo-readiness.md
+!/docs/troubleshooting.md
 !/docs/api文档/
 /docs/api文档/*
 !/docs/api文档/*.md

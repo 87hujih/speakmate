@@ -168,7 +168,18 @@ HTTP 状态码：`200`
 | `409` | `2004` | `session already finished` | Session 已结束，不允许继续发送音频 |
 | `502` | `3003` | `conversation agent failed` | Conversation Agent 生成回复失败且没有可用降级 |
 | `502` | `3004` | `feedback agent failed` | `FEEDBACK_FAIL_OPEN=false` 且纠错或评分生成失败 |
+| `503` | `8001` | `session state store failed` | Redis/memory 短期状态写入失败 |
+| `503` | `8002` | `stream event publish failed` | SSE/Redis 事件发布失败 |
 | `500` | `500` | `internal server error` | 非预期服务端错误 |
+
+所有 HTTP 接口还可能由基础 middleware 返回：
+
+| HTTP 状态码 | 业务错误码 | message | 说明 |
+|---|---:|---|---|
+| `500` | `9001` | `internal server error` | panic 被 recover 后的统一错误 |
+| `504` | `9002` | `request timeout` | 普通请求超过 `REQUEST_TIMEOUT_SECONDS` |
+| `413` | `9003` | `request body too large` | 请求体超过 `REQUEST_BODY_LIMIT_BYTES` |
+| `429` | `9004` | `rate limit exceeded` | 同一客户端超过基础限流窗口 |
 
 ## curl 示例
 

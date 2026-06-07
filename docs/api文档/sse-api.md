@@ -13,6 +13,7 @@
 | 是否回放历史事件 | 不回放。只推送连接建立后的实时事件 |
 | 心跳 | 服务端定期发送 `: ping` 注释帧 |
 | Redis 模式 | `REDIS_ENABLED=true` 时使用 Redis Pub/Sub 分发，并把事件短期写入 `session:{id}:events` List，TTL 30m |
+| 基础安全 | 受 CORS、recover、请求体大小限制和基础限流保护；SSE 长连接不套普通 `REQUEST_TIMEOUT_SECONDS` |
 
 ## 建立连接
 
@@ -34,6 +35,14 @@ GET /api/v1/sessions/:id/stream
   "message": "invalid session id"
 }
 ```
+
+建立连接前也可能返回基础 middleware 错误：
+
+| HTTP 状态码 | 业务错误码 | message | 说明 |
+|---|---:|---|---|
+| `500` | `9001` | `internal server error` | panic 被 recover 后的统一错误 |
+| `413` | `9003` | `request body too large` | 请求体超过 `REQUEST_BODY_LIMIT_BYTES` |
+| `429` | `9004` | `rate limit exceeded` | 同一客户端超过基础限流窗口 |
 
 ## 事件帧格式
 

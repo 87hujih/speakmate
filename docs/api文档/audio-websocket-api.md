@@ -27,6 +27,10 @@ WebSocket 录音分片 -> end -> ASR Provider final transcript -> SendMessage ->
 | 后端接受音频类型 | 与单段上传一致：`audio/webm`、`audio/wav`、`audio/mp4`、`audio/ogg` 等 |
 | 腾讯云真实识别限制 | `webm` 当前不支持；建议使用 `ogg-opus`、`m4a/mp4` 或 `wav` |
 | Redis 连接状态 | `REDIS_ENABLED=true` 时写入 `ws:{session_id}:connection`，TTL 30m |
+| Origin 校验 | WebSocket 握手使用 `CORS_ALLOWED_ORIGINS` 白名单；未配置 Origin 的非浏览器客户端允许连接 |
+| 基础安全 | 受 recover、请求体大小限制和基础限流保护；WebSocket 长连接不套普通 `REQUEST_TIMEOUT_SECONDS` |
+
+如果浏览器 Origin 不在 `CORS_ALLOWED_ORIGINS` 中，握手会返回 `403`，此时不是 JSON 错误响应。
 
 ## 客户端事件
 

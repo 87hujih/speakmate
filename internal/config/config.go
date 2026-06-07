@@ -36,7 +36,10 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	RequestTimeoutSeconds int
+	RequestTimeoutSeconds  int
+	RequestBodyLimitBytes  int
+	RateLimitRequests      int
+	RateLimitWindowSeconds int
 }
 
 type CORSConfig struct {
@@ -109,7 +112,10 @@ func Load() Config {
 	return Config{
 		Port: port,
 		Server: ServerConfig{
-			RequestTimeoutSeconds: positiveIntEnv("REQUEST_TIMEOUT_SECONDS", 30),
+			RequestTimeoutSeconds:  positiveIntEnv("REQUEST_TIMEOUT_SECONDS", 30),
+			RequestBodyLimitBytes:  positiveIntEnv("REQUEST_BODY_LIMIT_BYTES", 12*1024*1024),
+			RateLimitRequests:      positiveIntEnv("RATE_LIMIT_REQUESTS", 120),
+			RateLimitWindowSeconds: positiveIntEnv("RATE_LIMIT_WINDOW_SECONDS", 60),
 		},
 		CORS: CORSConfig{
 			AllowedOrigins:   listEnv("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173", "http://127.0.0.1:5173"}),

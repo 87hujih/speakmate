@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +19,14 @@ import (
 const (
 	internalServerErrorCode = 9001
 	requestTimeoutCode      = 9002
+	requestBodyTooLargeCode = 9003
+	rateLimitExceededCode   = 9004
 )
+
+type rateLimitBucket struct {
+	count   int
+	resetAt time.Time
+}
 
 // CORS applies the configured cross-origin policy and handles preflight requests.
 func CORS(cfg config.CORSConfig) gin.HandlerFunc {
@@ -89,6 +97,63 @@ func RequestLogger(logger *log.Logger) gin.HandlerFunc {
 			c.Writer.Status(),
 			time.Since(startedAt).Round(time.Millisecond),
 		)
+	}
+}
+
+// BodySizeLimit caps request bodies before handlers parse JSON or multipart
+// payloads. Audio endpoints still keep their stricter file-level validation.
+func BodySizeLimit(maxBytes int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if maxBytes <= 0 || c.Request == nil || c.Request.Body == nil {
+			c.Next()
+			return
+		}
+
+		if c.Request.ContentLength > int64(maxBytes) {
+			c.Abort()
+			response.Error(c, http.StatusRequestEntityTooLarge, requestBodyTooLargeCode, "request body too large")
+			return
+		}
+
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, int64(maxBytes))
+		c.Next()
+	}
+}
+
+// RateLimit provides a simple in-memory per-client-IP abuse guard. It is meant
+// for local demo and basic deployment hygiene, not distributed production quota.
+func RateLimit(requests int, window time.Duration) gin.HandlerFunc {
+	var mu sync.Mutex
+	buckets := make(map[string]rateLimitBucket)
+
+	return func(c *gin.Context) {
+		if requests <= 0 || window <= 0 || c.Request.Method == http.MethodOptions {
+			c.Next()
+			return
+		}
+
+		now := time.Now()
+		key := c.ClientIP()
+		if key == "" {
+			key = "unknown"
+		}
+
+		mu.Lock()
+		bucket := buckets[key]
+		if bucket.resetAt.IsZero() || now.After(bucket.resetAt) {
+			bucket = rateLimitBucket{resetAt: now.Add(window)}
+		}
+		if bucket.count >= requests {
+			mu.Unlock()
+			c.Abort()
+			response.Error(c, http.StatusTooManyRequests, rateLimitExceededCode, "rate limit exceeded")
+			return
+		}
+		bucket.count++
+		buckets[key] = bucket
+		mu.Unlock()
+
+		c.Next()
 	}
 }
 
