@@ -61,6 +61,8 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 	)
 	sessionHandler := handler.NewSessionHandler(sessionService)
 	messageHandler := handler.NewMessageHandler(sessionService)
+	audioService := service.NewAudioService(sessionService, NewASRClient(cfg))
+	audioHandler := handler.NewAudioHandler(audioService)
 	feedbackService := service.NewFeedbackService(feedbackRepo)
 	feedbackHandler := handler.NewFeedbackHandler(feedbackService)
 	reportService := service.NewReportService(
@@ -87,6 +89,7 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 	api.GET("/sessions/:id/stream", streamHandler.Stream)
 	api.POST("/sessions/:id/finish", sessionHandler.Finish)
 	api.POST("/sessions/:id/messages", messageHandler.Send)
+	api.POST("/sessions/:id/audio", audioHandler.Upload)
 	api.GET("/sessions/:id/corrections", feedbackHandler.ListSessionCorrections)
 	api.GET("/sessions/:id/scores", feedbackHandler.GetSessionScore)
 	api.POST("/sessions/:id/report", reportHandler.Generate)
@@ -195,4 +198,8 @@ func NewSummaryAgent(cfg config.Config) agent.SummaryAgent {
 	}
 
 	return agent.NewLLMSummaryAgent(client, agent.WithSummaryFallbackAgent(agent.NewMockSummaryAgent()))
+}
+
+func NewASRClient(cfg config.Config) agent.ASRClient {
+	return agent.NewMockASRClient()
 }
