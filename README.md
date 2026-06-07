@@ -132,6 +132,7 @@ Browser
 | 反馈 API（Module 4） | 已完成（第一版） | 消息发送后同步生成纠错/评分摘要，支持单条消息纠错、Session 纠错列表和当前评分查询，见 [docs/api文档/feedback-api.md](docs/api文档/feedback-api.md) |
 | 课后报告 API（Module 5） | 已完成（第一版） | 训练结束后可基于消息、纠错和评分生成结构化报告，支持重复查询，见 [docs/api文档/report-api.md](docs/api文档/report-api.md) |
 | MySQL 持久化与历史记录 | 已完成（第一版） | 支持 `memory` / `mysql` 存储模式切换，Session、Message、Correction、Score、Report 可落库，历史列表见 [docs/api文档/history-api.md](docs/api文档/history-api.md) |
+| SSE 流式事件 | 已完成（第一版） | 支持 `GET /api/v1/sessions/:id/stream`，推送 AI 回复分片、纠错、评分、报告和错误事件，见 [docs/api文档/sse-api.md](docs/api文档/sse-api.md) |
 | Conversation Agent | 已接入 | 默认使用 Mock；配置 API Key 且关闭 Mock 后使用 OpenAI-compatible LLM，失败时降级 Mock |
 | AI 纠错、评分与总结 | 已完成（第一版） | Correction / Scoring / Summary 模型、Mock/LLM Agent、内存 Feedback/Report Repository、fail-open 降级和查询 API 已接入 |
 | 语音能力 | 规划中 | 浏览器录音、ASR、WebSocket 音频分片 |
@@ -283,6 +284,7 @@ speakmate/
 │   ├── infra/llm/           # OpenAI-compatible LLM HTTP Client
 │   ├── repository/          # memory/mysql 仓库实现
 │   ├── response/            # 统一响应结构
+│   ├── stream/              # Session 级 SSE 事件模型和内存事件总线
 │   └── router/              # Gin 路由
 ├── migrations/              # MySQL 表结构和默认场景 seed
 ├── web/                     # 前端目录，后续使用 Vite + React + TypeScript
@@ -296,7 +298,7 @@ speakmate/
 ## 后续规划
 
 - 接入 LLM，完成基于场景的真实 AI 追问；
-- 增加 SSE 流式回复；
+- 将当前模拟 AI 回复分片升级为真实 LLM streaming；
 - 接入 ASR，支持浏览器录音和语音识别；
 - 补充迁移执行工具和部署环境数据库初始化流程；
 - 使用 Redis 管理训练过程中的上下文和临时状态。

@@ -10,6 +10,7 @@ import (
 	"speakmate/internal/model"
 	"speakmate/internal/repository"
 	"speakmate/internal/service"
+	"speakmate/internal/stream"
 )
 
 func TestSessionServiceCreatesRunningSessionFromScenario(t *testing.T) {
@@ -256,6 +257,89 @@ func TestSessionServiceSendsMessageAndGeneratesFeedback(t *testing.T) {
 	}
 }
 
+func TestSessionServicePublishesMessageFeedbackStreamEvents(t *testing.T) {
+	scenarioReader, sessionRepo, created := setupFeedbackSession(t)
+	feedbackRepo := newFakeFeedbackRepository()
+	correctionAgent := &fakeCorrectionAgent{}
+	scoringAgent := &fakeScoringAgent{}
+	publisher := &fakeEventPublisher{}
+	sessionService := service.NewSessionService(
+		scenarioReader,
+		sessionRepo,
+		service.WithFeedbackRepository(feedbackRepo),
+		service.WithCorrectionAgent(correctionAgent),
+		service.WithScoringAgent(scoringAgent),
+		service.WithEventPublisher(publisher),
+	)
+
+	result, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.ID,
+		Content:   "I am study computer science and I have did a project.",
+	})
+	if err != nil {
+		t.Fatalf("SendMessage returned error: %v", err)
+	}
+
+	wantTypes := []stream.EventType{
+		stream.EventTypeAIMessageDelta,
+		stream.EventTypeAIMessageDone,
+		stream.EventTypeCorrectionDone,
+		stream.EventTypeScoreUpdated,
+	}
+	if len(publisher.events) != len(wantTypes) {
+		t.Fatalf("published events length = %d, want %d: %+v", len(publisher.events), len(wantTypes), publisher.events)
+	}
+	for i, wantType := range wantTypes {
+		if publisher.events[i].Type != wantType {
+			t.Fatalf("event[%d] type = %q, want %q", i, publisher.events[i].Type, wantType)
+		}
+		if publisher.events[i].SessionID != created.ID {
+			t.Fatalf("event[%d] session id = %d, want %d", i, publisher.events[i].SessionID, created.ID)
+		}
+	}
+
+	delta, ok := publisher.events[0].Payload.(stream.AIMessageDeltaPayload)
+	if !ok {
+		t.Fatalf("delta payload type = %T, want AIMessageDeltaPayload", publisher.events[0].Payload)
+	}
+	if delta.MessageID != result.AIMessage.ID {
+		t.Fatalf("delta message id = %d, want %d", delta.MessageID, result.AIMessage.ID)
+	}
+	if delta.Delta != result.AIMessage.Content {
+		t.Fatalf("delta = %q, want full simulated reply chunk %q", delta.Delta, result.AIMessage.Content)
+	}
+
+	done, ok := publisher.events[1].Payload.(stream.AIMessageDonePayload)
+	if !ok {
+		t.Fatalf("done payload type = %T, want AIMessageDonePayload", publisher.events[1].Payload)
+	}
+	if done.MessageID != result.AIMessage.ID || done.Content != result.AIMessage.Content {
+		t.Fatalf("done payload = %+v, want saved ai message %d/%q", done, result.AIMessage.ID, result.AIMessage.Content)
+	}
+
+	correction, ok := publisher.events[2].Payload.(stream.CorrectionDonePayload)
+	if !ok {
+		t.Fatalf("correction payload type = %T, want CorrectionDonePayload", publisher.events[2].Payload)
+	}
+	if correction.MessageID != result.UserMessage.ID {
+		t.Fatalf("correction message id = %d, want %d", correction.MessageID, result.UserMessage.ID)
+	}
+	if !correction.HasErrors || correction.ErrorCount != 2 {
+		t.Fatalf("correction payload = %+v, want has_errors with 2 errors", correction)
+	}
+
+	score, ok := publisher.events[3].Payload.(stream.ScoreUpdatedPayload)
+	if !ok {
+		t.Fatalf("score payload type = %T, want ScoreUpdatedPayload", publisher.events[3].Payload)
+	}
+	if score.MessageID != result.UserMessage.ID {
+		t.Fatalf("score message id = %d, want %d", score.MessageID, result.UserMessage.ID)
+	}
+	if score.TotalScore != 77 || score.Grammar != 72 || score.Expression != 80 {
+		t.Fatalf("score payload = %+v, want saved score summary", score)
+	}
+}
+
 func TestSessionServiceFailOpenKeepsMessageChainWhenCorrectionAgentFails(t *testing.T) {
 	scenarioReader, sessionRepo, created := setupFeedbackSession(t)
 	feedbackRepo := newFakeFeedbackRepository()
@@ -380,6 +464,47 @@ func TestSessionServiceFailClosedReturnsFeedbackAgentFailureWhenCorrectionAgentF
 	}
 	if len(saved.Messages) != 2 {
 		t.Fatalf("saved messages length = %d, want 2", len(saved.Messages))
+	}
+}
+
+func TestSessionServicePublishesErrorEventWhenFeedbackFails(t *testing.T) {
+	scenarioReader, sessionRepo, created := setupFeedbackSession(t)
+	feedbackRepo := newFakeFeedbackRepository()
+	publisher := &fakeEventPublisher{}
+	sessionService := service.NewSessionService(
+		scenarioReader,
+		sessionRepo,
+		service.WithFeedbackRepository(feedbackRepo),
+		service.WithCorrectionAgent(&fakeCorrectionAgent{err: errors.New("fake correction failed")}),
+		service.WithScoringAgent(&fakeScoringAgent{}),
+		service.WithFeedbackFailOpen(false),
+		service.WithEventPublisher(publisher),
+	)
+
+	_, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.ID,
+		Content:   "I am study computer science.",
+	})
+
+	if !errors.Is(err, service.ErrFeedbackAgentFailed) {
+		t.Fatalf("error = %v, want ErrFeedbackAgentFailed", err)
+	}
+	if len(publisher.events) != 3 {
+		t.Fatalf("published events length = %d, want 3: %+v", len(publisher.events), publisher.events)
+	}
+	event := publisher.events[2]
+	if event.Type != stream.EventTypeError {
+		t.Fatalf("event type = %q, want %q", event.Type, stream.EventTypeError)
+	}
+	if event.SessionID != created.ID {
+		t.Fatalf("event session id = %d, want %d", event.SessionID, created.ID)
+	}
+	payload, ok := event.Payload.(stream.ErrorPayload)
+	if !ok {
+		t.Fatalf("payload type = %T, want ErrorPayload", event.Payload)
+	}
+	if payload.Code != "feedback_agent_failed" || payload.Message != "feedback agent failed" {
+		t.Fatalf("payload = %+v, want feedback failure", payload)
 	}
 }
 
@@ -780,4 +905,15 @@ func (a *fakeScoringAgent) Score(input agent.ScoringInput) (agent.ScoringOutput,
 			Comment:    "stable score",
 		},
 	}, nil
+}
+
+type fakeEventPublisher struct {
+	events []stream.Event
+	err    error
+}
+
+func (p *fakeEventPublisher) Publish(event stream.Event) error {
+	p.events = append(p.events, event)
+
+	return p.err
 }

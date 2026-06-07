@@ -10,6 +10,7 @@ import (
 	"speakmate/internal/agent"
 	"speakmate/internal/model"
 	"speakmate/internal/repository"
+	"speakmate/internal/stream"
 )
 
 var (
@@ -42,11 +43,17 @@ type SessionRepository interface {
 	AppendTurn(id int, userMessage model.Message, aiMessage model.Message) (model.Session, error)
 }
 
+// EventPublisher 定义业务事件发布能力。
+type EventPublisher interface {
+	Publish(event stream.Event) error
+}
+
 // SessionService 封装训练 Session 生命周期业务流程。
 type SessionService struct {
 	scenarioReader   ScenarioReader
 	repo             SessionRepository
 	feedbackRepo     FeedbackRepository
+	events           EventPublisher
 	conversation     agent.ConversationAgent
 	correction       agent.CorrectionAgent
 	scoring          agent.ScoringAgent
@@ -86,6 +93,14 @@ func WithFeedbackRepository(feedbackRepo FeedbackRepository) SessionOption {
 	return func(service *SessionService) {
 		if feedbackRepo != nil {
 			service.feedbackRepo = feedbackRepo
+		}
+	}
+}
+
+func WithEventPublisher(publisher EventPublisher) SessionOption {
+	return func(service *SessionService) {
+		if publisher != nil {
+			service.events = publisher
 		}
 	}
 }
@@ -280,7 +295,9 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 		UserContent: content,
 	})
 	if err != nil {
-		return SendMessageResult{}, fmt.Errorf("%w: %v", ErrConversationAgentFailed, err)
+		wrapped := fmt.Errorf("%w: %v", ErrConversationAgentFailed, err)
+		s.publishSessionError(input.SessionID, wrapped)
+		return SendMessageResult{}, wrapped
 	}
 	reply.Reply = strings.TrimSpace(reply.Reply)
 	if reply.Reply == "" {
@@ -325,8 +342,26 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 	messages := updated.Messages
 	savedUserMessage := messages[len(messages)-2]
 	savedAIMessage := messages[len(messages)-1]
+	s.publishStreamEvent(stream.Event{
+		Type:      stream.EventTypeAIMessageDelta,
+		SessionID: updated.ID,
+		Payload: stream.AIMessageDeltaPayload{
+			MessageID: savedAIMessage.ID,
+			Delta:     savedAIMessage.Content,
+		},
+	})
+	s.publishStreamEvent(stream.Event{
+		Type:      stream.EventTypeAIMessageDone,
+		SessionID: updated.ID,
+		Payload: stream.AIMessageDonePayload{
+			MessageID: savedAIMessage.ID,
+			Content:   savedAIMessage.Content,
+			Stage:     savedAIMessage.Stage,
+		},
+	})
 	correctionSummary, scoreSummary, err := s.generateFeedback(ctx, scenario, updated, savedUserMessage)
 	if err != nil {
+		s.publishSessionError(updated.ID, err)
 		return SendMessageResult{}, err
 	}
 
@@ -363,6 +398,16 @@ func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Sc
 	if err := s.feedbackRepo.SaveCorrection(correction); err != nil {
 		return s.handleFeedbackFailure(CorrectionSummary{}, ScoreSummary{}, "save correction failed", err)
 	}
+	correctionSummary := correctionSummaryFromResult(correction)
+	s.publishStreamEvent(stream.Event{
+		Type:      stream.EventTypeCorrectionDone,
+		SessionID: session.ID,
+		Payload: stream.CorrectionDonePayload{
+			MessageID:  correction.MessageID,
+			HasErrors:  correctionSummary.HasErrors,
+			ErrorCount: correctionSummary.ErrorCount,
+		},
+	})
 
 	scoringAgent := s.scoring
 	if scoringAgent == nil {
@@ -380,10 +425,21 @@ func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Sc
 	}
 	score := normalizeScoreResult(scoreOutput.Result, session.ID, userMessage, correction)
 	if err := s.feedbackRepo.SaveScore(score); err != nil {
-		return s.handleFeedbackFailure(correctionSummaryFromResult(correction), ScoreSummary{}, "save score failed", err)
+		return s.handleFeedbackFailure(correctionSummary, ScoreSummary{}, "save score failed", err)
 	}
+	scoreSummary := scoreSummaryFromResult(score)
+	s.publishStreamEvent(stream.Event{
+		Type:      stream.EventTypeScoreUpdated,
+		SessionID: session.ID,
+		Payload: stream.ScoreUpdatedPayload{
+			MessageID:  score.MessageID,
+			TotalScore: scoreSummary.TotalScore,
+			Grammar:    scoreSummary.Grammar,
+			Expression: scoreSummary.Expression,
+		},
+	})
 
-	return correctionSummaryFromResult(correction), scoreSummaryFromResult(score), nil
+	return correctionSummary, scoreSummary, nil
 }
 
 func (s *SessionService) handleFeedbackFailure(correctionSummary CorrectionSummary, scoreSummary ScoreSummary, step string, err error) (CorrectionSummary, ScoreSummary, error) {
@@ -447,5 +503,46 @@ func scoreSummaryFromResult(score model.ScoreResult) ScoreSummary {
 		TotalScore: score.TotalScore,
 		Grammar:    score.Grammar,
 		Expression: score.Expression,
+	}
+}
+
+func (s *SessionService) publishStreamEvent(event stream.Event) {
+	if s.events == nil {
+		return
+	}
+	if event.CreatedAt.IsZero() {
+		event.CreatedAt = s.now()
+	}
+	_ = s.events.Publish(event)
+}
+
+func (s *SessionService) publishSessionError(sessionID int, err error) {
+	if s.events == nil {
+		return
+	}
+
+	code, message := sessionErrorPayload(err)
+	s.publishStreamEvent(stream.Event{
+		Type:      stream.EventTypeError,
+		SessionID: sessionID,
+		Payload: stream.ErrorPayload{
+			Code:    code,
+			Message: message,
+		},
+	})
+}
+
+func sessionErrorPayload(err error) (string, string) {
+	switch {
+	case errors.Is(err, ErrConversationAgentFailed):
+		return "conversation_agent_failed", "conversation agent failed"
+	case errors.Is(err, ErrFeedbackAgentFailed):
+		return "feedback_agent_failed", "feedback agent failed"
+	case errors.Is(err, ErrSessionNotFound):
+		return "session_not_found", "session not found"
+	case errors.Is(err, ErrSessionAlreadyFinished):
+		return "session_already_finished", "session already finished"
+	default:
+		return "message_send_failed", "message send failed"
 	}
 }
