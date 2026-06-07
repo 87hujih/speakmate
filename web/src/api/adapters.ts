@@ -79,6 +79,10 @@ function secondsBetween(start: string, end: string | null, now: Date) {
   return Math.max(0, Math.floor((endDate.getTime() - startDate.getTime()) / 1000));
 }
 
+function arrayOrEmpty<T>(value: T[] | null | undefined) {
+  return Array.isArray(value) ? value : [];
+}
+
 function mapScenarioBase(scenario: BackendScenarioSummary | BackendScenario): Scenario {
   const detail = scenario as Partial<BackendScenario>;
   const stages = detail.stages ?? [];
@@ -150,26 +154,29 @@ function toCorrectionCategory(type: BackendCorrectionError["type"]): Correction[
 
 export function mapCorrections(corrections: BackendCorrectionResult[]): Correction[] {
   return corrections.flatMap((correction) => {
-    if (correction.errors.length === 0) {
+    const errors = arrayOrEmpty(correction.errors);
+    const betterExpressions = arrayOrEmpty(correction.better_expressions);
+
+    if (errors.length === 0) {
       return [
         {
           title: "表达优化建议",
           category: "expression",
           original: correction.original_text,
-          suggestion: correction.corrected_text || correction.better_expressions[0] || correction.original_text,
+          suggestion: correction.corrected_text || betterExpressions[0] || correction.original_text,
           explanation: "AI 给出了更自然的表达方式。",
-          issues: correction.better_expressions,
+          issues: betterExpressions,
         },
       ];
     }
 
-    return correction.errors.map((error) => ({
+    return errors.map((error) => ({
       title: error.explanation || `${error.span} 表达建议`,
       category: toCorrectionCategory(error.type),
       original: error.span || correction.original_text,
       suggestion: error.suggestion || correction.corrected_text,
       explanation: error.explanation,
-      issues: error.span && error.suggestion ? [`${error.span} -> ${error.suggestion}`] : correction.better_expressions,
+      issues: error.span && error.suggestion ? [`${error.span} -> ${error.suggestion}`] : betterExpressions,
     }));
   });
 }
@@ -210,7 +217,7 @@ function deriveProgress(tasks: TrainingSession["tasks"]) {
 
 function latestBetterExpression(corrections: BackendCorrectionResult[]) {
   for (let index = corrections.length - 1; index >= 0; index -= 1) {
-    const expressions = corrections[index].better_expressions;
+    const expressions = arrayOrEmpty(corrections[index].better_expressions);
     const expression = expressions[expressions.length - 1];
     if (expression) {
       return expression;
@@ -302,15 +309,11 @@ function parseFrequentError(error: string, index: number): Correction {
   };
 }
 
-function stringArray(value: string[] | null | undefined) {
-  return Array.isArray(value) ? value : [];
-}
-
 export function mapReport(report: BackendReport): TrainingReport {
-  const majorProblems = stringArray(report.major_problems);
-  const frequentErrors = stringArray(report.frequent_errors);
-  const betterExpressions = stringArray(report.better_expressions);
-  const nextPracticePlan = stringArray(report.next_practice_plan);
+  const majorProblems = arrayOrEmpty(report.major_problems);
+  const frequentErrors = arrayOrEmpty(report.frequent_errors);
+  const betterExpressions = arrayOrEmpty(report.better_expressions);
+  const nextPracticePlan = arrayOrEmpty(report.next_practice_plan);
 
   return {
     sessionId: String(report.session_id),

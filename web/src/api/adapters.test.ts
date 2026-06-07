@@ -119,6 +119,63 @@ describe("api adapters", () => {
     expect(mapped[0].issues).toEqual(["am study -> am studying"]);
   });
 
+  it("maps null correction arrays to empty feedback instead of throwing", () => {
+    const sessionDetail: BackendSessionDetail = {
+      session_id: 7,
+      session_no: "S202606070001",
+      scenario: {
+        id: 1,
+        code: "interview",
+        name: "英语面试",
+        description: "练习自我介绍、项目经历和技术追问",
+        difficulty: "medium",
+      },
+      status: "running",
+      turn_count: 1,
+      messages: [
+        {
+          id: 10,
+          session_id: 7,
+          role: "user",
+          content: "I study computer science.",
+          stage: "自我介绍",
+          created_at: "2026-06-07T03:01:00Z",
+        },
+      ],
+      created_at: "2026-06-07T03:00:00Z",
+      ended_at: null,
+    };
+    const corrections = [
+      {
+        message_id: 10,
+        session_id: 7,
+        original_text: "I study computer science.",
+        corrected_text: "I study computer science.",
+        errors: null,
+        better_expressions: null,
+      },
+    ] as unknown as BackendCorrectionResult[];
+
+    const session = mapSessionDetailToTrainingSession({
+      session: sessionDetail,
+      scenario: scenarioDetail,
+      corrections,
+      now: new Date("2026-06-07T03:02:00Z"),
+    });
+
+    expect(session.corrections).toEqual([
+      {
+        title: "表达优化建议",
+        category: "expression",
+        original: "I study computer science.",
+        suggestion: "I study computer science.",
+        explanation: "AI 给出了更自然的表达方式。",
+        issues: [],
+      },
+    ]);
+    expect(session.naturalExpression).toBe("完成一轮输入后，这里会显示更自然的替代表达。");
+  });
+
   it("maps backend scores to all five UI dimensions", () => {
     expect(mapSessionScore(score).map((item) => [item.key, item.score])).toEqual([
       ["fluency", 75],

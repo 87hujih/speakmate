@@ -101,8 +101,8 @@ export interface BackendCorrectionResult {
   session_id: number;
   original_text: string;
   corrected_text: string;
-  errors: BackendCorrectionError[];
-  better_expressions: string[];
+  errors: BackendCorrectionError[] | null;
+  better_expressions: string[] | null;
 }
 
 export interface BackendScoreResult {
