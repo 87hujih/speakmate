@@ -9,7 +9,10 @@ import (
 
 func main() {
 	cfg := config.Load()
-	engine := router.New(cfg)
+	engine, err := router.NewWithError(cfg)
+	if err != nil {
+		log.Fatalf("init server failed: %v", err)
+	}
 
 	if err := engine.Run(cfg.Addr()); err != nil {
 		log.Fatalf("server stopped: %v", err)

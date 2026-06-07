@@ -3,6 +3,7 @@ package repository
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -63,6 +64,42 @@ func (r *MemorySessionRepository) FindByID(id int) (model.Session, error) {
 	}
 
 	return cloneSession(session), nil
+}
+
+// ListSessions 按分页条件查询训练 Session 历史。
+func (r *MemorySessionRepository) ListSessions(query model.SessionListQuery) (model.SessionListResult, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	sessions := make([]model.Session, 0, len(r.sessions))
+	for _, session := range r.sessions {
+		if query.UserID > 0 && session.UserID != query.UserID {
+			continue
+		}
+		sessions = append(sessions, cloneSession(session))
+	}
+	sort.Slice(sessions, func(i int, j int) bool {
+		if sessions[i].CreatedAt.Equal(sessions[j].CreatedAt) {
+			return sessions[i].ID > sessions[j].ID
+		}
+
+		return sessions[i].CreatedAt.After(sessions[j].CreatedAt)
+	})
+
+	total := len(sessions)
+	start := (query.Page - 1) * query.PageSize
+	if start >= total {
+		return model.SessionListResult{Sessions: []model.Session{}, Total: total}, nil
+	}
+	end := start + query.PageSize
+	if end > total {
+		end = total
+	}
+
+	return model.SessionListResult{
+		Sessions: sessions[start:end],
+		Total:    total,
+	}, nil
 }
 
 // Finish 把 running Session 原子地结束为 finished。
