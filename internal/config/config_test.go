@@ -40,6 +40,9 @@ func TestLoadDefaultsToPort8080(t *testing.T) {
 	if !cfg.Feedback.ScoringUseMock {
 		t.Fatal("Feedback.ScoringUseMock = false, want true by default")
 	}
+	if !cfg.Feedback.SummaryUseMock {
+		t.Fatal("Feedback.SummaryUseMock = false, want true by default")
+	}
 	if !cfg.Feedback.FailOpen {
 		t.Fatal("Feedback.FailOpen = false, want true by default")
 	}
@@ -55,6 +58,7 @@ func TestLoadReadsLLMEnvironment(t *testing.T) {
 	t.Setenv("LLM_USE_MOCK", "false")
 	t.Setenv("CORRECTION_USE_MOCK", "false")
 	t.Setenv("SCORING_USE_MOCK", "false")
+	t.Setenv("SUMMARY_USE_MOCK", "false")
 	t.Setenv("FEEDBACK_FAIL_OPEN", "false")
 
 	cfg := Load()
@@ -86,6 +90,9 @@ func TestLoadReadsLLMEnvironment(t *testing.T) {
 	if cfg.Feedback.ScoringUseMock {
 		t.Fatal("Feedback.ScoringUseMock = true, want false")
 	}
+	if cfg.Feedback.SummaryUseMock {
+		t.Fatal("Feedback.SummaryUseMock = true, want false")
+	}
 	if cfg.Feedback.FailOpen {
 		t.Fatal("Feedback.FailOpen = true, want false")
 	}
@@ -97,6 +104,7 @@ func TestLoadFallsBackForInvalidLLMTimeoutAndMockFlag(t *testing.T) {
 	t.Setenv("LLM_USE_MOCK", "not-a-bool")
 	t.Setenv("CORRECTION_USE_MOCK", "not-a-bool")
 	t.Setenv("SCORING_USE_MOCK", "not-a-bool")
+	t.Setenv("SUMMARY_USE_MOCK", "not-a-bool")
 	t.Setenv("FEEDBACK_FAIL_OPEN", "not-a-bool")
 
 	cfg := Load()
@@ -112,6 +120,9 @@ func TestLoadFallsBackForInvalidLLMTimeoutAndMockFlag(t *testing.T) {
 	}
 	if !cfg.Feedback.ScoringUseMock {
 		t.Fatal("Feedback.ScoringUseMock = false, want true for invalid flag")
+	}
+	if !cfg.Feedback.SummaryUseMock {
+		t.Fatal("Feedback.SummaryUseMock = false, want true for invalid flag")
 	}
 	if !cfg.Feedback.FailOpen {
 		t.Fatal("Feedback.FailOpen = false, want true for invalid flag")
@@ -129,5 +140,6 @@ func clearLLMEnv(t *testing.T) {
 	t.Setenv("LLM_USE_MOCK", "")
 	t.Setenv("CORRECTION_USE_MOCK", "")
 	t.Setenv("SCORING_USE_MOCK", "")
+	t.Setenv("SUMMARY_USE_MOCK", "")
 	t.Setenv("FEEDBACK_FAIL_OPEN", "")
 }
