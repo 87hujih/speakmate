@@ -6,7 +6,7 @@
 创建 Session -> 发送用户文本 -> 收到 Conversation Agent 回复 -> 生成纠错/评分摘要 -> 查询消息历史 -> 结束训练
 ```
 
-当前版本支持文本消息的普通 JSON 响应，并提供可选 SSE 流式事件增强。服务默认使用本地 Mock Agent，配置完整且关闭 Mock 时可切换到 OpenAI-compatible LLM Agent。当前不处理语音。
+当前版本支持文本消息的普通 JSON 响应，并提供可选 SSE 流式事件增强。服务默认使用本地 Mock Agent，配置完整且关闭 Mock 时可切换到 OpenAI-compatible LLM Agent。语音输入通过单独的音频上传接口接入，见 [audio-api.md](audio-api.md)。
 
 ## 基本信息
 

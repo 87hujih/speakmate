@@ -104,7 +104,7 @@ source.addEventListener('error', (event) => {
 ```text
 1. POST /api/v1/sessions 创建 Session
 2. GET /api/v1/sessions/:id/stream 建立 SSE
-3. POST /api/v1/sessions/:id/messages 发送文本消息
+3. POST /api/v1/sessions/:id/messages 发送文本消息，或 POST /api/v1/sessions/:id/audio 上传单段音频
 4. SSE 接收 ai_message_delta、ai_message_done、correction_done、score_updated
 5. POST /api/v1/sessions/:id/finish 结束训练
 6. POST /api/v1/sessions/:id/report 生成报告
