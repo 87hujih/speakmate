@@ -1039,16 +1039,26 @@ func TestSessionStreamReceivesMessageFeedbackEvents(t *testing.T) {
 	postMessage(t, engine, sessionID, `{"content":"I am study computer science and I have did a project."}`)
 
 	reader := bufio.NewReader(resp.Body)
-	gotTypes := readSSEEventTypes(t, reader, 4)
+	gotTypes := readSSEEventTypes(t, reader, 8)
+	deltaCount := 0
+	for deltaCount < len(gotTypes) && gotTypes[deltaCount] == "ai_message_delta" {
+		deltaCount++
+	}
+	if deltaCount == 0 {
+		t.Fatalf("got no ai_message_delta events; all types = %#v", gotTypes)
+	}
 	wantTypes := []string{
-		"ai_message_delta",
 		"ai_message_done",
 		"correction_done",
 		"score_updated",
 	}
 	for i, wantType := range wantTypes {
-		if gotTypes[i] != wantType {
-			t.Fatalf("event type[%d] = %q, want %q; all types = %#v", i, gotTypes[i], wantType, gotTypes)
+		gotIndex := deltaCount + i
+		if gotIndex >= len(gotTypes) {
+			t.Fatalf("missing event after deltas[%d], want %q; all types = %#v", i, wantType, gotTypes)
+		}
+		if gotTypes[gotIndex] != wantType {
+			t.Fatalf("event type after deltas[%d] = %q, want %q; all types = %#v", i, gotTypes[gotIndex], wantType, gotTypes)
 		}
 	}
 }

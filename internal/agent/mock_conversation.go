@@ -2,6 +2,8 @@ package agent
 
 import "context"
 
+const mockStreamChunkRunes = 24
+
 type MockConversationAgent struct{}
 
 func NewMockConversationAgent() *MockConversationAgent {
@@ -20,6 +22,42 @@ func (a *MockConversationAgent) GenerateReply(ctx context.Context, input Convers
 		Stage:    stage,
 		NextGoal: nextGoals[index],
 	}, nil
+}
+
+func (a *MockConversationAgent) StreamReply(ctx context.Context, input ConversationInput, onDelta func(ConversationDelta) error) (ConversationOutput, error) {
+	output, err := a.GenerateReply(ctx, input)
+	if err != nil {
+		return ConversationOutput{}, err
+	}
+	if onDelta == nil {
+		return output, nil
+	}
+
+	for _, chunk := range splitMockStreamChunks(output.Reply) {
+		if err := onDelta(ConversationDelta{Content: chunk}); err != nil {
+			return ConversationOutput{}, err
+		}
+	}
+
+	return output, nil
+}
+
+func splitMockStreamChunks(content string) []string {
+	runes := []rune(content)
+	if len(runes) == 0 {
+		return nil
+	}
+
+	chunks := make([]string, 0, (len(runes)+mockStreamChunkRunes-1)/mockStreamChunkRunes)
+	for start := 0; start < len(runes); start += mockStreamChunkRunes {
+		end := start + mockStreamChunkRunes
+		if end > len(runes) {
+			end = len(runes)
+		}
+		chunks = append(chunks, string(runes[start:end]))
+	}
+
+	return chunks
 }
 
 func repliesForScenario(code string) []string {

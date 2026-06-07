@@ -266,6 +266,13 @@ func TestSessionServicePublishesMessageFeedbackStreamEvents(t *testing.T) {
 	sessionService := service.NewSessionService(
 		scenarioReader,
 		sessionRepo,
+		service.WithConversationAgent(&fakeConversationAgent{
+			output: agent.ConversationOutput{
+				Reply:    "What was your role?",
+				Stage:    "项目经历",
+				NextGoal: "ask user to describe personal project contribution",
+			},
+		}),
 		service.WithFeedbackRepository(feedbackRepo),
 		service.WithCorrectionAgent(correctionAgent),
 		service.WithScoringAgent(scoringAgent),
@@ -337,6 +344,122 @@ func TestSessionServicePublishesMessageFeedbackStreamEvents(t *testing.T) {
 	}
 	if score.TotalScore != 77 || score.Grammar != 72 || score.Expression != 80 {
 		t.Fatalf("score payload = %+v, want saved score summary", score)
+	}
+}
+
+func TestSessionServicePublishesStreamingDeltasBeforePersistedDone(t *testing.T) {
+	scenarioReader, sessionRepo, created := setupFeedbackSession(t)
+	feedbackRepo := newFakeFeedbackRepository()
+	publisher := &fakeEventPublisher{}
+	sessionService := service.NewSessionService(
+		scenarioReader,
+		sessionRepo,
+		service.WithConversationAgent(&fakeStreamingConversationAgent{
+			deltas: []string{"What ", "was your role?"},
+			output: agent.ConversationOutput{
+				Reply:    "What was your role?",
+				Stage:    "项目经历",
+				NextGoal: "ask user to describe personal project contribution",
+			},
+		}),
+		service.WithFeedbackRepository(feedbackRepo),
+		service.WithCorrectionAgent(&fakeCorrectionAgent{}),
+		service.WithScoringAgent(&fakeScoringAgent{}),
+		service.WithEventPublisher(publisher),
+	)
+
+	result, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.ID,
+		Content:   "I built a robot control project.",
+	})
+	if err != nil {
+		t.Fatalf("SendMessage returned error: %v", err)
+	}
+
+	wantTypes := []stream.EventType{
+		stream.EventTypeAIMessageDelta,
+		stream.EventTypeAIMessageDelta,
+		stream.EventTypeAIMessageDone,
+		stream.EventTypeCorrectionDone,
+		stream.EventTypeScoreUpdated,
+	}
+	if len(publisher.events) != len(wantTypes) {
+		t.Fatalf("published events length = %d, want %d: %+v", len(publisher.events), len(wantTypes), publisher.events)
+	}
+	for i, wantType := range wantTypes {
+		if publisher.events[i].Type != wantType {
+			t.Fatalf("event[%d] type = %q, want %q", i, publisher.events[i].Type, wantType)
+		}
+	}
+
+	firstDelta := publisher.events[0].Payload.(stream.AIMessageDeltaPayload)
+	if firstDelta.MessageID != 0 || firstDelta.Delta != "What " {
+		t.Fatalf("first delta = %+v, want unsaved message id 0 and first chunk", firstDelta)
+	}
+	secondDelta := publisher.events[1].Payload.(stream.AIMessageDeltaPayload)
+	if secondDelta.MessageID != 0 || secondDelta.Delta != "was your role?" {
+		t.Fatalf("second delta = %+v, want unsaved message id 0 and second chunk", secondDelta)
+	}
+
+	done := publisher.events[2].Payload.(stream.AIMessageDonePayload)
+	if done.MessageID != result.AIMessage.ID {
+		t.Fatalf("done message id = %d, want saved ai message id %d", done.MessageID, result.AIMessage.ID)
+	}
+	if done.Content != "What was your role?" {
+		t.Fatalf("done content = %q, want complete streamed reply", done.Content)
+	}
+
+	saved, err := sessionRepo.FindByID(created.ID)
+	if err != nil {
+		t.Fatalf("FindByID returned error: %v", err)
+	}
+	if len(saved.Messages) != 2 {
+		t.Fatalf("saved messages length = %d, want 2", len(saved.Messages))
+	}
+	if saved.Messages[1].Content != "What was your role?" {
+		t.Fatalf("saved ai content = %q, want complete streamed reply", saved.Messages[1].Content)
+	}
+}
+
+func TestSessionServicePublishesErrorWhenStreamingConversationFails(t *testing.T) {
+	scenarioReader, sessionRepo, created := setupFeedbackSession(t)
+	publisher := &fakeEventPublisher{}
+	sessionService := service.NewSessionService(
+		scenarioReader,
+		sessionRepo,
+		service.WithConversationAgent(&fakeStreamingConversationAgent{err: errors.New("stream failed")}),
+		service.WithEventPublisher(publisher),
+	)
+
+	_, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.ID,
+		Content:   "Hello",
+	})
+
+	if !errors.Is(err, service.ErrConversationAgentFailed) {
+		t.Fatalf("error = %v, want ErrConversationAgentFailed", err)
+	}
+	if len(publisher.events) != 1 {
+		t.Fatalf("published events length = %d, want 1: %+v", len(publisher.events), publisher.events)
+	}
+	event := publisher.events[0]
+	if event.Type != stream.EventTypeError {
+		t.Fatalf("event type = %q, want %q", event.Type, stream.EventTypeError)
+	}
+	payload, ok := event.Payload.(stream.ErrorPayload)
+	if !ok {
+		t.Fatalf("payload type = %T, want ErrorPayload", event.Payload)
+	}
+	if payload.Code != "conversation_agent_failed" || payload.Message != "conversation agent failed" {
+		t.Fatalf("payload = %+v, want conversation failure", payload)
+	}
+
+	saved, findErr := sessionRepo.FindByID(created.ID)
+	if findErr != nil {
+		t.Fatalf("FindByID returned error: %v", findErr)
+	}
+	if len(saved.Messages) != 0 {
+		t.Fatalf("saved messages length = %d, want 0", len(saved.Messages))
 	}
 }
 
@@ -474,6 +597,13 @@ func TestSessionServicePublishesErrorEventWhenFeedbackFails(t *testing.T) {
 	sessionService := service.NewSessionService(
 		scenarioReader,
 		sessionRepo,
+		service.WithConversationAgent(&fakeConversationAgent{
+			output: agent.ConversationOutput{
+				Reply:    "What was your role?",
+				Stage:    "项目经历",
+				NextGoal: "ask user to describe personal project contribution",
+			},
+		}),
 		service.WithFeedbackRepository(feedbackRepo),
 		service.WithCorrectionAgent(&fakeCorrectionAgent{err: errors.New("fake correction failed")}),
 		service.WithScoringAgent(&fakeScoringAgent{}),
@@ -836,6 +966,39 @@ func (a *fakeConversationAgent) GenerateReply(ctx context.Context, input agent.C
 	a.input = input
 	if a.err != nil {
 		return agent.ConversationOutput{}, a.err
+	}
+
+	return a.output, nil
+}
+
+type fakeStreamingConversationAgent struct {
+	output    agent.ConversationOutput
+	err       error
+	deltas    []string
+	callCount int
+	input     agent.ConversationInput
+}
+
+func (a *fakeStreamingConversationAgent) GenerateReply(ctx context.Context, input agent.ConversationInput) (agent.ConversationOutput, error) {
+	a.callCount++
+	a.input = input
+	if a.err != nil {
+		return agent.ConversationOutput{}, a.err
+	}
+
+	return a.output, nil
+}
+
+func (a *fakeStreamingConversationAgent) StreamReply(ctx context.Context, input agent.ConversationInput, onDelta func(agent.ConversationDelta) error) (agent.ConversationOutput, error) {
+	a.callCount++
+	a.input = input
+	if a.err != nil {
+		return agent.ConversationOutput{}, a.err
+	}
+	for _, delta := range a.deltas {
+		if err := onDelta(agent.ConversationDelta{Content: delta}); err != nil {
+			return agent.ConversationOutput{}, err
+		}
 	}
 
 	return a.output, nil

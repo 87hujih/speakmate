@@ -288,12 +288,13 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	reply, err := conversation.GenerateReply(ctx, agent.ConversationInput{
+	conversationInput := agent.ConversationInput{
 		Scenario:    scenario,
 		Session:     session,
 		History:     session.Messages,
 		UserContent: content,
-	})
+	}
+	reply, usedStreaming, err := s.generateConversationReply(ctx, input.SessionID, conversation, conversationInput)
 	if err != nil {
 		wrapped := fmt.Errorf("%w: %v", ErrConversationAgentFailed, err)
 		s.publishSessionError(input.SessionID, wrapped)
@@ -342,14 +343,16 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 	messages := updated.Messages
 	savedUserMessage := messages[len(messages)-2]
 	savedAIMessage := messages[len(messages)-1]
-	s.publishStreamEvent(stream.Event{
-		Type:      stream.EventTypeAIMessageDelta,
-		SessionID: updated.ID,
-		Payload: stream.AIMessageDeltaPayload{
-			MessageID: savedAIMessage.ID,
-			Delta:     savedAIMessage.Content,
-		},
-	})
+	if !usedStreaming {
+		s.publishStreamEvent(stream.Event{
+			Type:      stream.EventTypeAIMessageDelta,
+			SessionID: updated.ID,
+			Payload: stream.AIMessageDeltaPayload{
+				MessageID: savedAIMessage.ID,
+				Delta:     savedAIMessage.Content,
+			},
+		})
+	}
 	s.publishStreamEvent(stream.Event{
 		Type:      stream.EventTypeAIMessageDone,
 		SessionID: updated.ID,
@@ -374,6 +377,31 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 		CorrectionSummary: correctionSummary,
 		ScoreSummary:      scoreSummary,
 	}, nil
+}
+
+func (s *SessionService) generateConversationReply(ctx context.Context, sessionID int, conversation agent.ConversationAgent, input agent.ConversationInput) (agent.ConversationOutput, bool, error) {
+	if streamingConversation, ok := conversation.(agent.StreamingConversationAgent); ok {
+		reply, err := streamingConversation.StreamReply(ctx, input, func(delta agent.ConversationDelta) error {
+			if delta.Content == "" {
+				return nil
+			}
+			s.publishStreamEvent(stream.Event{
+				Type:      stream.EventTypeAIMessageDelta,
+				SessionID: sessionID,
+				Payload: stream.AIMessageDeltaPayload{
+					MessageID: 0,
+					Delta:     delta.Content,
+				},
+			})
+
+			return nil
+		})
+
+		return reply, true, err
+	}
+
+	reply, err := conversation.GenerateReply(ctx, input)
+	return reply, false, err
 }
 
 func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Scenario, session model.Session, userMessage model.Message) (CorrectionSummary, ScoreSummary, error) {

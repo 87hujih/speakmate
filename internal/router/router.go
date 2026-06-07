@@ -162,7 +162,12 @@ func NewConversationAgent(cfg config.Config) agent.ConversationAgent {
 		return agent.NewMockConversationAgent()
 	}
 
-	return agent.NewLLMConversationAgent(client, agent.WithFallbackAgent(agent.NewMockConversationAgent()))
+	opts := []agent.LLMConversationOption{}
+	if cfg.LLM.FallbackToMock {
+		opts = append(opts, agent.WithFallbackAgent(agent.NewMockConversationAgent()))
+	}
+
+	return agent.NewLLMConversationAgent(client, opts...)
 }
 
 func NewCorrectionAgent(cfg config.Config) agent.CorrectionAgent {
@@ -178,7 +183,12 @@ func NewCorrectionAgent(cfg config.Config) agent.CorrectionAgent {
 		return agent.NewMockCorrectionAgent()
 	}
 
-	return agent.NewLLMCorrectionAgent(client, agent.WithCorrectionFallbackAgent(agent.NewMockCorrectionAgent()))
+	opts := []agent.LLMCorrectionOption{}
+	if cfg.LLM.FallbackToMock {
+		opts = append(opts, agent.WithCorrectionFallbackAgent(agent.NewMockCorrectionAgent()))
+	}
+
+	return agent.NewLLMCorrectionAgent(client, opts...)
 }
 
 func NewScoringAgent(cfg config.Config) agent.ScoringAgent {
@@ -194,7 +204,12 @@ func NewScoringAgent(cfg config.Config) agent.ScoringAgent {
 		return agent.NewMockScoringAgent()
 	}
 
-	return agent.NewLLMScoringAgent(client, agent.WithScoringFallbackAgent(agent.NewMockScoringAgent()))
+	opts := []agent.LLMScoringOption{}
+	if cfg.LLM.FallbackToMock {
+		opts = append(opts, agent.WithScoringFallbackAgent(agent.NewMockScoringAgent()))
+	}
+
+	return agent.NewLLMScoringAgent(client, opts...)
 }
 
 func NewSummaryAgent(cfg config.Config) agent.SummaryAgent {
@@ -210,7 +225,12 @@ func NewSummaryAgent(cfg config.Config) agent.SummaryAgent {
 		return agent.NewMockSummaryAgent()
 	}
 
-	return agent.NewLLMSummaryAgent(client, agent.WithSummaryFallbackAgent(agent.NewMockSummaryAgent()))
+	opts := []agent.LLMSummaryOption{}
+	if cfg.LLM.FallbackToMock {
+		opts = append(opts, agent.WithSummaryFallbackAgent(agent.NewMockSummaryAgent()))
+	}
+
+	return agent.NewLLMSummaryAgent(client, opts...)
 }
 
 func NewASRClient(cfg config.Config) agent.ASRClient {
