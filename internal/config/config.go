@@ -53,6 +53,7 @@ type LLMConfig struct {
 	Model          string
 	TimeoutSeconds int
 	UseMock        bool
+	FallbackToMock bool
 }
 
 type ASRConfig struct {
@@ -110,6 +111,7 @@ func Load() Config {
 			Model:          strings.TrimSpace(os.Getenv("LLM_MODEL")),
 			TimeoutSeconds: positiveIntEnv("LLM_TIMEOUT_SECONDS", externalServiceTimeoutSeconds),
 			UseMock:        boolEnv("LLM_USE_MOCK", true),
+			FallbackToMock: boolEnv("LLM_FALLBACK_TO_MOCK", true),
 		},
 		ASR: ASRConfig{
 			Provider:       stringEnv("ASR_PROVIDER", "mock"),

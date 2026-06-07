@@ -63,3 +63,32 @@ func TestMockConversationAgentFallsBackForUnknownScenario(t *testing.T) {
 		t.Fatalf("next_goal = %q, want fallback detail goal", output.NextGoal)
 	}
 }
+
+func TestMockConversationAgentStreamsFakeReplyChunks(t *testing.T) {
+	conversationAgent := agent.NewMockConversationAgent()
+
+	var chunks []string
+	output, err := conversationAgent.StreamReply(context.Background(), agent.ConversationInput{
+		Scenario: model.Scenario{
+			Code: "interview",
+			Stages: []model.ScenarioStage{
+				{Name: "自我介绍"},
+				{Name: "项目经历"},
+			},
+		},
+		Session: model.Session{TurnCount: 0},
+	}, func(delta agent.ConversationDelta) error {
+		chunks = append(chunks, delta.Content)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("StreamReply returned error: %v", err)
+	}
+
+	if len(chunks) < 2 {
+		t.Fatalf("chunks length = %d, want multiple fake streaming chunks", len(chunks))
+	}
+	if strings.Join(chunks, "") != output.Reply {
+		t.Fatalf("joined chunks = %q, want full reply %q", strings.Join(chunks, ""), output.Reply)
+	}
+}

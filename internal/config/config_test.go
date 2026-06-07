@@ -35,6 +35,9 @@ func TestLoadDefaultsToPort8080(t *testing.T) {
 	if !cfg.LLM.UseMock {
 		t.Fatal("LLM.UseMock = false, want true by default")
 	}
+	if !cfg.LLM.FallbackToMock {
+		t.Fatal("LLM.FallbackToMock = false, want true by default")
+	}
 	if !cfg.Feedback.CorrectionUseMock {
 		t.Fatal("Feedback.CorrectionUseMock = false, want true by default")
 	}
@@ -96,6 +99,7 @@ func TestLoadReadsLLMEnvironment(t *testing.T) {
 	t.Setenv("LLM_MODEL", "test-model")
 	t.Setenv("LLM_TIMEOUT_SECONDS", "45")
 	t.Setenv("LLM_USE_MOCK", "false")
+	t.Setenv("LLM_FALLBACK_TO_MOCK", "false")
 	t.Setenv("CORRECTION_USE_MOCK", "false")
 	t.Setenv("SCORING_USE_MOCK", "false")
 	t.Setenv("SUMMARY_USE_MOCK", "false")
@@ -123,6 +127,9 @@ func TestLoadReadsLLMEnvironment(t *testing.T) {
 	}
 	if cfg.LLM.UseMock {
 		t.Fatal("LLM.UseMock = true, want false")
+	}
+	if cfg.LLM.FallbackToMock {
+		t.Fatal("LLM.FallbackToMock = true, want false")
 	}
 	if cfg.Feedback.CorrectionUseMock {
 		t.Fatal("Feedback.CorrectionUseMock = true, want false")
@@ -276,6 +283,7 @@ func TestLoadFallsBackForInvalidLLMTimeoutAndMockFlag(t *testing.T) {
 	clearLLMEnv(t)
 	t.Setenv("LLM_TIMEOUT_SECONDS", "not-a-number")
 	t.Setenv("LLM_USE_MOCK", "not-a-bool")
+	t.Setenv("LLM_FALLBACK_TO_MOCK", "not-a-bool")
 	t.Setenv("CORRECTION_USE_MOCK", "not-a-bool")
 	t.Setenv("SCORING_USE_MOCK", "not-a-bool")
 	t.Setenv("SUMMARY_USE_MOCK", "not-a-bool")
@@ -288,6 +296,9 @@ func TestLoadFallsBackForInvalidLLMTimeoutAndMockFlag(t *testing.T) {
 	}
 	if !cfg.LLM.UseMock {
 		t.Fatal("LLM.UseMock = false, want true for invalid flag")
+	}
+	if !cfg.LLM.FallbackToMock {
+		t.Fatal("LLM.FallbackToMock = false, want true for invalid flag")
 	}
 	if !cfg.Feedback.CorrectionUseMock {
 		t.Fatal("Feedback.CorrectionUseMock = false, want true for invalid flag")
@@ -312,6 +323,7 @@ func clearLLMEnv(t *testing.T) {
 	t.Setenv("LLM_MODEL", "")
 	t.Setenv("LLM_TIMEOUT_SECONDS", "")
 	t.Setenv("LLM_USE_MOCK", "")
+	t.Setenv("LLM_FALLBACK_TO_MOCK", "")
 	t.Setenv("CORRECTION_USE_MOCK", "")
 	t.Setenv("SCORING_USE_MOCK", "")
 	t.Setenv("SUMMARY_USE_MOCK", "")

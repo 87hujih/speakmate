@@ -12,11 +12,21 @@ type ConversationAgent interface {
 	GenerateReply(ctx context.Context, input ConversationInput) (ConversationOutput, error)
 }
 
+type StreamingConversationAgent interface {
+	ConversationAgent
+	StreamReply(ctx context.Context, input ConversationInput, onDelta func(ConversationDelta) error) (ConversationOutput, error)
+}
+
 type ConversationInput struct {
 	Scenario    model.Scenario
 	Session     model.Session
 	History     []model.Message
 	UserContent string
+}
+
+type ConversationDelta struct {
+	Content string
+	Raw     string
 }
 
 type ConversationOutput struct {
