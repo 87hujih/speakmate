@@ -19,7 +19,7 @@ export const voiceStatusContent: Record<
 > = {
   idle: {
     title: "点击开始说英语",
-    description: "准备回答面试官的问题，系统会实时记录你的表达。",
+    description: "录制一段英文回答，结束后上传转写。",
     action: "开始",
   },
   recording: {
@@ -29,8 +29,8 @@ export const voiceStatusContent: Record<
   },
   recognizing: {
     title: "正在识别",
-    description: "ASR 正在转写你的回答，并提取语法问题。",
-    action: "继续",
+    description: "ASR 正在转写回答，并接入本轮训练反馈。",
+    action: "等待",
   },
   thinking: {
     title: "AI 正在思考",

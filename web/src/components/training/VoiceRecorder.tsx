@@ -6,17 +6,21 @@ import { voiceStatusContent, voiceStatusOrder } from "./voiceStatus";
 
 interface VoiceRecorderProps {
   status: VoiceStatus;
+  transcript?: string;
+  error?: string;
+  isDisabled?: boolean;
   onToggle?: () => void;
 }
 
-export function VoiceRecorder({ status, onToggle }: VoiceRecorderProps) {
+export function VoiceRecorder({ status, transcript, error, isDisabled = false, onToggle }: VoiceRecorderProps) {
   const copy = voiceStatusContent[status];
   const isActive = status !== "idle";
   const StatusIcon = status === "thinking" ? Brain : status === "recognizing" ? LoaderCircle : status === "recording" ? Square : Mic;
+  const isButtonDisabled = isDisabled || status === "recognizing" || status === "thinking";
 
   return (
     <div className="border-t border-line bg-white px-5 py-4">
-      <div className="grid grid-cols-[minmax(210px,0.9fr)_minmax(220px,1fr)_104px] items-center gap-5 rounded-[24px] border border-line bg-slate-50/90 p-4 shadow-soft">
+      <div className="grid grid-cols-1 items-center gap-4 rounded-[24px] border border-line bg-slate-50/90 p-4 shadow-soft md:grid-cols-[minmax(180px,0.9fr)_minmax(180px,1fr)_88px]">
         <div className="flex min-w-0 items-center gap-4">
           <div
             className={cn(
@@ -51,8 +55,9 @@ export function VoiceRecorder({ status, onToggle }: VoiceRecorderProps) {
         <button
           type="button"
           onClick={onToggle}
+          disabled={isButtonDisabled}
           className={cn(
-            "grid h-[76px] w-[76px] place-items-center justify-self-end rounded-full text-white shadow-glow transition duration-200 hover:-translate-y-0.5 active:translate-y-px",
+            "grid h-[72px] w-[72px] place-items-center justify-self-start rounded-full text-white shadow-glow transition duration-200 hover:-translate-y-0.5 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 md:justify-self-end",
             status === "recording" ? "bg-rose-500 shadow-[0_20px_42px_rgba(244,63,94,0.28)]" : "bg-gradient-to-br from-brand-blue to-brand-purple",
           )}
           aria-label={`${copy.action}录音状态`}
@@ -63,6 +68,8 @@ export function VoiceRecorder({ status, onToggle }: VoiceRecorderProps) {
           </span>
         </button>
       </div>
+      {transcript ? <div className="mt-2 rounded-2xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">转写：{transcript}</div> : null}
+      {error ? <div className="mt-2 rounded-2xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">{error}</div> : null}
     </div>
   );
 }

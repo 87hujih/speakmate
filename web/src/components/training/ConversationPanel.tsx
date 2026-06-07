@@ -1,7 +1,8 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef } from "react";
 import { LoaderCircle, MessageSquareText, SendHorizontal, TimerReset } from "lucide-react";
-import type { ChatMessage as ChatMessageType } from "../../types";
+import type { ChatMessage as ChatMessageType, VoiceStatus } from "../../types";
 import { ChatMessage } from "./ChatMessage";
+import { VoiceRecorder } from "./VoiceRecorder";
 
 interface ConversationPanelProps {
   currentStage: string;
@@ -12,8 +13,13 @@ interface ConversationPanelProps {
   isDisabled: boolean;
   error?: string;
   streamNotice?: string;
+  voiceStatus: VoiceStatus;
+  voiceTranscript?: string;
+  voiceError?: string;
+  isVoiceDisabled: boolean;
   onDraftChange: (value: string) => void;
   onSend: () => void;
+  onVoiceToggle: () => void;
 }
 
 export function ConversationPanel({
@@ -25,8 +31,13 @@ export function ConversationPanel({
   isDisabled,
   error,
   streamNotice,
+  voiceStatus,
+  voiceTranscript,
+  voiceError,
+  isVoiceDisabled,
   onDraftChange,
   onSend,
+  onVoiceToggle,
 }: ConversationPanelProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -103,6 +114,13 @@ export function ConversationPanel({
           </button>
         </div>
       </form>
+      <VoiceRecorder
+        status={voiceStatus}
+        transcript={voiceTranscript}
+        error={voiceError}
+        isDisabled={isVoiceDisabled}
+        onToggle={onVoiceToggle}
+      />
     </section>
   );
 }
