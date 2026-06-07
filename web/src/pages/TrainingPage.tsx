@@ -10,12 +10,50 @@ import { RealtimeFeedbackPanel } from "../components/training/RealtimeFeedbackPa
 import { TaskPanel } from "../components/training/TaskPanel";
 import { TrainingHeader } from "../components/training/TrainingHeader";
 import { buttonClasses } from "../components/ui/Button";
-import type { TrainingSession, VoiceStatus } from "../types";
+import type { ChatMessage, TrainingSession, VoiceStatus } from "../types";
 
 function parseRouteSessionId(value: string | undefined) {
   const numeric = Number(value);
 
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+}
+
+const streamingAIMessageId = -1;
+
+function appendAIStreamDelta(session: TrainingSession, event: Extract<SessionStreamEvent, { type: "ai_message_delta" }>): TrainingSession {
+  if (!event.content) {
+    return session;
+  }
+
+  const targetId = event.message_id && event.message_id > 0 ? event.message_id : streamingAIMessageId;
+  const existingIndex = session.messages.findIndex((message) => message.id === targetId || message.id === streamingAIMessageId);
+  const messages = [...session.messages];
+  if (existingIndex >= 0) {
+    const existing = messages[existingIndex];
+    messages[existingIndex] = {
+      ...existing,
+      id: targetId,
+      content: `${existing.content}${event.content}`,
+      isTyping: true,
+    };
+
+    return { ...session, messages };
+  }
+
+  const streamingMessage: ChatMessage = {
+    id: targetId,
+    role: "ai",
+    speaker: session.scenario.aiRole || "AI 教练",
+    content: event.content,
+    stage: session.currentStage,
+    createdAt: new Date().toISOString(),
+    isTyping: true,
+  };
+
+  return {
+    ...session,
+    messages: [...messages, streamingMessage],
+  };
 }
 
 export function TrainingPage() {
@@ -84,6 +122,7 @@ export function TrainingPage() {
     function handleStreamEvent(event: SessionStreamEvent) {
       if (event.type === "ai_message_delta") {
         setStreamNotice("正在接收 AI 回复片段");
+        setSession((current) => (current ? appendAIStreamDelta(current, event) : current));
         return;
       }
       if (event.type === "ai_message_done" || event.type === "correction_done" || event.type === "score_updated") {
