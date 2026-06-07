@@ -2,7 +2,10 @@ package router
 
 import (
 	"context"
+	"log"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -11,6 +14,7 @@ import (
 	"speakmate/internal/handler"
 	"speakmate/internal/infra/database"
 	"speakmate/internal/infra/llm"
+	"speakmate/internal/middleware"
 	"speakmate/internal/repository"
 	"speakmate/internal/service"
 	"speakmate/internal/stream"
@@ -32,14 +36,20 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 	if len(configs) > 0 {
 		cfg = configs[0]
 	}
-	if err := cfg.Storage.Validate(); err != nil {
+	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
 	gin.SetMode(gin.ReleaseMode)
 
 	engine := gin.New()
-	engine.Use(gin.Recovery())
+	logger := log.New(os.Stdout, "", log.LstdFlags)
+	engine.Use(
+		middleware.Recover(logger),
+		middleware.RequestLogger(logger),
+		middleware.CORS(cfg.CORS),
+		middleware.RequestTimeout(time.Duration(cfg.Server.RequestTimeoutSeconds)*time.Second),
+	)
 	engine.GET("/health", handler.Health)
 
 	scenarioRepo, sessionRepo, feedbackRepo, reportRepo, err := newRepositories(cfg)

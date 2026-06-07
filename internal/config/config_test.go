@@ -47,6 +47,33 @@ func TestLoadDefaultsToPort8080(t *testing.T) {
 	if !cfg.Feedback.FailOpen {
 		t.Fatal("Feedback.FailOpen = false, want true by default")
 	}
+	if cfg.ExternalServiceTimeoutSeconds != 30 {
+		t.Fatalf("ExternalServiceTimeoutSeconds = %d, want 30", cfg.ExternalServiceTimeoutSeconds)
+	}
+	if cfg.Server.RequestTimeoutSeconds != 30 {
+		t.Fatalf("Server.RequestTimeoutSeconds = %d, want 30", cfg.Server.RequestTimeoutSeconds)
+	}
+	if len(cfg.CORS.AllowedOrigins) != 2 {
+		t.Fatalf("CORS.AllowedOrigins length = %d, want 2", len(cfg.CORS.AllowedOrigins))
+	}
+	if cfg.CORS.AllowedOrigins[0] != "http://localhost:5173" {
+		t.Fatalf("CORS.AllowedOrigins[0] = %q, want http://localhost:5173", cfg.CORS.AllowedOrigins[0])
+	}
+	if cfg.Redis.Enabled {
+		t.Fatal("Redis.Enabled = true, want false by default")
+	}
+	if cfg.Redis.Addr != "127.0.0.1:6379" {
+		t.Fatalf("Redis.Addr = %q, want 127.0.0.1:6379", cfg.Redis.Addr)
+	}
+	if cfg.ASR.Provider != "mock" {
+		t.Fatalf("ASR.Provider = %q, want mock", cfg.ASR.Provider)
+	}
+	if cfg.ASR.TimeoutSeconds != 30 {
+		t.Fatalf("ASR.TimeoutSeconds = %d, want 30", cfg.ASR.TimeoutSeconds)
+	}
+	if !cfg.ASR.UseMock {
+		t.Fatal("ASR.UseMock = false, want true by default")
+	}
 	if cfg.Storage.Mode != StorageModeMemory {
 		t.Fatalf("Storage.Mode = %q, want %q", cfg.Storage.Mode, StorageModeMemory)
 	}
@@ -55,6 +82,9 @@ func TestLoadDefaultsToPort8080(t *testing.T) {
 	}
 	if err := cfg.Storage.Validate(); err != nil {
 		t.Fatalf("Storage.Validate returned error for default memory mode: %v", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Config.Validate returned error for defaults: %v", err)
 	}
 }
 
@@ -123,6 +153,102 @@ func TestLoadReadsStorageEnvironment(t *testing.T) {
 	}
 	if err := cfg.Storage.Validate(); err != nil {
 		t.Fatalf("Storage.Validate returned error for valid mysql mode: %v", err)
+	}
+}
+
+func TestLoadReadsInfrastructureEnvironment(t *testing.T) {
+	clearLLMEnv(t)
+	clearStorageEnv(t)
+	clearInfrastructureEnv(t)
+	t.Setenv("REQUEST_TIMEOUT_SECONDS", "12")
+	t.Setenv("EXTERNAL_SERVICE_TIMEOUT_SECONDS", "19")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173, https://app.example.com ")
+	t.Setenv("CORS_ALLOWED_METHODS", "GET,POST,OPTIONS")
+	t.Setenv("CORS_ALLOWED_HEADERS", "Content-Type,Authorization,X-Request-ID")
+	t.Setenv("CORS_ALLOW_CREDENTIALS", "true")
+	t.Setenv("REDIS_ENABLED", "true")
+	t.Setenv("REDIS_ADDR", "redis:6379")
+	t.Setenv("REDIS_PASSWORD", "redis-secret")
+	t.Setenv("REDIS_DB", "2")
+	t.Setenv("REDIS_CONNECT_TIMEOUT_SECONDS", "4")
+	t.Setenv("ASR_PROVIDER", "mock")
+	t.Setenv("ASR_BASE_URL", "https://asr.example.com/v1")
+	t.Setenv("ASR_API_KEY", "asr-test-key")
+	t.Setenv("ASR_MODEL", "asr-test-model")
+	t.Setenv("ASR_TIMEOUT_SECONDS", "7")
+	t.Setenv("ASR_USE_MOCK", "false")
+
+	cfg := Load()
+
+	if cfg.Server.RequestTimeoutSeconds != 12 {
+		t.Fatalf("Server.RequestTimeoutSeconds = %d, want 12", cfg.Server.RequestTimeoutSeconds)
+	}
+	if cfg.ExternalServiceTimeoutSeconds != 19 {
+		t.Fatalf("ExternalServiceTimeoutSeconds = %d, want 19", cfg.ExternalServiceTimeoutSeconds)
+	}
+	if cfg.CORS.AllowedOrigins[1] != "https://app.example.com" {
+		t.Fatalf("CORS.AllowedOrigins[1] = %q, want https://app.example.com", cfg.CORS.AllowedOrigins[1])
+	}
+	if !cfg.CORS.AllowCredentials {
+		t.Fatal("CORS.AllowCredentials = false, want true")
+	}
+	if cfg.Redis.Addr != "redis:6379" {
+		t.Fatalf("Redis.Addr = %q, want redis:6379", cfg.Redis.Addr)
+	}
+	if cfg.Redis.Password != "redis-secret" {
+		t.Fatalf("Redis.Password = %q, want redis-secret", cfg.Redis.Password)
+	}
+	if cfg.Redis.DB != 2 {
+		t.Fatalf("Redis.DB = %d, want 2", cfg.Redis.DB)
+	}
+	if cfg.Redis.ConnectTimeoutSeconds != 4 {
+		t.Fatalf("Redis.ConnectTimeoutSeconds = %d, want 4", cfg.Redis.ConnectTimeoutSeconds)
+	}
+	if cfg.ASR.BaseURL != "https://asr.example.com/v1" {
+		t.Fatalf("ASR.BaseURL = %q, want https://asr.example.com/v1", cfg.ASR.BaseURL)
+	}
+	if cfg.ASR.APIKey != "asr-test-key" {
+		t.Fatalf("ASR.APIKey = %q, want asr-test-key", cfg.ASR.APIKey)
+	}
+	if cfg.ASR.Model != "asr-test-model" {
+		t.Fatalf("ASR.Model = %q, want asr-test-model", cfg.ASR.Model)
+	}
+	if cfg.ASR.TimeoutSeconds != 7 {
+		t.Fatalf("ASR.TimeoutSeconds = %d, want 7", cfg.ASR.TimeoutSeconds)
+	}
+	if cfg.ASR.UseMock {
+		t.Fatal("ASR.UseMock = true, want false")
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Config.Validate returned error for valid infrastructure env: %v", err)
+	}
+}
+
+func TestExternalServiceTimeoutFeedsLLMAndASRDefaults(t *testing.T) {
+	clearLLMEnv(t)
+	clearInfrastructureEnv(t)
+	t.Setenv("EXTERNAL_SERVICE_TIMEOUT_SECONDS", "11")
+
+	cfg := Load()
+
+	if cfg.LLM.TimeoutSeconds != 11 {
+		t.Fatalf("LLM.TimeoutSeconds = %d, want external timeout 11", cfg.LLM.TimeoutSeconds)
+	}
+	if cfg.ASR.TimeoutSeconds != 11 {
+		t.Fatalf("ASR.TimeoutSeconds = %d, want external timeout 11", cfg.ASR.TimeoutSeconds)
+	}
+}
+
+func TestConfigValidateRejectsEnabledRedisWithoutAddress(t *testing.T) {
+	cfg := Config{
+		Storage: StorageConfig{Mode: StorageModeMemory},
+		Redis:   RedisConfig{Enabled: true},
+	}
+
+	err := cfg.Validate()
+
+	if err == nil {
+		t.Fatal("Validate returned nil, want missing Redis address error")
 	}
 }
 
@@ -197,4 +323,26 @@ func clearStorageEnv(t *testing.T) {
 
 	t.Setenv("STORAGE_MODE", "")
 	t.Setenv("MYSQL_DSN", "")
+}
+
+func clearInfrastructureEnv(t *testing.T) {
+	t.Helper()
+
+	t.Setenv("REQUEST_TIMEOUT_SECONDS", "")
+	t.Setenv("EXTERNAL_SERVICE_TIMEOUT_SECONDS", "")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "")
+	t.Setenv("CORS_ALLOWED_METHODS", "")
+	t.Setenv("CORS_ALLOWED_HEADERS", "")
+	t.Setenv("CORS_ALLOW_CREDENTIALS", "")
+	t.Setenv("REDIS_ENABLED", "")
+	t.Setenv("REDIS_ADDR", "")
+	t.Setenv("REDIS_PASSWORD", "")
+	t.Setenv("REDIS_DB", "")
+	t.Setenv("REDIS_CONNECT_TIMEOUT_SECONDS", "")
+	t.Setenv("ASR_PROVIDER", "")
+	t.Setenv("ASR_BASE_URL", "")
+	t.Setenv("ASR_API_KEY", "")
+	t.Setenv("ASR_MODEL", "")
+	t.Setenv("ASR_TIMEOUT_SECONDS", "")
+	t.Setenv("ASR_USE_MOCK", "")
 }
