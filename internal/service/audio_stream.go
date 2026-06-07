@@ -12,9 +12,10 @@ const defaultAudioStreamContentType = "audio/webm"
 
 // AudioStreamService 封装 WebSocket 音频分片、Mock 转写和消息链路复用。
 type AudioStreamService struct {
-	messageSender AudioMessageSender
-	asr           agent.ASRClient
-	maxBytes      int
+	messageSender      AudioMessageSender
+	asr                agent.ASRClient
+	maxBytes           int
+	transcribePartials bool
 }
 
 type AudioStreamOption func(*AudioStreamService)
@@ -28,12 +29,20 @@ func WithMaxAudioStreamBytes(maxBytes int) AudioStreamOption {
 	}
 }
 
+// WithAudioStreamPartialTranscription 控制 AppendChunk 是否调用 ASR 生成 partial。
+func WithAudioStreamPartialTranscription(enabled bool) AudioStreamOption {
+	return func(service *AudioStreamService) {
+		service.transcribePartials = enabled
+	}
+}
+
 // NewAudioStreamService 创建实时音频流服务。
 func NewAudioStreamService(messageSender AudioMessageSender, asr agent.ASRClient, opts ...AudioStreamOption) *AudioStreamService {
 	service := &AudioStreamService{
-		messageSender: messageSender,
-		asr:           asr,
-		maxBytes:      MaxAudioUploadBytes,
+		messageSender:      messageSender,
+		asr:                asr,
+		maxBytes:           MaxAudioUploadBytes,
+		transcribePartials: true,
 	}
 	if service.asr == nil {
 		service.asr = agent.NewMockASRClient()
@@ -116,6 +125,13 @@ func (s *AudioStream) AppendChunk(input AudioStreamChunkInput) (AudioStreamParti
 	sequence := input.Sequence
 	if sequence <= 0 {
 		sequence = s.chunkCount
+	}
+
+	if !s.service.transcribePartials {
+		return AudioStreamPartialResult{
+			Transcript: "",
+			Sequence:   sequence,
+		}, nil
 	}
 
 	output, err := s.service.transcribe(input.Context, s.audio, "stream-partial", s.contentType)

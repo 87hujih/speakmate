@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"speakmate/internal/agent"
 	"speakmate/internal/config"
 	"speakmate/internal/handler"
+	infraasr "speakmate/internal/infra/asr"
 	"speakmate/internal/infra/database"
 	"speakmate/internal/infra/llm"
 	"speakmate/internal/middleware"
@@ -71,9 +73,17 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 	)
 	sessionHandler := handler.NewSessionHandler(sessionService)
 	messageHandler := handler.NewMessageHandler(sessionService)
-	audioService := service.NewAudioService(sessionService, NewASRClient(cfg))
+	asrClient, err := NewASRClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	audioService := service.NewAudioService(sessionService, asrClient)
 	audioHandler := handler.NewAudioHandler(audioService)
-	audioStreamService := service.NewAudioStreamService(sessionService, NewASRClient(cfg))
+	audioStreamService := service.NewAudioStreamService(
+		sessionService,
+		asrClient,
+		service.WithAudioStreamPartialTranscription(audioStreamPartialTranscriptionEnabled(cfg)),
+	)
 	audioWebSocketHandler := handler.NewAudioWebSocketHandler(audioStreamService)
 	feedbackService := service.NewFeedbackService(feedbackRepo)
 	feedbackHandler := handler.NewFeedbackHandler(feedbackService)
@@ -233,6 +243,17 @@ func NewSummaryAgent(cfg config.Config) agent.SummaryAgent {
 	return agent.NewLLMSummaryAgent(client, opts...)
 }
 
-func NewASRClient(cfg config.Config) agent.ASRClient {
-	return agent.NewMockASRClient()
+func NewASRClient(cfg config.Config) (agent.ASRClient, error) {
+	if cfg.ASR.UseMock || strings.EqualFold(cfg.ASR.Provider, "mock") {
+		return agent.NewMockASRClient(), nil
+	}
+	if strings.EqualFold(cfg.ASR.Provider, "tencent") {
+		return infraasr.NewTencentFlashClient(cfg.ASR)
+	}
+
+	return nil, fmt.Errorf("unsupported asr provider: %s", cfg.ASR.Provider)
+}
+
+func audioStreamPartialTranscriptionEnabled(cfg config.Config) bool {
+	return cfg.ASR.UseMock || strings.EqualFold(cfg.ASR.Provider, "mock")
 }

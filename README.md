@@ -4,7 +4,7 @@
 
 SpeakMate AI 不是一个开放闲聊机器人。它更像一个有训练目标的英语陪练教练：先给用户一个具体场景，再通过 AI 追问推动对话，最后把用户的表达问题整理成可执行的练习建议。
 
-本项目面向七牛云 XEngineer 暑期实训营「AI 英语口语陪练」议题设计。当前仓库已完成 Go + Gin 后端基础骨架、正式 Vite + React + TypeScript 前端应用、文本训练闭环、单段录音上传和实时音频 WebSocket 分片入口。完整技术方案见 [docs/project-blueprint.md](docs/project-blueprint.md)。
+本项目面向七牛云 XEngineer 暑期实训营「AI 英语口语陪练」议题设计。当前仓库已完成 Go + Gin 后端基础骨架、正式 Vite + React + TypeScript 前端应用、文本训练闭环、单段录音上传、实时音频 WebSocket 分片入口和可配置腾讯云 ASR Provider。完整技术方案见 [docs/project-blueprint.md](docs/project-blueprint.md)。
 
 ## 项目背景
 
@@ -122,7 +122,7 @@ Browser
 |---|---|---|
 | Gin 服务骨架 | 已完成 | `cmd/server` 启动 HTTP 服务 |
 | 健康检查接口 | 已完成 | `GET /health` 返回统一 JSON 响应 |
-| 配置加载 | 已完成 | 支持 `APP_PORT`、LLM、反馈 Mock 和存储模式环境变量，默认端口 `8080` |
+| 配置加载 | 已完成 | 支持 `APP_PORT`、LLM、ASR、反馈 Mock 和存储模式环境变量，默认端口 `8080` |
 | 统一响应结构 | 已完成 | 成功响应格式为 `{ code, message, data }` |
 | 前端原型 | 已完成 | `web/preview.html` 作为本地静态原型参考 |
 | 正式前端应用 | 已完成（第一版） | `web/` 已接入 Vite + React + TypeScript，覆盖场景选择、文本训练、反馈评分、报告和历史记录 |
@@ -135,7 +135,7 @@ Browser
 | SSE 流式事件 | 已完成 | 支持 `GET /api/v1/sessions/:id/stream`，真实 LLM 模式推送模型 delta，Mock/fallback 模式推送本地 fake delta，并继续推送纠错、评分、报告和错误事件，见 [docs/api文档/sse-api.md](docs/api文档/sse-api.md) |
 | Conversation Agent | 已接入 | 默认使用 Mock fake streaming；配置 API Key 且关闭 Mock 后使用 OpenAI-compatible LLM streaming，按 `LLM_FALLBACK_TO_MOCK` 决定失败时是否降级 Mock |
 | AI 纠错、评分与总结 | 已完成（第一版） | Correction / Scoring / Summary 模型、Mock/LLM Agent、内存 Feedback/Report Repository、fail-open 降级和查询 API 已接入 |
-| 语音能力 | 已完成（Mock 第一版） | 训练页支持浏览器录音、WebSocket 分片实时 partial transcript 和单段上传 fallback，后端使用 Mock ASR 转写后复用消息训练链路，见 [docs/api文档/audio-api.md](docs/api文档/audio-api.md) 和 [docs/api文档/audio-websocket-api.md](docs/api文档/audio-websocket-api.md) |
+| 语音能力 | 已完成（Mock / 腾讯云 ASR） | 训练页支持浏览器录音、WebSocket 分片和单段上传 fallback；后端可使用 Mock ASR 或腾讯云 `FlashRecognizer` 生成 final transcript 后复用消息训练链路，见 [docs/api文档/audio-api.md](docs/api文档/audio-api.md) 和 [docs/api文档/audio-websocket-api.md](docs/api文档/audio-websocket-api.md) |
 
 ## 技术栈
 
@@ -191,8 +191,9 @@ curl http://localhost:8080/health
 | Redis 预留 | `REDIS_ENABLED`、`REDIS_ADDR`、`REDIS_PASSWORD`、`REDIS_DB` |
 | 外部服务超时 | `EXTERNAL_SERVICE_TIMEOUT_SECONDS`，可被 `LLM_TIMEOUT_SECONDS` / `ASR_TIMEOUT_SECONDS` 覆盖 |
 | Mock / fallback | `LLM_USE_MOCK`、`LLM_FALLBACK_TO_MOCK`、`CORRECTION_USE_MOCK`、`SCORING_USE_MOCK`、`SUMMARY_USE_MOCK`、`ASR_USE_MOCK` |
+| 腾讯云 ASR | `ASR_PROVIDER=tencent`、`TENCENT_ASR_APP_ID`、`TENCENT_ASR_SECRET_ID`、`TENCENT_ASR_SECRET_KEY`、`TENCENT_ASR_ENGINE_TYPE` |
 
-本分支实现真实 LLM streaming。真实 ASR Provider 和 Redis 会话状态存储仍不在本分支范围内；Redis 只完成配置和 Compose 服务预留，ASR 默认仍是 Mock。
+本分支支持真实 LLM streaming 和腾讯云 ASR 文件识别极速版。Redis 只完成配置和 Compose 服务预留，尚未用于会话状态存储。
 
 ### 前端启动
 
@@ -276,7 +277,7 @@ docker compose down -v
 
 部署时建议保持前端 `VITE_API_BASE_URL=/api/v1`，由 Nginx 反向代理到后端；如果前后端分域部署，需要把前端域名加入 `CORS_ALLOWED_ORIGINS`。
 
-### LLM Streaming / ASR Mock
+### LLM Streaming / ASR Provider
 
 自动测试和默认本地运行不请求真实模型：
 
@@ -300,7 +301,21 @@ LLM_MODEL=your-model
 LLM_FALLBACK_TO_MOCK=true
 ```
 
-`GET /api/v1/sessions/:id/stream` 会推送真实模型 delta；如果 `LLM_FALLBACK_TO_MOCK=true` 且上游失败，会降级为本地 fake streaming，保证演示链路继续可用。设置 `LLM_FALLBACK_TO_MOCK=false` 时，上游 streaming 失败会通过 SSE `error` 事件和普通 JSON 错误返回。Correction / Scoring / Summary 仍通过各自 Mock 开关控制，真实 ASR Provider 只预留配置项，后端仍使用 Mock ASR。
+`GET /api/v1/sessions/:id/stream` 会推送真实模型 delta；如果 `LLM_FALLBACK_TO_MOCK=true` 且上游失败，会降级为本地 fake streaming，保证演示链路继续可用。设置 `LLM_FALLBACK_TO_MOCK=false` 时，上游 streaming 失败会通过 SSE `error` 事件和普通 JSON 错误返回。Correction / Scoring / Summary 仍通过各自 Mock 开关控制。
+
+开启腾讯云 ASR 时需要配置完整密钥，不会在配置缺失时静默降级到 Mock：
+
+```bash
+ASR_USE_MOCK=false
+ASR_PROVIDER=tencent
+TENCENT_ASR_APP_ID=your-app-id
+TENCENT_ASR_SECRET_ID=your-secret-id
+TENCENT_ASR_SECRET_KEY=your-secret-key
+TENCENT_ASR_ENGINE_TYPE=16k_en
+TENCENT_ASR_VOICE_FORMAT=ogg-opus
+```
+
+腾讯云模式使用 `FlashRecognizer` 识别完整音频，支持单段上传和 WebSocket `end` 后的 final transcript。当前不实现腾讯云实时 partial transcript；WebSocket 分片阶段只缓存音频并返回 partial 占位。`webm` 容器当前不支持真实腾讯云识别，建议使用 `ogg-opus`、`m4a/mp4` 或 `wav`，后续可以通过后端转码兼容只支持 `webm` 的浏览器。真实密钥只应放在本地环境变量或部署密钥系统中，不要提交到 git。
 
 ### 前后端联调路径
 
@@ -343,6 +358,7 @@ speakmate/
 │   ├── handler/             # HTTP Handler
 │   ├── infra/database/      # MySQL 连接初始化
 │   ├── infra/llm/           # OpenAI-compatible LLM HTTP Client
+│   ├── infra/asr/           # Tencent Cloud ASR FlashRecognizer adapter
 │   ├── middleware/          # CORS、请求日志、recover、请求超时
 │   ├── repository/          # memory/mysql 仓库实现
 │   ├── response/            # 统一响应结构
@@ -365,6 +381,7 @@ speakmate/
 ## 后续规划
 
 - 扩展更多 LLM Provider，并细化真实模型联调配置；
-- 接入真实 ASR Provider，并将 Mock partial transcript 升级为真实流式转写；
+- 评估腾讯云 `SpeechRecognizer` 实现真实 partial transcript；
+- 增加后端转码以兼容只支持 `webm/opus` 的浏览器；
 - 补充迁移执行工具和部署环境数据库初始化流程；
 - 使用 Redis 管理训练过程中的上下文和临时状态。

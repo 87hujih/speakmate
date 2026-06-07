@@ -57,6 +57,36 @@ function appendAIStreamDelta(session: TrainingSession, event: Extract<SessionStr
   };
 }
 
+function voiceUploadErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    if (error.code === 7004) {
+      return "当前音频格式不支持，请换用支持 ogg、mp4 或 wav 录音的浏览器。";
+    }
+    if (error.code === 7005) {
+      return "语音识别失败，请检查浏览器录音格式或后端 ASR 配置后重试。";
+    }
+    if (error.code === 7006) {
+      return "语音识别没有返回有效文本，请重新录制。";
+    }
+  }
+
+  return error instanceof Error ? error.message : "音频上传失败，请稍后重试。";
+}
+
+function voiceSocketErrorMessage(event: Extract<AudioWebSocketEvent, { type: "error" }>) {
+  if (event.code === "audio_file_type_unsupported") {
+    return "当前录音格式不支持，请换用支持 ogg、mp4 或 wav 录音的浏览器。";
+  }
+  if (event.code === "asr_client_failed") {
+    return "语音识别失败，请检查浏览器录音格式或后端 ASR 配置后重试。";
+  }
+  if (event.code === "audio_transcript_required") {
+    return "语音识别没有返回有效文本，请重新录制。";
+  }
+
+  return event.message;
+}
+
 export function TrainingPage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -228,7 +258,7 @@ export function TrainingPage() {
         setVoiceError("本次训练已结束，不能继续发送语音。");
         void reload();
       } else {
-        setVoiceError(error instanceof Error ? error.message : "音频上传失败，请稍后重试。");
+        setVoiceError(voiceUploadErrorMessage(error));
       }
     } finally {
       setIsSending(false);
@@ -264,7 +294,7 @@ export function TrainingPage() {
     if (event.type === "error") {
       setIsSending(false);
       setVoiceStatus("idle");
-      setVoiceError(event.message);
+      setVoiceError(voiceSocketErrorMessage(event));
     }
   }
 

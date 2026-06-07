@@ -24,12 +24,12 @@ export const voiceStatusContent: Record<
   },
   recording: {
     title: "正在听你说",
-    description: "保持英文回答连贯，结束后进入语音识别。",
+    description: "保持英文回答连贯，结束后进行整段识别。",
     action: "结束",
   },
   recognizing: {
     title: "正在识别",
-    description: "ASR 正在转写回答，并接入本轮训练反馈。",
+    description: "ASR 正在处理整段回答，完成后会接入本轮训练反馈。",
     action: "等待",
   },
   thinking: {

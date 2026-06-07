@@ -17,6 +17,10 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"speakmate/internal/agent"
+	"speakmate/internal/config"
+	infraasr "speakmate/internal/infra/asr"
 )
 
 func TestMain(m *testing.M) {
@@ -56,6 +60,80 @@ func TestHealthEndpointReturnsOK(t *testing.T) {
 	}
 	if body.Data.Status != "ok" {
 		t.Fatalf("data.status = %q, want %q", body.Data.Status, "ok")
+	}
+}
+
+func TestNewASRClientUsesMockWhenMockEnabled(t *testing.T) {
+	client, err := NewASRClient(config.Config{
+		ASR: config.ASRConfig{
+			Provider: "tencent",
+			UseMock:  true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewASRClient returned error: %v", err)
+	}
+
+	if _, ok := client.(*agent.MockASRClient); !ok {
+		t.Fatalf("client type = %T, want *agent.MockASRClient", client)
+	}
+}
+
+func TestNewASRClientRejectsTencentMissingRequiredConfig(t *testing.T) {
+	_, err := NewASRClient(config.Config{
+		ASR: config.ASRConfig{
+			Provider: "tencent",
+			UseMock:  false,
+		},
+	})
+
+	if !errors.Is(err, infraasr.ErrTencentASRConfigRequired) {
+		t.Fatalf("error = %v, want ErrTencentASRConfigRequired", err)
+	}
+}
+
+func TestNewASRClientBuildsTencentClientWhenConfigComplete(t *testing.T) {
+	client, err := NewASRClient(config.Config{
+		ASR: validRouterTencentASRConfig(),
+	})
+	if err != nil {
+		t.Fatalf("NewASRClient returned error: %v", err)
+	}
+
+	if _, ok := client.(*infraasr.TencentFlashClient); !ok {
+		t.Fatalf("client type = %T, want *infraasr.TencentFlashClient", client)
+	}
+}
+
+func TestAudioStreamPartialTranscriptionEnabledOnlyForMockASR(t *testing.T) {
+	if !audioStreamPartialTranscriptionEnabled(config.Config{
+		ASR: config.ASRConfig{Provider: "tencent", UseMock: true},
+	}) {
+		t.Fatal("audioStreamPartialTranscriptionEnabled() = false, want true when ASR mock is enabled")
+	}
+	if !audioStreamPartialTranscriptionEnabled(config.Config{
+		ASR: config.ASRConfig{Provider: "mock", UseMock: false},
+	}) {
+		t.Fatal("audioStreamPartialTranscriptionEnabled() = false, want true for mock provider")
+	}
+	if audioStreamPartialTranscriptionEnabled(config.Config{
+		ASR: validRouterTencentASRConfig(),
+	}) {
+		t.Fatal("audioStreamPartialTranscriptionEnabled() = true, want false for real Tencent provider")
+	}
+}
+
+func TestNewWithErrorRejectsTencentASRConfigMissingRequiredFields(t *testing.T) {
+	_, err := NewWithError(config.Config{
+		Storage: config.StorageConfig{Mode: config.StorageModeMemory},
+		ASR: config.ASRConfig{
+			Provider: "tencent",
+			UseMock:  false,
+		},
+	})
+
+	if !errors.Is(err, infraasr.ErrTencentASRConfigRequired) {
+		t.Fatalf("NewWithError error = %v, want ErrTencentASRConfigRequired", err)
 	}
 }
 
@@ -1600,5 +1678,17 @@ func assertErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, httpStatu
 	}
 	if body.Message != message {
 		t.Fatalf("message = %q, want %q", body.Message, message)
+	}
+}
+
+func validRouterTencentASRConfig() config.ASRConfig {
+	return config.ASRConfig{
+		Provider:           "tencent",
+		UseMock:            false,
+		TencentAppID:       "1250000000",
+		TencentSecretID:    "secret-id",
+		TencentSecretKey:   "secret-key",
+		TencentEngineType:  "16k_en",
+		TencentVoiceFormat: "ogg-opus",
 	}
 }

@@ -184,6 +184,19 @@ func TestLoadReadsInfrastructureEnvironment(t *testing.T) {
 	t.Setenv("ASR_MODEL", "asr-test-model")
 	t.Setenv("ASR_TIMEOUT_SECONDS", "7")
 	t.Setenv("ASR_USE_MOCK", "false")
+	t.Setenv("TENCENT_ASR_APP_ID", "1250000000")
+	t.Setenv("TENCENT_ASR_SECRET_ID", "test-secret-id")
+	t.Setenv("TENCENT_ASR_SECRET_KEY", "test-secret-key")
+	t.Setenv("TENCENT_ASR_ENGINE_TYPE", "16k_en")
+	t.Setenv("TENCENT_ASR_VOICE_FORMAT", "ogg-opus")
+	t.Setenv("TENCENT_ASR_HOTWORD_ID", "hotword-id")
+	t.Setenv("TENCENT_ASR_HOTWORD_LIST", "cloud word")
+	t.Setenv("TENCENT_ASR_CUSTOMIZATION_ID", "custom-id")
+	t.Setenv("TENCENT_ASR_FILTER_DIRTY", "1")
+	t.Setenv("TENCENT_ASR_FILTER_MODAL", "1")
+	t.Setenv("TENCENT_ASR_FILTER_PUNC", "1")
+	t.Setenv("TENCENT_ASR_CONVERT_NUM_MODE", "0")
+	t.Setenv("TENCENT_ASR_WORD_INFO", "2")
 
 	cfg := Load()
 
@@ -226,8 +239,80 @@ func TestLoadReadsInfrastructureEnvironment(t *testing.T) {
 	if cfg.ASR.UseMock {
 		t.Fatal("ASR.UseMock = true, want false")
 	}
+	if cfg.ASR.TencentAppID != "1250000000" {
+		t.Fatalf("ASR.TencentAppID = %q, want configured app id", cfg.ASR.TencentAppID)
+	}
+	if cfg.ASR.TencentSecretID != "test-secret-id" {
+		t.Fatalf("ASR.TencentSecretID = %q, want configured secret id", cfg.ASR.TencentSecretID)
+	}
+	if cfg.ASR.TencentSecretKey != "test-secret-key" {
+		t.Fatalf("ASR.TencentSecretKey = %q, want configured secret key", cfg.ASR.TencentSecretKey)
+	}
+	if cfg.ASR.TencentEngineType != "16k_en" {
+		t.Fatalf("ASR.TencentEngineType = %q, want 16k_en", cfg.ASR.TencentEngineType)
+	}
+	if cfg.ASR.TencentVoiceFormat != "ogg-opus" {
+		t.Fatalf("ASR.TencentVoiceFormat = %q, want ogg-opus", cfg.ASR.TencentVoiceFormat)
+	}
+	if cfg.ASR.TencentHotwordID != "hotword-id" {
+		t.Fatalf("ASR.TencentHotwordID = %q, want hotword-id", cfg.ASR.TencentHotwordID)
+	}
+	if cfg.ASR.TencentHotwordList != "cloud word" {
+		t.Fatalf("ASR.TencentHotwordList = %q, want cloud word", cfg.ASR.TencentHotwordList)
+	}
+	if cfg.ASR.TencentCustomizationID != "custom-id" {
+		t.Fatalf("ASR.TencentCustomizationID = %q, want custom-id", cfg.ASR.TencentCustomizationID)
+	}
+	if cfg.ASR.TencentFilterDirty != 1 {
+		t.Fatalf("ASR.TencentFilterDirty = %d, want 1", cfg.ASR.TencentFilterDirty)
+	}
+	if cfg.ASR.TencentFilterModal != 1 {
+		t.Fatalf("ASR.TencentFilterModal = %d, want 1", cfg.ASR.TencentFilterModal)
+	}
+	if cfg.ASR.TencentFilterPunc != 1 {
+		t.Fatalf("ASR.TencentFilterPunc = %d, want 1", cfg.ASR.TencentFilterPunc)
+	}
+	if cfg.ASR.TencentConvertNumMode != 0 {
+		t.Fatalf("ASR.TencentConvertNumMode = %d, want 0", cfg.ASR.TencentConvertNumMode)
+	}
+	if cfg.ASR.TencentWordInfo != 2 {
+		t.Fatalf("ASR.TencentWordInfo = %d, want 2", cfg.ASR.TencentWordInfo)
+	}
+	if !cfg.ASR.HasTencentRequiredFields() {
+		t.Fatal("ASR.HasTencentRequiredFields() = false, want true")
+	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Config.Validate returned error for valid infrastructure env: %v", err)
+	}
+}
+
+func TestASRConfigHasTencentRequiredFields(t *testing.T) {
+	valid := ASRConfig{
+		TencentAppID:      "1250000000",
+		TencentSecretID:   "secret-id",
+		TencentSecretKey:  "secret-key",
+		TencentEngineType: "16k_en",
+	}
+	if !valid.HasTencentRequiredFields() {
+		t.Fatal("HasTencentRequiredFields() = false, want true for complete Tencent config")
+	}
+
+	tests := []struct {
+		name string
+		cfg  ASRConfig
+	}{
+		{name: "missing app id", cfg: ASRConfig{TencentSecretID: "secret-id", TencentSecretKey: "secret-key", TencentEngineType: "16k_en"}},
+		{name: "missing secret id", cfg: ASRConfig{TencentAppID: "1250000000", TencentSecretKey: "secret-key", TencentEngineType: "16k_en"}},
+		{name: "missing secret key", cfg: ASRConfig{TencentAppID: "1250000000", TencentSecretID: "secret-id", TencentEngineType: "16k_en"}},
+		{name: "missing engine type", cfg: ASRConfig{TencentAppID: "1250000000", TencentSecretID: "secret-id", TencentSecretKey: "secret-key"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.cfg.HasTencentRequiredFields() {
+				t.Fatal("HasTencentRequiredFields() = true, want false")
+			}
+		})
 	}
 }
 
@@ -357,4 +442,17 @@ func clearInfrastructureEnv(t *testing.T) {
 	t.Setenv("ASR_MODEL", "")
 	t.Setenv("ASR_TIMEOUT_SECONDS", "")
 	t.Setenv("ASR_USE_MOCK", "")
+	t.Setenv("TENCENT_ASR_APP_ID", "")
+	t.Setenv("TENCENT_ASR_SECRET_ID", "")
+	t.Setenv("TENCENT_ASR_SECRET_KEY", "")
+	t.Setenv("TENCENT_ASR_ENGINE_TYPE", "")
+	t.Setenv("TENCENT_ASR_VOICE_FORMAT", "")
+	t.Setenv("TENCENT_ASR_HOTWORD_ID", "")
+	t.Setenv("TENCENT_ASR_HOTWORD_LIST", "")
+	t.Setenv("TENCENT_ASR_CUSTOMIZATION_ID", "")
+	t.Setenv("TENCENT_ASR_FILTER_DIRTY", "")
+	t.Setenv("TENCENT_ASR_FILTER_MODAL", "")
+	t.Setenv("TENCENT_ASR_FILTER_PUNC", "")
+	t.Setenv("TENCENT_ASR_CONVERT_NUM_MODE", "")
+	t.Setenv("TENCENT_ASR_WORD_INFO", "")
 }
