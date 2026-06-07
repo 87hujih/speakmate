@@ -52,6 +52,8 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 		middleware.Recover(logger),
 		middleware.RequestLogger(logger),
 		middleware.CORS(cfg.CORS),
+		middleware.RateLimit(cfg.Server.RateLimitRequests, time.Duration(cfg.Server.RateLimitWindowSeconds)*time.Second),
+		middleware.BodySizeLimit(cfg.Server.RequestBodyLimitBytes),
 		middleware.RequestTimeout(time.Duration(cfg.Server.RequestTimeoutSeconds)*time.Second),
 	)
 	engine.GET("/health", handler.Health)
@@ -91,7 +93,7 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 		service.WithAudioStreamPartialTranscription(audioStreamPartialTranscriptionEnabled(cfg)),
 		service.WithAudioStreamStateStore(stateStore),
 	)
-	audioWebSocketHandler := handler.NewAudioWebSocketHandler(audioStreamService)
+	audioWebSocketHandler := handler.NewAudioWebSocketHandler(audioStreamService, cfg.CORS)
 	feedbackService := service.NewFeedbackService(feedbackRepo)
 	feedbackHandler := handler.NewFeedbackHandler(feedbackService)
 	reportService := service.NewReportService(

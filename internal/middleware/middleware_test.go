@@ -15,6 +15,78 @@ import (
 	"speakmate/internal/config"
 )
 
+func TestBodySizeLimitRejectsOversizedKnownLengthRequests(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	engine := gin.New()
+	engine.Use(BodySizeLimit(8))
+	engine.POST("/api/v1/sessions", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(`{"too":"large"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status code = %d, want %d; body = %s", rec.Code, http.StatusRequestEntityTooLarge, rec.Body.String())
+	}
+
+	var body struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if body.Code != 9003 || body.Message != "request body too large" {
+		t.Fatalf("body = %#v, want code 9003 request body too large", body)
+	}
+}
+
+func TestRateLimitRejectsRequestsBeyondWindowLimit(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	engine := gin.New()
+	engine.Use(RateLimit(2, time.Minute))
+	engine.GET("/health", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		req.RemoteAddr = "192.0.2.10:1234"
+		rec := httptest.NewRecorder()
+
+		engine.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request %d status code = %d, want %d", i+1, rec.Code, http.StatusOK)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req.RemoteAddr = "192.0.2.10:1234"
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status code = %d, want %d; body = %s", rec.Code, http.StatusTooManyRequests, rec.Body.String())
+	}
+
+	var body struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if body.Code != 9004 || body.Message != "rate limit exceeded" {
+		t.Fatalf("body = %#v, want code 9004 rate limit exceeded", body)
+	}
+}
+
 func TestCORSMiddlewareAllowsConfiguredOriginAndPreflight(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()

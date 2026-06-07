@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
+	"speakmate/internal/config"
 	"speakmate/internal/model"
 	"speakmate/internal/service"
 	"speakmate/internal/state"
@@ -51,6 +53,43 @@ func TestAudioWebSocketHandlerRecordsErrorAndCloseConnectionState(t *testing.T) 
 		t.Fatalf("Close returned error: %v", err)
 	}
 	waitForConnectionStatus(t, stateStore, 7, "closed")
+}
+
+func TestAudioWebSocketHandlerChecksConfiguredOrigin(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	audioStreamService := service.NewAudioStreamService(nil, nil)
+	audioWSHandler := NewAudioWebSocketHandler(audioStreamService, config.CORSConfig{
+		AllowedOrigins: []string{"http://localhost:5173"},
+	})
+	engine := gin.New()
+	engine.GET("/api/v1/sessions/:id/audio/ws", audioWSHandler.Stream)
+	server := httptest.NewServer(engine)
+	defer server.Close()
+
+	allowedHeader := http.Header{}
+	allowedHeader.Set("Origin", "http://localhost:5173")
+	allowedConn, _, err := websocket.DefaultDialer.Dial(wsTestURL(server.URL, "/api/v1/sessions/7/audio/ws"), allowedHeader)
+	if err != nil {
+		t.Fatalf("allowed origin Dial returned error: %v", err)
+	}
+	if err := allowedConn.Close(); err != nil {
+		t.Fatalf("allowed conn Close returned error: %v", err)
+	}
+
+	blockedHeader := http.Header{}
+	blockedHeader.Set("Origin", "https://evil.example.com")
+	blockedConn, resp, err := websocket.DefaultDialer.Dial(wsTestURL(server.URL, "/api/v1/sessions/7/audio/ws"), blockedHeader)
+	if err == nil {
+		_ = blockedConn.Close()
+		t.Fatal("blocked origin Dial succeeded, want bad handshake")
+	}
+	if resp == nil || resp.StatusCode != http.StatusForbidden {
+		status := 0
+		if resp != nil {
+			status = resp.StatusCode
+		}
+		t.Fatalf("blocked origin status = %d, want %d", status, http.StatusForbidden)
+	}
 }
 
 func wsTestURL(serverURL string, path string) string {

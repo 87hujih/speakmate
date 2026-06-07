@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
+	"speakmate/internal/config"
 	"speakmate/internal/response"
 	"speakmate/internal/service"
 )
@@ -35,13 +37,18 @@ type AudioWebSocketHandler struct {
 }
 
 // NewAudioWebSocketHandler 创建实时音频 WebSocket Handler。
-func NewAudioWebSocketHandler(service *service.AudioStreamService) *AudioWebSocketHandler {
+func NewAudioWebSocketHandler(service *service.AudioStreamService, corsConfigs ...config.CORSConfig) *AudioWebSocketHandler {
+	checkOrigin := func(r *http.Request) bool {
+		return true
+	}
+	if len(corsConfigs) > 0 {
+		checkOrigin = webSocketOriginChecker(corsConfigs[0])
+	}
+
 	return &AudioWebSocketHandler{
 		service: service,
 		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool {
-				return true
-			},
+			CheckOrigin: checkOrigin,
 		},
 	}
 }
@@ -325,4 +332,32 @@ func contextFromGin(c *gin.Context) context.Context {
 	}
 
 	return c.Request.Context()
+}
+
+func webSocketOriginChecker(cfg config.CORSConfig) func(*http.Request) bool {
+	allowedOrigins := make(map[string]struct{}, len(cfg.AllowedOrigins))
+	allowWildcard := false
+	for _, origin := range cfg.AllowedOrigins {
+		origin = strings.TrimSpace(origin)
+		if origin == "" {
+			continue
+		}
+		if origin == "*" {
+			allowWildcard = true
+			continue
+		}
+		allowedOrigins[origin] = struct{}{}
+	}
+
+	return func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		if allowWildcard {
+			return true
+		}
+		_, ok := allowedOrigins[origin]
+		return ok
+	}
 }
