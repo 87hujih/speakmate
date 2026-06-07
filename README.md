@@ -129,9 +129,9 @@ Browser
 | 场景 API（Module 1） | 已完成 | 场景列表和详情接口，见 [docs/api文档/scenario-api-module1-api.md](docs/api文档/scenario-api-module1-api.md) |
 | 训练 Session API（Module 2） | 已完成 | 创建、查询、结束训练 Session，见 [docs/api文档/session-api-module2-api.md](docs/api文档/session-api-module2-api.md) |
 | 消息 API（Module 3） | 已完成 | 发送文本、AI 回复、轮次更新和消息历史查询，见 [docs/api文档/message-api-module3-api.md](docs/api文档/message-api-module3-api.md) |
-| 反馈查询 API（Module 4） | 部分完成 | 单条消息纠错、Session 纠错列表和当前评分查询，见 [docs/api文档/feedback-api-module4-api.md](docs/api文档/feedback-api-module4-api.md) |
+| 反馈 API（Module 4） | 已完成（第一版） | 消息发送后同步生成纠错/评分摘要，支持单条消息纠错、Session 纠错列表和当前评分查询，见 [docs/api文档/feedback-api.md](docs/api文档/feedback-api.md) |
 | Conversation Agent | 已接入 | 默认使用 Mock；配置 API Key 且关闭 Mock 后使用 OpenAI-compatible LLM，失败时降级 Mock |
-| AI 纠错与评分 | 部分完成 | Correction / Scoring 模型、Mock Agent、内存仓库、查询 Service 和查询 API 已接入，消息发送后自动生成反馈仍待接入 |
+| AI 纠错与评分 | 已完成（第一版） | Correction / Scoring 模型、Mock/LLM Agent、内存 Feedback Repository、fail-open 降级和反馈查询 API 已接入 |
 | 语音能力 | 规划中 | 浏览器录音、ASR、WebSocket 音频分片 |
 
 ## 技术栈
@@ -201,6 +201,34 @@ go run ./cmd/server
 
 如果 `LLM_USE_MOCK=true`，或 `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 不完整，服务会继续使用 Mock Agent。真实 LLM 调用失败时当前启动策略会降级为 Mock 回复，保证本地演示链路可用。
 
+### 反馈 Mock / LLM 配置
+
+纠错和评分默认同样使用 Mock，不依赖真实模型：
+
+```bash
+LLM_USE_MOCK=true
+CORRECTION_USE_MOCK=true
+SCORING_USE_MOCK=true
+FEEDBACK_FAIL_OPEN=true
+go run ./cmd/server
+```
+
+如果要让纠错和评分也使用真实 OpenAI-compatible LLM，需要关闭全局 Mock 和反馈 Mock：
+
+```bash
+LLM_PROVIDER=openai-compatible
+LLM_BASE_URL=https://api.example.com/v1
+LLM_API_KEY=replace-with-your-api-key
+LLM_MODEL=replace-with-your-model
+LLM_USE_MOCK=false
+CORRECTION_USE_MOCK=false
+SCORING_USE_MOCK=false
+FEEDBACK_FAIL_OPEN=true
+go run ./cmd/server
+```
+
+`FEEDBACK_FAIL_OPEN=true` 表示反馈生成失败时不阻断主对话链路；设置为 `false` 时，纠错或评分失败会让消息接口返回 `502 / 3004 feedback agent failed`。
+
 查看前端原型：
 
 ```text
@@ -233,7 +261,7 @@ speakmate/
 
 - 接入 LLM，完成基于场景的真实 AI 追问；
 - 增加 SSE 流式回复；
-- 实现表达纠错、评分和课后报告生成；
+- 实现课后报告生成，并把纠错和评分接入报告汇总；
 - 接入 ASR，支持浏览器录音和语音识别；
 - 使用 MySQL 保存训练记录和报告；
 - 使用 Redis 管理训练过程中的上下文和临时状态。

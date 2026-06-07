@@ -1,12 +1,12 @@
 # Module 3: Message API + Conversation Agent 接口文档
 
-本文档说明当前已实现的文本消息发送接口。前端可以用它完成训练页的核心对话闭环：
+本文档说明当前已实现的文本消息发送接口。前端可以用它完成训练页的核心对话闭环，并在发送成功后拿到本轮纠错和评分摘要：
 
 ```text
-创建 Session -> 发送用户文本 -> 收到 Conversation Agent 回复 -> 查询消息历史 -> 结束训练
+创建 Session -> 发送用户文本 -> 收到 Conversation Agent 回复 -> 生成纠错/评分摘要 -> 查询消息历史 -> 结束训练
 ```
 
-当前版本只支持文本消息和普通 JSON 响应。服务默认使用本地 `MockConversationAgent`，配置完整且 `LLM_USE_MOCK=false` 时可切换到 OpenAI-compatible LLM Agent。当前不做 SSE 流式输出、不处理语音。
+当前版本只支持文本消息和普通 JSON 响应。服务默认使用本地 Mock Agent，配置完整且关闭 Mock 时可切换到 OpenAI-compatible LLM Agent。当前不做 SSE 流式输出、不处理语音。
 
 ## 基本信息
 
@@ -28,8 +28,9 @@
 | 禁止发送状态 | `finished` Session 会返回 `409 / 2004` |
 | 轮次递增 | 每次成功发送用户消息并生成 AI 回复后，`turn_count + 1` |
 | 消息保存 | 每次成功发送会保存 2 条消息：用户消息和 AI 消息 |
+| 反馈生成 | 消息保存后同步调用 Correction Agent 和 Scoring Agent，并保存到内存 Feedback Repository |
 | 消息历史 | 调用 `GET /api/v1/sessions/:id` 可以看到已保存的消息列表 |
-| 数据持久性 | 当前使用内存存储，服务重启后 Session 和消息数据会丢失 |
+| 数据持久性 | 当前使用内存存储，服务重启后 Session、消息、纠错和评分数据会丢失 |
 
 ## Conversation Agent 规则
 
@@ -43,6 +44,17 @@
 
 阶段字段 `stage` 根据当前场景的 `stages` 和 `turn_count` 推进。轮次数超过阶段数量时使用最后一个阶段。
 
+## Feedback Agent 规则
+
+消息发送成功保存用户消息和 AI 消息后，会同步调用 `CorrectionAgent` 和 `ScoringAgent`：
+
+- 默认 `LLM_USE_MOCK=true`、`CORRECTION_USE_MOCK=true`、`SCORING_USE_MOCK=true`，纠错和评分都使用本地 Mock。
+- 配置完整且设置 `LLM_USE_MOCK=false`、`CORRECTION_USE_MOCK=false`、`SCORING_USE_MOCK=false` 后，纠错和评分使用 OpenAI-compatible LLM。
+- 默认 `FEEDBACK_FAIL_OPEN=true`，反馈失败不阻断主对话链路；响应中的反馈摘要可能为空或只有纠错摘要。
+- 设置 `FEEDBACK_FAIL_OPEN=false` 后，反馈失败会返回 `502 / 3004 feedback agent failed`。
+
+反馈查询接口见 [feedback-api.md](feedback-api.md)。
+
 ## 错误码
 
 | HTTP 状态码 | 业务错误码 | message | 说明 |
@@ -53,6 +65,7 @@
 | `404` | `2003` | `session not found` | Session 不存在 |
 | `409` | `2004` | `session already finished` | Session 已结束，不允许继续发送消息 |
 | `502` | `3003` | `conversation agent failed` | Conversation Agent 生成回复失败且没有可用降级 |
+| `502` | `3004` | `feedback agent failed` | `FEEDBACK_FAIL_OPEN=false` 且纠错或评分生成失败 |
 | `500` | `500` | `internal server error` | 非预期服务端错误 |
 
 ## 发送文本消息
@@ -110,6 +123,13 @@ HTTP 状态码：`200`
 | `stage` | string | 当前响应对应的训练阶段，与 `ai_message.stage` 一致 |
 | `next_goal` | string | Agent 给出的下一步追问目标 |
 | `turn_count` | number | 发送成功后的 Session 对话轮次 |
+| `correction_summary` | object | 本轮纠错摘要 |
+| `correction_summary.has_errors` | boolean | 本轮是否发现表达问题 |
+| `correction_summary.error_count` | number | 本轮错误数量 |
+| `score_summary` | object | 本轮评分摘要 |
+| `score_summary.total_score` | number | 本轮综合分 |
+| `score_summary.grammar` | number | 本轮语法分 |
+| `score_summary.expression` | number | 本轮表达自然度分 |
 
 示例响应：
 
@@ -136,7 +156,16 @@ HTTP 状态码：`200`
     },
     "stage": "项目经历",
     "next_goal": "ask user to describe personal project contribution",
-    "turn_count": 1
+    "turn_count": 1,
+    "correction_summary": {
+      "has_errors": false,
+      "error_count": 0
+    },
+    "score_summary": {
+      "total_score": 85,
+      "grammar": 88,
+      "expression": 84
+    }
   }
 }
 ```
@@ -230,6 +259,17 @@ POST /api/v1/sessions/1/messages
 }
 ```
 
+### 反馈生成失败
+
+仅当 `FEEDBACK_FAIL_OPEN=false`，且纠错或评分生成失败时返回：
+
+```json
+{
+  "code": 3004,
+  "message": "feedback agent failed"
+}
+```
+
 ## curl 示例
 
 ### 完整训练消息闭环
@@ -248,6 +288,10 @@ curl http://localhost:8080/api/v1/sessions/1
 curl -X POST http://localhost:8080/api/v1/sessions/1/messages \
   -H "Content-Type: application/json" \
   -d '{"content":"I was responsible for the backend API and debugging control issues."}'
+
+curl http://localhost:8080/api/v1/messages/1/corrections
+
+curl http://localhost:8080/api/v1/sessions/1/scores
 
 curl http://localhost:8080/api/v1/sessions/1
 
@@ -284,6 +328,8 @@ curl -X POST http://localhost:8080/api/v1/sessions/1/messages \
 - 发送前前端也应做一次 `content.trim()` 校验，避免空内容请求。
 - 发送中禁用输入框和发送按钮，避免用户重复点击造成连续轮次递增。
 - 成功后把 `user_message` 和 `ai_message` 直接追加到本地消息列表，不需要立即重新拉取 Session。
+- 成功后可以先用 `correction_summary` 和 `score_summary` 更新轻量反馈区。
+- 需要纠错详情或累计反馈时，调用 [feedback-api.md](feedback-api.md) 中的反馈查询接口。
 - 如果需要恢复页面状态，调用 `GET /api/v1/sessions/:id`，使用返回的 `messages` 和 `turn_count` 重新渲染。
 - `ai_message.role` 当前固定为 `ai`，前端不要按 `assistant` 判断。
 - `turn_count` 表示成功完成的用户输入轮次，不等于消息条数。一次成功发送会新增 2 条消息。
@@ -301,9 +347,11 @@ curl -X POST http://localhost:8080/api/v1/sessions/1/messages \
 3. 渲染 create session 返回的 opening_message
 4. POST /api/v1/sessions/:id/messages
 5. 将 user_message 和 ai_message 追加到前端消息列表
-6. 需要恢复状态时 GET /api/v1/sessions/:id
-7. POST /api/v1/sessions/:id/finish
-8. finished 后禁用继续发送
+6. 使用 correction_summary 和 score_summary 更新轻量反馈
+7. 需要详情时 GET /api/v1/messages/:message_id/corrections 或 GET /api/v1/sessions/:id/scores
+8. 需要恢复状态时 GET /api/v1/sessions/:id
+9. POST /api/v1/sessions/:id/finish
+10. finished 后禁用继续发送
 ```
 
 ## 验证命令
