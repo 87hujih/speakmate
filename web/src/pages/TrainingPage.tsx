@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { createAudioWebSocketUrl, parseAudioWebSocketEvent, type AudioWebSocketEvent } from "../api/audioWebSocket";
 import { ApiError } from "../api/client";
+import { demoErrorMessage } from "../api/errors";
 import { finishTrainingSession, loadTrainingSessionState, sendTrainingAudio, sendTrainingText } from "../api/loaders";
 import { connectSessionStream, type SessionStreamEvent } from "../api/sessionStream";
 import { PageContainer } from "../components/layout/PageContainer";
@@ -202,7 +203,7 @@ export function TrainingPage() {
         setSendError("本次训练已结束，不能继续发送消息。");
         void reload();
       } else {
-        setSendError(error instanceof Error ? error.message : "消息发送失败，请稍后重试。");
+        setSendError(demoErrorMessage(error, "消息发送失败，请稍后重试。"));
       }
     } finally {
       setIsSending(false);
@@ -439,7 +440,7 @@ export function TrainingPage() {
       if (error instanceof ApiError && error.code === 2004) {
         navigate(`/report/${numericSessionId}`);
       } else {
-        setSendError(error instanceof Error ? error.message : "结束训练失败");
+        setSendError(demoErrorMessage(error, "结束训练失败"));
       }
     } finally {
       setIsFinishing(false);
