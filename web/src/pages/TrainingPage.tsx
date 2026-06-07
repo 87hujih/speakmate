@@ -11,6 +11,7 @@ import { TaskPanel } from "../components/training/TaskPanel";
 import { TrainingHeader } from "../components/training/TrainingHeader";
 import { buttonClasses } from "../components/ui/Button";
 import type { ChatMessage, TrainingSession, VoiceStatus } from "../types";
+import { extensionForAudioMimeType, selectSupportedAudioMimeType } from "../utils/audioMime";
 
 function parseRouteSessionId(value: string | undefined) {
   const numeric = Number(value);
@@ -198,22 +199,7 @@ export function TrainingPage() {
       return "";
     }
 
-    const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
-    return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "";
-  }
-
-  function extensionForMimeType(mimeType: string) {
-    if (mimeType.includes("mp4")) {
-      return "m4a";
-    }
-    if (mimeType.includes("ogg")) {
-      return "ogg";
-    }
-    if (mimeType.includes("wav")) {
-      return "wav";
-    }
-
-    return "webm";
+    return selectSupportedAudioMimeType((candidate) => MediaRecorder.isTypeSupported(candidate));
   }
 
   async function uploadRecordedAudio(blob: Blob, mimeType: string) {
@@ -227,7 +213,7 @@ export function TrainingPage() {
     }
 
     const fileType = mimeType || blob.type || "audio/webm";
-    const file = new File([blob], `answer-${Date.now()}.${extensionForMimeType(fileType)}`, { type: fileType });
+    const file = new File([blob], `answer-${Date.now()}.${extensionForAudioMimeType(fileType)}`, { type: fileType });
 
     setIsSending(true);
     setSendError("");
