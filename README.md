@@ -150,17 +150,18 @@ Browser
 
 ## 快速开始
 
-默认配置会使用本地 Mock Agent 和内存存储，不需要 API Key 或数据库：
+默认配置使用 Mock Agent 和内存存储，不需要 API Key、MySQL 或 Redis：
 
 ```bash
-STORAGE_MODE=memory
-LLM_USE_MOCK=true
-go run ./cmd/server
+STORAGE_MODE=memory LLM_USE_MOCK=true ASR_USE_MOCK=true go run ./cmd/server
 ```
 
-启动后端服务：
+PowerShell：
 
-```bash
+```powershell
+$env:STORAGE_MODE="memory"
+$env:LLM_USE_MOCK="true"
+$env:ASR_USE_MOCK="true"
 go run ./cmd/server
 ```
 
@@ -173,20 +174,25 @@ curl http://localhost:8080/health
 预期响应：
 
 ```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "status": "ok"
-  }
-}
+{"code":0,"message":"success","data":{"status":"ok"}}
 ```
 
-运行测试：
+示例环境变量见 [.env.example](.env.example)。Go 服务不会自动读取 `.env` 文件，可以用 shell、direnv、dotenv 工具或 Docker Compose 注入环境变量。
 
-```bash
-go test ./...
-```
+### 配置说明
+
+关键配置按用途拆分：
+
+| 用途 | 变量 |
+|---|---|
+| 服务 | `APP_PORT`、`REQUEST_TIMEOUT_SECONDS` |
+| 跨域 | `CORS_ALLOWED_ORIGINS`、`CORS_ALLOWED_METHODS`、`CORS_ALLOWED_HEADERS`、`CORS_ALLOW_CREDENTIALS` |
+| MySQL | `STORAGE_MODE=mysql`、`MYSQL_DSN` |
+| Redis 预留 | `REDIS_ENABLED`、`REDIS_ADDR`、`REDIS_PASSWORD`、`REDIS_DB` |
+| 外部服务超时 | `EXTERNAL_SERVICE_TIMEOUT_SECONDS`，可被 `LLM_TIMEOUT_SECONDS` / `ASR_TIMEOUT_SECONDS` 覆盖 |
+| Mock | `LLM_USE_MOCK`、`CORRECTION_USE_MOCK`、`SCORING_USE_MOCK`、`SUMMARY_USE_MOCK`、`ASR_USE_MOCK` |
+
+本分支不实现真实 LLM Streaming、真实 ASR Provider 或 Redis 会话状态存储。Redis 只完成配置和 Compose 服务预留；ASR 默认仍是 Mock。
 
 ### 前端启动
 
@@ -197,7 +203,7 @@ cd web
 npm install
 ```
 
-如果前后端分开启动，建议显式配置后端 API 地址：
+本地前后端分开启动时，建议显式配置后端 API 地址：
 
 ```powershell
 $env:VITE_API_BASE_URL="http://localhost:8080/api/v1"
@@ -210,123 +216,98 @@ macOS / Linux：
 VITE_API_BASE_URL=http://localhost:8080/api/v1 npm run dev
 ```
 
-前端默认端口是 `5173`。如果不设置 `VITE_API_BASE_URL`，前端会请求同源 `/api/v1`，适合反向代理或同源部署场景。
+前端默认端口是 `5173`。同源部署时可以使用 `VITE_API_BASE_URL=/api/v1`，前端 Nginx 会把 `/api/`、SSE 和 WebSocket 请求代理到后端。
 
-前端验证命令：
+### MySQL 与 Migration
 
-```bash
-cd web
-npm test
-npm run build
-```
-
-### 前后端联调路径
-
-1. 启动后端：
+内存模式适合本地开发和测试，服务重启后数据会丢失。切换 MySQL 前先创建数据库并执行迁移：
 
 ```bash
-go run ./cmd/server
+docker compose up -d mysql redis
 ```
 
-2. 启动前端并配置 API 地址：
+PowerShell：
 
 ```powershell
-cd web
-$env:VITE_API_BASE_URL="http://localhost:8080/api/v1"
-npm run dev
+$env:MYSQL_DSN="speakmate:speakmate@tcp(127.0.0.1:3306)/speakmate?parseTime=true&loc=UTC"
+go run ./cmd/migrate -dir migrations
+$env:STORAGE_MODE="mysql"
+go run ./cmd/server
 ```
 
-3. 在浏览器打开 `http://localhost:5173`，验证完整训练闭环：
+macOS / Linux：
+
+```bash
+export MYSQL_DSN='speakmate:speakmate@tcp(127.0.0.1:3306)/speakmate?parseTime=true&loc=UTC'
+go run ./cmd/migrate -dir migrations
+STORAGE_MODE=mysql go run ./cmd/server
+```
+
+如果安装了 `make`，也可以执行：
+
+```bash
+make migrate
+```
+
+迁移文件按文件名顺序执行。当前 SQL 使用 `CREATE TABLE IF NOT EXISTS` 和 `ON DUPLICATE KEY UPDATE`，可重复执行；失败时会打印具体 migration 文件和语句序号。`STORAGE_MODE=mysql` 但 `MYSQL_DSN` 为空时，服务会在启动阶段返回明确配置错误。
+
+### Docker Compose
+
+一条命令拉起 MySQL、Redis、迁移任务、后端和前端静态服务：
+
+```bash
+docker compose up --build
+```
+
+启动后访问：
 
 ```text
-选择场景 -> 创建训练 -> 发送文本或实时录音/录音上传 -> AI 回复 -> 查看纠错评分 -> 结束训练 -> 生成报告 -> 查询历史记录 -> 回到报告/训练详情
+前端：http://localhost:5173
+后端健康检查：http://localhost:8080/health
+MySQL：127.0.0.1:3306
+Redis：127.0.0.1:6379
 ```
 
-### 存储配置
-
-默认 `STORAGE_MODE=memory`，适合本地开发和自动测试；服务重启后训练数据会丢失。
+Compose 默认使用 MySQL 持久化和 Mock Agent。`migrate` 服务会在后端启动前执行 `/app/migrate -dir /app/migrations`。如果要清空本地容器数据：
 
 ```bash
-STORAGE_MODE=memory
-go run ./cmd/server
+docker compose down -v
 ```
 
-切换 MySQL 持久化前，先创建数据库并按顺序执行 migrations：
+部署时建议保持前端 `VITE_API_BASE_URL=/api/v1`，由 Nginx 反向代理到后端；如果前后端分域部署，需要把前端域名加入 `CORS_ALLOWED_ORIGINS`。
 
-```bash
-mysql -u root -p -e 'CREATE DATABASE IF NOT EXISTS speakmate DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'
-mysql -u root -p speakmate < migrations/001_create_core_tables.sql
-mysql -u root -p speakmate < migrations/002_seed_default_scenarios.sql
-```
+### LLM / ASR Mock
 
-然后设置 DSN 启动服务：
-
-```bash
-STORAGE_MODE=mysql
-MYSQL_DSN='speakmate:password@tcp(127.0.0.1:3306)/speakmate?parseTime=true&loc=UTC'
-go run ./cmd/server
-```
-
-`STORAGE_MODE=mysql` 但 `MYSQL_DSN` 为空时，服务会在启动阶段返回明确配置错误。示例环境变量见 [.env.example](.env.example)。
-
-### LLM 配置
-
-自动测试只使用 Fake / Mock，不会请求真实模型。本地默认 `LLM_USE_MOCK=true`，只有配置完整且关闭 Mock 时才会请求 OpenAI-compatible API：
-
-```bash
-APP_PORT=8080
-LLM_PROVIDER=openai-compatible
-LLM_BASE_URL=https://api.example.com/v1
-LLM_API_KEY=replace-with-your-api-key
-LLM_MODEL=replace-with-your-model
-LLM_TIMEOUT_SECONDS=30
-LLM_USE_MOCK=false
-go run ./cmd/server
-```
-
-如果 `LLM_USE_MOCK=true`，或 `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 不完整，服务会继续使用 Mock Agent。真实 LLM 调用失败时当前启动策略会降级为 Mock 回复，保证本地演示链路可用。
-
-### 反馈 Mock / LLM 配置
-
-纠错、评分和课后总结默认同样使用 Mock，不依赖真实模型：
+自动测试和默认本地运行不请求真实模型：
 
 ```bash
 LLM_USE_MOCK=true
 CORRECTION_USE_MOCK=true
 SCORING_USE_MOCK=true
 SUMMARY_USE_MOCK=true
-FEEDBACK_FAIL_OPEN=true
-go run ./cmd/server
+ASR_USE_MOCK=true
 ```
 
-如果要让纠错、评分和总结也使用真实 OpenAI-compatible LLM，需要关闭全局 Mock 和对应 Mock：
+现有 Conversation / Correction / Scoring / Summary 的非流式 OpenAI-compatible 调用仍在 Mock/fallback 开关后面；本分支不新增真实 streaming。真实 ASR Provider 只预留配置项，后端仍使用 Mock ASR。
 
-```bash
-LLM_PROVIDER=openai-compatible
-LLM_BASE_URL=https://api.example.com/v1
-LLM_API_KEY=replace-with-your-api-key
-LLM_MODEL=replace-with-your-model
-LLM_USE_MOCK=false
-CORRECTION_USE_MOCK=false
-SCORING_USE_MOCK=false
-SUMMARY_USE_MOCK=false
-FEEDBACK_FAIL_OPEN=true
-go run ./cmd/server
-```
+### 前后端联调路径
 
-`FEEDBACK_FAIL_OPEN=true` 表示反馈生成失败时不阻断主对话链路；设置为 `false` 时，纠错或评分失败会让消息接口返回 `502 / 3004 feedback agent failed`。
-课后报告的 Summary Agent 自带 Mock fallback；模型调用或 JSON 解析失败时会尽量返回 Mock 报告内容。关闭 `SUMMARY_USE_MOCK` 且 LLM 配置完整时才会请求真实模型。
-
-### ASR / 录音
-
-当前语音能力使用 Mock ASR，不需要真实 ASR API Key，也不会请求外部 ASR 服务。浏览器优先使用 WebSocket 分片，连接失败时可以回退到单段上传：
+1. 启动后端：`go run ./cmd/server`
+2. 启动前端：`cd web && npm run dev`
+3. 打开 `http://localhost:5173`，验证完整训练闭环：
 
 ```text
-录音分片 -> GET /api/v1/sessions/:id/audio/ws -> partial/final transcript -> SendMessage
-录音整段 -> POST /api/v1/sessions/:id/audio -> Mock ASR transcript -> SendMessage
+选择场景 -> 创建训练 -> 发送文本或实时录音/录音上传 -> AI 回复 -> 查看纠错评分 -> 结束训练 -> 生成报告 -> 查询历史记录 -> 回到报告/训练详情
 ```
 
-接口说明见 [docs/api文档/audio-api.md](docs/api文档/audio-api.md) 和 [docs/api文档/audio-websocket-api.md](docs/api文档/audio-websocket-api.md)。真实 ASR Provider 配置仍留作后续扩展。
+### 验证命令
+
+```bash
+go test ./...
+cd web
+npm test
+npm run build
+```
 
 查看静态前端原型参考：
 
@@ -340,20 +321,27 @@ web/preview.html
 
 ```text
 speakmate/
+├── Dockerfile               # 后端 server + migration 多阶段镜像
+├── docker-compose.yml       # MySQL、Redis、迁移任务、后端和前端静态服务
 ├── cmd/server/              # 服务入口
+├── cmd/migrate/             # MySQL migration 执行入口
 ├── internal/
 │   ├── config/              # 环境配置
 │   ├── agent/               # Conversation/Feedback/Summary/ASR Agent、Prompt 和 Mock/LLM 实现
 │   ├── handler/             # HTTP Handler
 │   ├── infra/database/      # MySQL 连接初始化
 │   ├── infra/llm/           # OpenAI-compatible LLM HTTP Client
+│   ├── middleware/          # CORS、请求日志、recover、请求超时
 │   ├── repository/          # memory/mysql 仓库实现
 │   ├── response/            # 统一响应结构
+│   ├── security/            # 日志敏感信息脱敏
 │   ├── stream/              # Session 级 SSE 事件模型和内存事件总线
 │   └── router/              # Gin 路由
 ├── migrations/              # MySQL 表结构和默认场景 seed
 ├── web/                     # Vite + React + TypeScript 前端应用
 │   ├── src/                 # 页面、组件、API client 和类型定义
+│   ├── Dockerfile           # 前端构建 + Nginx 静态部署
+│   ├── nginx.conf           # 静态资源、API、SSE、WebSocket 反向代理
 │   ├── package.json
 │   └── preview.html         # 静态交互原型参考
 ├── docs/project-blueprint.md # 完整产品与技术方案
