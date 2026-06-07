@@ -79,7 +79,17 @@ go run ./cmd/server
 | `404` | `5003` | `report not found` | 查询时报告尚未生成 |
 | `409` | `5004` | `report feedback missing` | 缺少纠错或评分数据 |
 | `502` | `5005` | `summary agent failed` | Summary Agent 失败且没有可用降级 |
+| `503` | `8002` | `stream event publish failed` | 报告事件发布失败 |
 | `500` | `500` | `internal server error` | 非预期服务端错误 |
+
+所有 HTTP 接口还可能由基础 middleware 返回：
+
+| HTTP 状态码 | 业务错误码 | message | 说明 |
+|---|---:|---|---|
+| `500` | `9001` | `internal server error` | panic 被 recover 后的统一错误 |
+| `504` | `9002` | `request timeout` | 普通请求超过 `REQUEST_TIMEOUT_SECONDS` |
+| `413` | `9003` | `request body too large` | 请求体超过 `REQUEST_BODY_LIMIT_BYTES` |
+| `429` | `9004` | `rate limit exceeded` | 同一客户端超过基础限流窗口 |
 
 ## 报告字段
 

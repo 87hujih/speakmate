@@ -48,6 +48,15 @@ running -> finished
 | `404` | `2003` | `session not found` | Session 不存在 |
 | `409` | `2004` | `session already finished` | 重复结束，或对已结束 Session 执行运行中操作 |
 
+所有 HTTP 接口还可能由基础 middleware 返回：
+
+| HTTP 状态码 | 业务错误码 | message | 说明 |
+|---|---:|---|---|
+| `500` | `9001` | `internal server error` | panic 被 recover 后的统一错误 |
+| `504` | `9002` | `request timeout` | 普通请求超过 `REQUEST_TIMEOUT_SECONDS` |
+| `413` | `9003` | `request body too large` | 请求体超过 `REQUEST_BODY_LIMIT_BYTES` |
+| `429` | `9004` | `rate limit exceeded` | 同一客户端超过基础限流窗口 |
+
 ## 创建训练 Session
 
 基于某个训练场景创建一次训练。用于用户点击“开始训练”时调用。
