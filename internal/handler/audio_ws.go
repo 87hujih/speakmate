@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -60,12 +61,19 @@ func (h *AudioWebSocketHandler) Stream(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	defer conn.Close()
+	closedByHandler := false
+	defer func() {
+		if !closedByHandler {
+			_ = h.service.RecordConnectionClosed(c.Request.Context(), id, "client_disconnect")
+		}
+		_ = conn.Close()
+	}()
 
 	var streamSession *service.AudioStream
 	for {
 		messageType, message, err := conn.ReadMessage()
 		if err != nil {
+			_ = h.service.RecordConnectionClosed(c.Request.Context(), id, "read_closed")
 			return
 		}
 
@@ -76,11 +84,13 @@ func (h *AudioWebSocketHandler) Stream(c *gin.Context) {
 				streamSession = nextStream
 			}
 			if shouldClose {
+				closedByHandler = true
+				_ = h.service.RecordConnectionClosed(c.Request.Context(), id, "handler_close")
 				return
 			}
 		case websocket.BinaryMessage:
 			if streamSession == nil {
-				if !writeAudioWSError(conn, id, service.ErrInvalidAudioRequest) {
+				if !h.writeError(c, conn, id, service.ErrInvalidAudioRequest) {
 					return
 				}
 				continue
@@ -92,7 +102,7 @@ func (h *AudioWebSocketHandler) Stream(c *gin.Context) {
 				return
 			}
 		default:
-			if !writeAudioWSError(conn, id, service.ErrInvalidAudioRequest) {
+			if !h.writeError(c, conn, id, service.ErrInvalidAudioRequest) {
 				return
 			}
 		}
@@ -102,7 +112,7 @@ func (h *AudioWebSocketHandler) Stream(c *gin.Context) {
 func (h *AudioWebSocketHandler) handleTextMessage(c *gin.Context, conn *websocket.Conn, sessionID int, streamSession *service.AudioStream, message []byte) (*service.AudioStream, bool) {
 	var event audioWSClientEvent
 	if err := json.Unmarshal(message, &event); err != nil {
-		return nil, !writeAudioWSError(conn, sessionID, service.ErrInvalidAudioRequest)
+		return nil, !h.writeError(c, conn, sessionID, service.ErrInvalidAudioRequest)
 	}
 
 	switch event.Type {
@@ -112,7 +122,7 @@ func (h *AudioWebSocketHandler) handleTextMessage(c *gin.Context, conn *websocke
 			ContentType: event.Payload.ContentType,
 		})
 		if err != nil {
-			return nil, !writeAudioWSError(conn, sessionID, err)
+			return nil, !h.writeError(c, conn, sessionID, err)
 		}
 		if !writeAudioWSEvent(conn, sessionID, audioWSEventStart, audioWSStartPayload{
 			ContentType: event.Payload.ContentType,
@@ -123,11 +133,11 @@ func (h *AudioWebSocketHandler) handleTextMessage(c *gin.Context, conn *websocke
 		return started, false
 	case audioWSEventAudioChunk:
 		if streamSession == nil {
-			return nil, !writeAudioWSError(conn, sessionID, service.ErrInvalidAudioRequest)
+			return nil, !h.writeError(c, conn, sessionID, service.ErrInvalidAudioRequest)
 		}
 		audio, err := decodeAudioChunk(event.Payload.AudioBase64)
 		if err != nil {
-			return nil, !writeAudioWSError(conn, sessionID, err)
+			return nil, !h.writeError(c, conn, sessionID, err)
 		}
 
 		return nil, !h.writePartial(conn, sessionID, streamSession, service.AudioStreamChunkInput{
@@ -137,11 +147,11 @@ func (h *AudioWebSocketHandler) handleTextMessage(c *gin.Context, conn *websocke
 		})
 	case audioWSEventEnd:
 		if streamSession == nil {
-			return nil, !writeAudioWSError(conn, sessionID, service.ErrInvalidAudioRequest)
+			return nil, !h.writeError(c, conn, sessionID, service.ErrInvalidAudioRequest)
 		}
 		result, err := streamSession.Finish(c.Request.Context())
 		if err != nil {
-			return nil, !writeAudioWSError(conn, sessionID, err)
+			return nil, !h.writeError(c, conn, sessionID, err)
 		}
 		if !writeAudioWSEvent(conn, sessionID, audioWSEventFinalTranscript, finalTranscriptPayload(result)) {
 			return nil, true
@@ -159,20 +169,31 @@ func (h *AudioWebSocketHandler) handleTextMessage(c *gin.Context, conn *websocke
 
 		return nil, true
 	default:
-		return nil, !writeAudioWSError(conn, sessionID, service.ErrInvalidAudioRequest)
+		return nil, !h.writeError(c, conn, sessionID, service.ErrInvalidAudioRequest)
 	}
 }
 
 func (h *AudioWebSocketHandler) writePartial(conn *websocket.Conn, sessionID int, streamSession *service.AudioStream, input service.AudioStreamChunkInput) bool {
 	partial, err := streamSession.AppendChunk(input)
 	if err != nil {
-		return writeAudioWSError(conn, sessionID, err)
+		return h.writeError(nil, conn, sessionID, err)
 	}
 
 	return writeAudioWSEvent(conn, sessionID, audioWSEventPartialTranscript, partialTranscriptPayload{
 		Transcript: partial.Transcript,
 		Sequence:   partial.Sequence,
 	})
+}
+
+func (h *AudioWebSocketHandler) writeError(c *gin.Context, conn *websocket.Conn, sessionID int, err error) bool {
+	if h.service != nil {
+		ctx := contextFromGin(c)
+		if stateErr := h.service.RecordConnectionError(ctx, sessionID, err); stateErr != nil {
+			return writeAudioWSError(conn, sessionID, stateErr)
+		}
+	}
+
+	return writeAudioWSError(conn, sessionID, err)
 }
 
 type audioWSClientEvent struct {
@@ -285,6 +306,8 @@ func audioWSError(err error) (string, string) {
 		return "asr_client_failed", "asr client failed"
 	case errors.Is(err, service.ErrAudioTranscriptRequired):
 		return "audio_transcript_required", "audio transcript is required"
+	case errors.Is(err, service.ErrStateStoreFailed):
+		return "session_state_store_failed", "session state store failed"
 	case errors.Is(err, service.ErrSessionNotFound):
 		return "session_not_found", "session not found"
 	case errors.Is(err, service.ErrSessionAlreadyFinished):
@@ -294,4 +317,12 @@ func audioWSError(err error) (string, string) {
 	default:
 		return "audio_websocket_failed", "audio websocket failed"
 	}
+}
+
+func contextFromGin(c *gin.Context) context.Context {
+	if c == nil || c.Request == nil {
+		return context.Background()
+	}
+
+	return c.Request.Context()
 }

@@ -10,6 +10,7 @@ import (
 	"speakmate/internal/model"
 	"speakmate/internal/repository"
 	"speakmate/internal/service"
+	"speakmate/internal/state"
 	"speakmate/internal/stream"
 )
 
@@ -344,6 +345,94 @@ func TestSessionServicePublishesMessageFeedbackStreamEvents(t *testing.T) {
 	}
 	if score.TotalScore != 77 || score.Grammar != 72 || score.Expression != 80 {
 		t.Fatalf("score payload = %+v, want saved score summary", score)
+	}
+}
+
+func TestSessionServiceWritesShortLivedStateDuringLifecycle(t *testing.T) {
+	scenarioReader, sessionRepo, _ := setupFeedbackSession(t)
+	feedbackRepo := newFakeFeedbackRepository()
+	stateStore := newFakeStateStore()
+	sessionService := service.NewSessionService(
+		scenarioReader,
+		sessionRepo,
+		service.WithConversationAgent(&fakeConversationAgent{
+			output: agent.ConversationOutput{
+				Reply:    "What was your role?",
+				Stage:    "项目经历",
+				NextGoal: "ask user to describe personal project contribution",
+			},
+		}),
+		service.WithFeedbackRepository(feedbackRepo),
+		service.WithCorrectionAgent(&fakeCorrectionAgent{}),
+		service.WithScoringAgent(&fakeScoringAgent{}),
+		service.WithStateStore(stateStore),
+	)
+
+	created, err := sessionService.CreateSession(service.CreateSessionInput{ScenarioID: 1, UserID: 42})
+	if err != nil {
+		t.Fatalf("CreateSession returned error: %v", err)
+	}
+	createdState := stateStore.states[created.Session.ID]
+	if createdState.Status != "running" || createdState.TurnCount != 0 || createdState.UserID != 42 {
+		t.Fatalf("created state = %+v, want running turn 0 user 42", createdState)
+	}
+
+	result, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.Session.ID,
+		Content:   "I am study computer science and I have did a project.",
+	})
+	if err != nil {
+		t.Fatalf("SendMessage returned error: %v", err)
+	}
+	if len(stateStore.messages[created.Session.ID]) != 2 {
+		t.Fatalf("message snapshot length = %d, want 2", len(stateStore.messages[created.Session.ID]))
+	}
+	sentState := stateStore.states[created.Session.ID]
+	if sentState.Stage != result.Stage || sentState.TurnCount != 1 || sentState.Status != "running" {
+		t.Fatalf("sent state = %+v, want current stage/turn/status", sentState)
+	}
+	if stateStore.scores[created.Session.ID].TotalScore != 77 {
+		t.Fatalf("partial score = %+v, want generated score", stateStore.scores[created.Session.ID])
+	}
+	if len(stateStore.corrections[created.Session.ID]) != 1 {
+		t.Fatalf("corrections length = %d, want 1", len(stateStore.corrections[created.Session.ID]))
+	}
+
+	finished, err := sessionService.FinishSession(created.Session.ID)
+	if err != nil {
+		t.Fatalf("FinishSession returned error: %v", err)
+	}
+	finishedState := stateStore.states[created.Session.ID]
+	if finishedState.Status != string(finished.Status) || finishedState.TurnCount != finished.TurnCount {
+		t.Fatalf("finished state = %+v, want finished session state", finishedState)
+	}
+}
+
+func TestSessionServiceReturnsEventPublishFailure(t *testing.T) {
+	scenarioReader, sessionRepo, created := setupFeedbackSession(t)
+	publisher := &fakeEventPublisher{err: errors.New("redis publish failed")}
+	sessionService := service.NewSessionService(
+		scenarioReader,
+		sessionRepo,
+		service.WithConversationAgent(&fakeConversationAgent{
+			output: agent.ConversationOutput{
+				Reply: "What was your role?",
+				Stage: "项目经历",
+			},
+		}),
+		service.WithEventPublisher(publisher),
+	)
+
+	_, err := sessionService.SendMessage(service.SendMessageInput{
+		SessionID: created.ID,
+		Content:   "I built a robot control project.",
+	})
+
+	if !errors.Is(err, service.ErrEventPublishFailed) {
+		t.Fatalf("error = %v, want ErrEventPublishFailed", err)
+	}
+	if len(publisher.events) != 1 {
+		t.Fatalf("published events length = %d, want first failed event only", len(publisher.events))
 	}
 }
 
@@ -1079,4 +1168,103 @@ func (p *fakeEventPublisher) Publish(event stream.Event) error {
 	p.events = append(p.events, event)
 
 	return p.err
+}
+
+type fakeStateStore struct {
+	err         error
+	messages    map[int][]model.Message
+	states      map[int]state.SessionState
+	scores      map[int]model.ScoreResult
+	corrections map[int][]model.CorrectionResult
+	connections map[int]state.WebSocketConnectionState
+}
+
+func newFakeStateStore() *fakeStateStore {
+	return &fakeStateStore{
+		messages:    make(map[int][]model.Message),
+		states:      make(map[int]state.SessionState),
+		scores:      make(map[int]model.ScoreResult),
+		corrections: make(map[int][]model.CorrectionResult),
+		connections: make(map[int]state.WebSocketConnectionState),
+	}
+}
+
+func (s *fakeStateStore) SaveMessageSnapshot(ctx context.Context, sessionID int, messages []model.Message) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.messages[sessionID] = append([]model.Message(nil), messages...)
+	return nil
+}
+
+func (s *fakeStateStore) GetMessageSnapshot(ctx context.Context, sessionID int) ([]model.Message, error) {
+	messages, ok := s.messages[sessionID]
+	if !ok {
+		return nil, state.ErrStateNotFound
+	}
+	return append([]model.Message(nil), messages...), nil
+}
+
+func (s *fakeStateStore) SaveSessionState(ctx context.Context, sessionState state.SessionState) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.states[sessionState.SessionID] = sessionState
+	return nil
+}
+
+func (s *fakeStateStore) GetSessionState(ctx context.Context, sessionID int) (state.SessionState, error) {
+	sessionState, ok := s.states[sessionID]
+	if !ok {
+		return state.SessionState{}, state.ErrStateNotFound
+	}
+	return sessionState, nil
+}
+
+func (s *fakeStateStore) SavePartialScore(ctx context.Context, score model.ScoreResult) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.scores[score.SessionID] = score
+	return nil
+}
+
+func (s *fakeStateStore) GetPartialScore(ctx context.Context, sessionID int) (model.ScoreResult, error) {
+	score, ok := s.scores[sessionID]
+	if !ok {
+		return model.ScoreResult{}, state.ErrStateNotFound
+	}
+	return score, nil
+}
+
+func (s *fakeStateStore) AppendCorrection(ctx context.Context, correction model.CorrectionResult) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.corrections[correction.SessionID] = append(s.corrections[correction.SessionID], correction)
+	return nil
+}
+
+func (s *fakeStateStore) ListCorrections(ctx context.Context, sessionID int) ([]model.CorrectionResult, error) {
+	corrections, ok := s.corrections[sessionID]
+	if !ok {
+		return nil, state.ErrStateNotFound
+	}
+	return append([]model.CorrectionResult(nil), corrections...), nil
+}
+
+func (s *fakeStateStore) SaveWebSocketConnection(ctx context.Context, connection state.WebSocketConnectionState) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.connections[connection.SessionID] = connection
+	return nil
+}
+
+func (s *fakeStateStore) GetWebSocketConnection(ctx context.Context, sessionID int) (state.WebSocketConnectionState, error) {
+	connection, ok := s.connections[sessionID]
+	if !ok {
+		return state.WebSocketConnectionState{}, state.ErrStateNotFound
+	}
+	return connection, nil
 }

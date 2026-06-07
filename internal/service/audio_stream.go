@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"speakmate/internal/agent"
+	"speakmate/internal/state"
 )
 
 const defaultAudioStreamContentType = "audio/webm"
@@ -14,6 +16,7 @@ const defaultAudioStreamContentType = "audio/webm"
 type AudioStreamService struct {
 	messageSender      AudioMessageSender
 	asr                agent.ASRClient
+	stateStore         state.SessionStateStore
 	maxBytes           int
 	transcribePartials bool
 }
@@ -33,6 +36,15 @@ func WithMaxAudioStreamBytes(maxBytes int) AudioStreamOption {
 func WithAudioStreamPartialTranscription(enabled bool) AudioStreamOption {
 	return func(service *AudioStreamService) {
 		service.transcribePartials = enabled
+	}
+}
+
+// WithAudioStreamStateStore 设置 WebSocket 连接状态存储。
+func WithAudioStreamStateStore(store state.SessionStateStore) AudioStreamOption {
+	return func(service *AudioStreamService) {
+		if store != nil {
+			service.stateStore = store
+		}
 	}
 }
 
@@ -100,12 +112,22 @@ func (s *AudioStreamService) Start(input StartAudioStreamInput) (*AudioStream, e
 		return nil, ErrAudioFileTypeUnsupported
 	}
 
-	return &AudioStream{
+	stream := &AudioStream{
 		service:     s,
 		sessionID:   input.SessionID,
 		contentType: contentType,
 		audio:       []byte{},
-	}, nil
+	}
+	if err := s.saveConnectionState(context.Background(), state.WebSocketConnectionState{
+		SessionID:   input.SessionID,
+		Status:      "started",
+		ContentType: contentType,
+		UpdatedAt:   timeNowUTC(),
+	}); err != nil {
+		return nil, err
+	}
+
+	return stream, nil
 }
 
 // AppendChunk 保存一个音频分片并返回稳定的 Mock partial transcript。
@@ -125,6 +147,16 @@ func (s *AudioStream) AppendChunk(input AudioStreamChunkInput) (AudioStreamParti
 	sequence := input.Sequence
 	if sequence <= 0 {
 		sequence = s.chunkCount
+	}
+	if err := s.service.saveConnectionState(input.Context, state.WebSocketConnectionState{
+		SessionID:    s.sessionID,
+		Status:       "receiving",
+		ContentType:  s.contentType,
+		ChunkCount:   s.chunkCount,
+		LastSequence: sequence,
+		UpdatedAt:    timeNowUTC(),
+	}); err != nil {
+		return AudioStreamPartialResult{}, err
 	}
 
 	if !s.service.transcribePartials {
@@ -176,11 +208,60 @@ func (s *AudioStream) Finish(ctx context.Context) (AudioStreamResult, error) {
 	if err != nil {
 		return AudioStreamResult{}, err
 	}
+	if err := s.service.saveConnectionState(ctx, state.WebSocketConnectionState{
+		SessionID:    s.sessionID,
+		Status:       "ended",
+		ContentType:  s.contentType,
+		ChunkCount:   s.chunkCount,
+		LastSequence: s.chunkCount,
+		UpdatedAt:    timeNowUTC(),
+	}); err != nil {
+		return AudioStreamResult{}, err
+	}
 
 	return AudioStreamResult{
 		Transcript:        transcript,
 		SendMessageResult: result,
 	}, nil
+}
+
+// RecordConnectionError 写入 WebSocket 连接错误状态。
+func (s *AudioStreamService) RecordConnectionError(ctx context.Context, sessionID int, err error) error {
+	lastError := ""
+	if err != nil {
+		lastError = err.Error()
+	}
+
+	return s.saveConnectionState(ctx, state.WebSocketConnectionState{
+		SessionID: sessionID,
+		Status:    "error",
+		LastError: lastError,
+		UpdatedAt: timeNowUTC(),
+	})
+}
+
+// RecordConnectionClosed 写入 WebSocket 连接关闭状态。
+func (s *AudioStreamService) RecordConnectionClosed(ctx context.Context, sessionID int, reason string) error {
+	return s.saveConnectionState(ctx, state.WebSocketConnectionState{
+		SessionID: sessionID,
+		Status:    "closed",
+		LastError: reason,
+		UpdatedAt: timeNowUTC(),
+	})
+}
+
+func (s *AudioStreamService) saveConnectionState(ctx context.Context, connection state.WebSocketConnectionState) error {
+	if s.stateStore == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := s.stateStore.SaveWebSocketConnection(ctx, connection); err != nil {
+		return fmt.Errorf("%w: save websocket connection: %v", ErrStateStoreFailed, err)
+	}
+
+	return nil
 }
 
 func (s *AudioStreamService) transcribe(ctx context.Context, audio []byte, filename string, contentType string) (agent.ASROutput, error) {
@@ -202,6 +283,10 @@ func (s *AudioStreamService) transcribe(ctx context.Context, audio []byte, filen
 	}
 
 	return output, nil
+}
+
+func timeNowUTC() time.Time {
+	return time.Now().UTC()
 }
 
 func normalizeAudioStreamContentType(contentType string) string {

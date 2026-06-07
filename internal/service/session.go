@@ -10,6 +10,7 @@ import (
 	"speakmate/internal/agent"
 	"speakmate/internal/model"
 	"speakmate/internal/repository"
+	"speakmate/internal/state"
 	"speakmate/internal/stream"
 )
 
@@ -28,6 +29,10 @@ var (
 	ErrConversationAgentFailed = errors.New("conversation agent failed")
 	// ErrFeedbackAgentFailed 表示反馈 Agent 生成纠错或评分失败。
 	ErrFeedbackAgentFailed = errors.New("feedback agent failed")
+	// ErrStateStoreFailed 表示短期状态写入失败。
+	ErrStateStoreFailed = errors.New("session state store failed")
+	// ErrEventPublishFailed 表示 SSE/WebSocket 事件发布失败。
+	ErrEventPublishFailed = errors.New("stream event publish failed")
 )
 
 // ScenarioReader 定义 Session 服务依赖的场景读取能力。
@@ -53,6 +58,7 @@ type SessionService struct {
 	scenarioReader   ScenarioReader
 	repo             SessionRepository
 	feedbackRepo     FeedbackRepository
+	stateStore       state.SessionStateStore
 	events           EventPublisher
 	conversation     agent.ConversationAgent
 	correction       agent.CorrectionAgent
@@ -101,6 +107,14 @@ func WithEventPublisher(publisher EventPublisher) SessionOption {
 	return func(service *SessionService) {
 		if publisher != nil {
 			service.events = publisher
+		}
+	}
+}
+
+func WithStateStore(store state.SessionStateStore) SessionOption {
+	return func(service *SessionService) {
+		if store != nil {
+			service.stateStore = store
 		}
 	}
 }
@@ -206,6 +220,9 @@ func (s *SessionService) CreateSession(input CreateSessionInput) (CreateSessionR
 	if err != nil {
 		return CreateSessionResult{}, err
 	}
+	if err := s.saveSessionState(context.Background(), created, ""); err != nil {
+		return CreateSessionResult{}, err
+	}
 
 	return CreateSessionResult{
 		Session:        created,
@@ -246,6 +263,9 @@ func (s *SessionService) FinishSession(id int) (model.Session, error) {
 			return model.Session{}, ErrSessionAlreadyFinished
 		}
 
+		return model.Session{}, err
+	}
+	if err := s.saveSessionState(context.Background(), session, currentSessionStage(session)); err != nil {
 		return model.Session{}, err
 	}
 
@@ -296,6 +316,9 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 	}
 	reply, usedStreaming, err := s.generateConversationReply(ctx, input.SessionID, conversation, conversationInput)
 	if err != nil {
+		if errors.Is(err, ErrEventPublishFailed) {
+			return SendMessageResult{}, err
+		}
 		wrapped := fmt.Errorf("%w: %v", ErrConversationAgentFailed, err)
 		s.publishSessionError(input.SessionID, wrapped)
 		return SendMessageResult{}, wrapped
@@ -343,17 +366,22 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 	messages := updated.Messages
 	savedUserMessage := messages[len(messages)-2]
 	savedAIMessage := messages[len(messages)-1]
+	if err := s.saveMessageState(ctx, updated, savedAIMessage.Stage); err != nil {
+		return SendMessageResult{}, err
+	}
 	if !usedStreaming {
-		s.publishStreamEvent(stream.Event{
+		if err := s.publishStreamEvent(stream.Event{
 			Type:      stream.EventTypeAIMessageDelta,
 			SessionID: updated.ID,
 			Payload: stream.AIMessageDeltaPayload{
 				MessageID: savedAIMessage.ID,
 				Delta:     savedAIMessage.Content,
 			},
-		})
+		}); err != nil {
+			return SendMessageResult{}, err
+		}
 	}
-	s.publishStreamEvent(stream.Event{
+	if err := s.publishStreamEvent(stream.Event{
 		Type:      stream.EventTypeAIMessageDone,
 		SessionID: updated.ID,
 		Payload: stream.AIMessageDonePayload{
@@ -361,7 +389,9 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 			Content:   savedAIMessage.Content,
 			Stage:     savedAIMessage.Stage,
 		},
-	})
+	}); err != nil {
+		return SendMessageResult{}, err
+	}
 	correctionSummary, scoreSummary, err := s.generateFeedback(ctx, scenario, updated, savedUserMessage)
 	if err != nil {
 		s.publishSessionError(updated.ID, err)
@@ -385,14 +415,16 @@ func (s *SessionService) generateConversationReply(ctx context.Context, sessionI
 			if delta.Content == "" {
 				return nil
 			}
-			s.publishStreamEvent(stream.Event{
+			if err := s.publishStreamEvent(stream.Event{
 				Type:      stream.EventTypeAIMessageDelta,
 				SessionID: sessionID,
 				Payload: stream.AIMessageDeltaPayload{
 					MessageID: 0,
 					Delta:     delta.Content,
 				},
-			})
+			}); err != nil {
+				return err
+			}
 
 			return nil
 		})
@@ -426,8 +458,11 @@ func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Sc
 	if err := s.feedbackRepo.SaveCorrection(correction); err != nil {
 		return s.handleFeedbackFailure(CorrectionSummary{}, ScoreSummary{}, "save correction failed", err)
 	}
+	if err := s.appendCorrectionState(ctx, correction); err != nil {
+		return CorrectionSummary{}, ScoreSummary{}, err
+	}
 	correctionSummary := correctionSummaryFromResult(correction)
-	s.publishStreamEvent(stream.Event{
+	if err := s.publishStreamEvent(stream.Event{
 		Type:      stream.EventTypeCorrectionDone,
 		SessionID: session.ID,
 		Payload: stream.CorrectionDonePayload{
@@ -435,7 +470,9 @@ func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Sc
 			HasErrors:  correctionSummary.HasErrors,
 			ErrorCount: correctionSummary.ErrorCount,
 		},
-	})
+	}); err != nil {
+		return CorrectionSummary{}, ScoreSummary{}, err
+	}
 
 	scoringAgent := s.scoring
 	if scoringAgent == nil {
@@ -455,8 +492,11 @@ func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Sc
 	if err := s.feedbackRepo.SaveScore(score); err != nil {
 		return s.handleFeedbackFailure(correctionSummary, ScoreSummary{}, "save score failed", err)
 	}
+	if err := s.savePartialScoreState(ctx, score); err != nil {
+		return CorrectionSummary{}, ScoreSummary{}, err
+	}
 	scoreSummary := scoreSummaryFromResult(score)
-	s.publishStreamEvent(stream.Event{
+	if err := s.publishStreamEvent(stream.Event{
 		Type:      stream.EventTypeScoreUpdated,
 		SessionID: session.ID,
 		Payload: stream.ScoreUpdatedPayload{
@@ -465,7 +505,9 @@ func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Sc
 			Grammar:    scoreSummary.Grammar,
 			Expression: scoreSummary.Expression,
 		},
-	})
+	}); err != nil {
+		return CorrectionSummary{}, ScoreSummary{}, err
+	}
 
 	return correctionSummary, scoreSummary, nil
 }
@@ -534,14 +576,84 @@ func scoreSummaryFromResult(score model.ScoreResult) ScoreSummary {
 	}
 }
 
-func (s *SessionService) publishStreamEvent(event stream.Event) {
+func (s *SessionService) saveMessageState(ctx context.Context, session model.Session, stage string) error {
+	if s.stateStore == nil {
+		return nil
+	}
+	if err := s.stateStore.SaveMessageSnapshot(ctx, session.ID, session.Messages); err != nil {
+		return fmt.Errorf("%w: save message snapshot: %v", ErrStateStoreFailed, err)
+	}
+	return s.saveSessionState(ctx, session, stage)
+}
+
+func (s *SessionService) saveSessionState(ctx context.Context, session model.Session, stage string) error {
+	if s.stateStore == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if stage == "" {
+		stage = currentSessionStage(session)
+	}
+	err := s.stateStore.SaveSessionState(ctx, state.SessionState{
+		SessionID:  session.ID,
+		ScenarioID: session.ScenarioID,
+		UserID:     session.UserID,
+		Status:     string(session.Status),
+		Stage:      stage,
+		TurnCount:  session.TurnCount,
+		UpdatedAt:  s.now().UTC(),
+	})
+	if err != nil {
+		return fmt.Errorf("%w: save session state: %v", ErrStateStoreFailed, err)
+	}
+
+	return nil
+}
+
+func (s *SessionService) appendCorrectionState(ctx context.Context, correction model.CorrectionResult) error {
+	if s.stateStore == nil {
+		return nil
+	}
+	if err := s.stateStore.AppendCorrection(ctx, correction); err != nil {
+		return fmt.Errorf("%w: save correction state: %v", ErrStateStoreFailed, err)
+	}
+
+	return nil
+}
+
+func (s *SessionService) savePartialScoreState(ctx context.Context, score model.ScoreResult) error {
+	if s.stateStore == nil {
+		return nil
+	}
+	if err := s.stateStore.SavePartialScore(ctx, score); err != nil {
+		return fmt.Errorf("%w: save partial score: %v", ErrStateStoreFailed, err)
+	}
+
+	return nil
+}
+
+func currentSessionStage(session model.Session) string {
+	if len(session.Messages) == 0 {
+		return ""
+	}
+
+	return session.Messages[len(session.Messages)-1].Stage
+}
+
+func (s *SessionService) publishStreamEvent(event stream.Event) error {
 	if s.events == nil {
-		return
+		return nil
 	}
 	if event.CreatedAt.IsZero() {
 		event.CreatedAt = s.now()
 	}
-	_ = s.events.Publish(event)
+	if err := s.events.Publish(event); err != nil {
+		return fmt.Errorf("%w: %v", ErrEventPublishFailed, err)
+	}
+
+	return nil
 }
 
 func (s *SessionService) publishSessionError(sessionID int, err error) {

@@ -142,6 +142,35 @@ func TestReportServicePublishesReportDoneEvent(t *testing.T) {
 	}
 }
 
+func TestReportServiceReturnsEventPublishFailure(t *testing.T) {
+	scenarioReader, sessionRepo, created := setupReportSession(t, model.SessionStatusFinished)
+	feedbackRepo := newFakeFeedbackRepository()
+	feedbackRepo.correctionsBySessionID[created.ID] = []model.CorrectionResult{sampleCorrection(created.ID)}
+	feedbackRepo.scoresBySessionID[created.ID] = sampleScore(created.ID)
+	publisher := &fakeEventPublisher{err: errors.New("redis publish failed")}
+	reportService := service.NewReportService(
+		scenarioReader,
+		sessionRepo,
+		feedbackRepo,
+		newFakeReportRepository(),
+		service.WithSummaryAgent(&fakeSummaryAgent{
+			output: agent.SummaryOutput{
+				Summary:          "本次训练能够说明项目背景。",
+				MajorProblems:    []string{"动词形式不稳定"},
+				FrequentErrors:   []string{"am study -> am studying"},
+				NextPracticePlan: []string{"复述项目经历。"},
+			},
+		}),
+		service.WithReportEventPublisher(publisher),
+	)
+
+	_, err := reportService.GenerateReport(created.ID)
+
+	if !errors.Is(err, service.ErrEventPublishFailed) {
+		t.Fatalf("GenerateReport error = %v, want ErrEventPublishFailed", err)
+	}
+}
+
 func TestReportServicePublishesErrorEventWhenGenerationFails(t *testing.T) {
 	scenarioReader, sessionRepo, created := setupReportSession(t, model.SessionStatusFinished)
 	feedbackRepo := newFakeFeedbackRepository()

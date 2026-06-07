@@ -145,3 +145,61 @@ func TestAudioStreamFinishReturnsASRFailureWithoutSendingMessage(t *testing.T) {
 		t.Fatalf("message sender call count = %d, want 0", messageSender.callCount)
 	}
 }
+
+func TestAudioStreamWritesWebSocketConnectionState(t *testing.T) {
+	stateStore := newFakeStateStore()
+	asr := &fakeASRClient{
+		output: agent.ASROutput{Transcript: "I built a speech practice app."},
+	}
+	messageSender := &fakeAudioMessageSender{
+		result: sampleAudioMessageResult("I built a speech practice app."),
+	}
+	streamService := service.NewAudioStreamService(
+		messageSender,
+		asr,
+		service.WithAudioStreamPartialTranscription(false),
+		service.WithAudioStreamStateStore(stateStore),
+	)
+
+	streamSession, err := streamService.Start(service.StartAudioStreamInput{
+		SessionID:   7,
+		ContentType: "audio/ogg",
+	})
+	if err != nil {
+		t.Fatalf("Start returned error: %v", err)
+	}
+	if got := stateStore.connections[7]; got.Status != "started" || got.ContentType != "audio/ogg" {
+		t.Fatalf("connection after start = %+v, want started audio/ogg", got)
+	}
+
+	if _, err := streamSession.AppendChunk(service.AudioStreamChunkInput{
+		Audio:    []byte{0x01, 0x02},
+		Sequence: 5,
+	}); err != nil {
+		t.Fatalf("AppendChunk returned error: %v", err)
+	}
+	if got := stateStore.connections[7]; got.Status != "receiving" || got.ChunkCount != 1 || got.LastSequence != 5 {
+		t.Fatalf("connection after chunk = %+v, want receiving chunk 1 sequence 5", got)
+	}
+
+	if _, err := streamSession.Finish(context.Background()); err != nil {
+		t.Fatalf("Finish returned error: %v", err)
+	}
+	if got := stateStore.connections[7]; got.Status != "ended" || got.ChunkCount != 1 {
+		t.Fatalf("connection after finish = %+v, want ended with chunk count", got)
+	}
+
+	if err := streamService.RecordConnectionError(context.Background(), 7, errors.New("client error")); err != nil {
+		t.Fatalf("RecordConnectionError returned error: %v", err)
+	}
+	if got := stateStore.connections[7]; got.Status != "error" || got.LastError != "client error" {
+		t.Fatalf("connection after error = %+v, want error state", got)
+	}
+
+	if err := streamService.RecordConnectionClosed(context.Background(), 7, "client_close"); err != nil {
+		t.Fatalf("RecordConnectionClosed returned error: %v", err)
+	}
+	if got := stateStore.connections[7]; got.Status != "closed" || got.LastError != "client_close" {
+		t.Fatalf("connection after close = %+v, want closed state", got)
+	}
+}
