@@ -212,6 +212,41 @@ describe("api adapters", () => {
     expect(mapped.nextPracticePlan[0].title).toBe("练习建议 1");
   });
 
+  it("maps evidence-rich backend report strings into readable report cards", () => {
+    const report: BackendReport = {
+      session_id: 7,
+      scenario: { id: 1, code: "interview", name: "英语面试", difficulty: "medium" },
+      duration_seconds: 180,
+      turn_count: 1,
+      total_score: 77,
+      scores: score,
+      summary: "本次训练完成 1 轮。",
+      major_problems: ["语法准确度需要加强。证据：am study -> am studying"],
+      frequent_errors: ["am study -> am studying | 原因：be 动词后应接现在分词。 | 证据：“I am study computer science.”"],
+      better_expressions: ["I am study computer science. -> I major in computer science."],
+      next_practice_plan: [
+        "任务：把 “am study” 改写为 “am studying” 并各造 2 个新句子 | 验收：新句子必须正确使用 “am studying”。",
+      ],
+      created_at: "2026-06-07T03:05:00Z",
+    };
+
+    const mapped = mapReport(report);
+
+    expect(mapped.frequentErrors[0]).toMatchObject({
+      original: "am study",
+      suggestion: "am studying",
+      explanation: "原因：be 动词后应接现在分词。 | 证据：“I am study computer science.”",
+    });
+    expect(mapped.betterExpressions[0]).toEqual({
+      before: "I am study computer science.",
+      after: "I major in computer science.",
+    });
+    expect(mapped.nextPracticePlan[0]).toEqual({
+      title: "把 “am study” 改写为 “am studying” 并各造 2 个新句子",
+      description: "验收：新句子必须正确使用 “am studying”。",
+    });
+  });
+
   it("maps null backend report arrays to empty UI arrays", () => {
     const report: BackendReport = {
       session_id: 7,

@@ -28,17 +28,37 @@ func TestMockSummaryAgentBuildsStableReportSummary(t *testing.T) {
 	if len(output.FrequentErrors) != 2 {
 		t.Fatalf("frequent_errors length = %d, want 2", len(output.FrequentErrors))
 	}
-	if output.FrequentErrors[0] != "am study -> am studying" {
+	if !strings.Contains(output.FrequentErrors[0], "am study -> am studying") {
 		t.Fatalf("first frequent error = %q, want grammar suggestion", output.FrequentErrors[0])
 	}
 	if len(output.BetterExpressions) != 2 {
 		t.Fatalf("better_expressions length = %d, want 2", len(output.BetterExpressions))
 	}
-	if output.BetterExpressions[0] != "I major in computer science." {
+	if !strings.Contains(output.BetterExpressions[0], "I major in computer science.") {
 		t.Fatalf("first better expression = %q, want correction suggestion", output.BetterExpressions[0])
 	}
 	if len(output.NextPracticePlan) == 0 {
 		t.Fatal("next_practice_plan is empty")
+	}
+}
+
+func TestMockSummaryAgentAnchorsReportInConversationEvidence(t *testing.T) {
+	agent := NewMockSummaryAgent()
+	input := validSummaryInput()
+
+	output, err := agent.Summarize(input)
+	if err != nil {
+		t.Fatalf("Summarize returned error: %v", err)
+	}
+
+	if !strings.Contains(output.Summary, "I am study computer science") {
+		t.Fatalf("summary = %q, want a concrete user utterance from the conversation", output.Summary)
+	}
+	if !containsStringWith(output.MajorProblems, "am study") {
+		t.Fatalf("major_problems = %#v, want correction evidence from the user's wording", output.MajorProblems)
+	}
+	if !containsStringWith(output.NextPracticePlan, "have done") {
+		t.Fatalf("next_practice_plan = %#v, want practice tied to a corrected expression", output.NextPracticePlan)
 	}
 }
 
@@ -64,6 +84,16 @@ func TestMockSummaryAgentReturnsFallbackSuggestionsWithoutCorrections(t *testing
 	if len(output.NextPracticePlan) == 0 {
 		t.Fatal("next_practice_plan should contain fallback guidance")
 	}
+}
+
+func containsStringWith(values []string, fragment string) bool {
+	for _, value := range values {
+		if strings.Contains(value, fragment) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func validSummaryInput() SummaryInput {

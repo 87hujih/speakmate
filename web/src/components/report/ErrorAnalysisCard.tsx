@@ -30,6 +30,12 @@ export function ErrorAnalysisCard({ correction }: ErrorAnalysisCardProps) {
           {correction.suggestion}
         </div>
       </div>
+      {correction.explanation ? (
+        <div className="mt-3 rounded-2xl bg-amber-50 p-3 text-[13px] leading-6 text-amber-800">
+          <strong className="mb-1 block text-amber-950">分析依据</strong>
+          {correction.explanation}
+        </div>
+      ) : null}
     </div>
   );
 }

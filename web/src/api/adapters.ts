@@ -9,7 +9,17 @@ import type {
   BackendScoreResult,
   BackendSessionDetail,
 } from "./client";
-import type { Correction, HistoryRecord, Scenario, ScoreDimension, TrainingReport, TrainingSession, TrainingTask } from "../types";
+import type {
+  BetterExpression,
+  Correction,
+  HistoryRecord,
+  PracticePlanItem,
+  Scenario,
+  ScoreDimension,
+  TrainingReport,
+  TrainingSession,
+  TrainingTask,
+} from "../types";
 import { scoreTone } from "../utils/format";
 
 const defaultScoreDescriptions: Record<ScoreDimension["key"], string> = {
@@ -297,16 +307,64 @@ function mapReportScenario(report: BackendReport): Scenario {
 }
 
 function parseFrequentError(error: string, index: number): Correction {
-  const [rawOriginal, rawSuggestion] = error.split("->").map((part) => part.trim());
+  const segments = splitReportSegments(error);
+  const pair = segments[0] || error;
+  const [rawOriginal, rawSuggestion] = splitArrowPair(pair);
+  const detail = segments.slice(1).join(" | ");
 
   return {
     title: `高频错误 ${index + 1}`,
     category: "grammar",
     original: rawOriginal || error,
     suggestion: rawSuggestion || error,
-    explanation: error,
-    issues: [error],
+    explanation: detail || error,
+    issues: segments.length ? segments : [error],
   };
+}
+
+function splitReportSegments(value: string) {
+  return value
+    .split("|")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function splitArrowPair(value: string): [string, string] {
+  const arrowIndex = value.indexOf("->");
+  if (arrowIndex < 0) {
+    return [value.trim(), ""];
+  }
+
+  return [value.slice(0, arrowIndex).trim(), value.slice(arrowIndex + 2).trim()];
+}
+
+function parseBetterExpression(expression: string): BetterExpression {
+  const [before, after] = splitArrowPair(expression);
+  if (after) {
+    return { before, after };
+  }
+
+  return {
+    before: "原表达见纠错项",
+    after: expression,
+  };
+}
+
+function parsePracticePlanItem(item: string, index: number): PracticePlanItem {
+  const segments = splitReportSegments(item);
+  const firstSegment = segments[0] || "";
+  const hasTaskPrefix = firstSegment.startsWith("任务：");
+  const task = hasTaskPrefix ? stripReportPrefix(firstSegment, "任务：") : "";
+  const detail = segments.slice(1).join(" | ");
+
+  return {
+    title: task || `练习建议 ${index + 1}`,
+    description: detail || item,
+  };
+}
+
+function stripReportPrefix(value: string, prefix: string) {
+  return value.startsWith(prefix) ? value.slice(prefix.length).trim() : value.trim();
 }
 
 export function mapReport(report: BackendReport): TrainingReport {
@@ -328,14 +386,8 @@ export function mapReport(report: BackendReport): TrainingReport {
     scores: mapSessionScore(report.scores),
     majorProblems,
     frequentErrors: frequentErrors.map(parseFrequentError),
-    betterExpressions: betterExpressions.map((expression) => ({
-      before: "原表达见纠错项",
-      after: expression,
-    })),
-    nextPracticePlan: nextPracticePlan.map((item, index) => ({
-      title: `练习建议 ${index + 1}`,
-      description: item,
-    })),
+    betterExpressions: betterExpressions.map(parseBetterExpression),
+    nextPracticePlan: nextPracticePlan.map(parsePracticePlanItem),
     createdAt: formatDateTime(report.created_at),
   };
 }
