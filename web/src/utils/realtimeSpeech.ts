@@ -32,10 +32,18 @@ export interface RealtimeSpeechSession {
   abort: () => void;
 }
 
+export interface RealtimeSpeechFallbackState {
+  finalReceived?: boolean;
+  stopRequested?: boolean;
+  fallbackAttempted?: boolean;
+}
+
 interface NormalizedSpeechResult {
   transcript: string;
   isFinal: boolean;
 }
+
+const nonFallbackSpeechErrors = new Set(["no-speech", "not-allowed", "realtime_speech_unsupported"]);
 
 function browserSpeechHost(): SpeechRecognitionHost {
   if (typeof window === "undefined") {
@@ -51,6 +59,19 @@ function speechRecognitionConstructor(host: SpeechRecognitionHost = browserSpeec
 
 export function isRealtimeSpeechSupported(host: SpeechRecognitionHost = browserSpeechHost()) {
   return Boolean(speechRecognitionConstructor(host));
+}
+
+export function shouldFallbackToRecordedAudio(code: string, state: RealtimeSpeechFallbackState = {}) {
+  if (state.finalReceived || state.stopRequested || state.fallbackAttempted) {
+    return false;
+  }
+
+  const normalizedCode = code.trim().toLowerCase();
+  if (!normalizedCode) {
+    return true;
+  }
+
+  return !nonFallbackSpeechErrors.has(normalizedCode);
 }
 
 export function normalizeSpeechRecognitionResult(event: unknown): NormalizedSpeechResult {

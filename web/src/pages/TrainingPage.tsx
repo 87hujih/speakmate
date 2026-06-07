@@ -13,7 +13,12 @@ import { TrainingHeader } from "../components/training/TrainingHeader";
 import { buttonClasses } from "../components/ui/Button";
 import type { ChatMessage, TrainingSession, VoiceStatus } from "../types";
 import { extensionForAudioMimeType, selectSupportedAudioMimeType } from "../utils/audioMime";
-import { createRealtimeSpeechSession, isRealtimeSpeechSupported, type RealtimeSpeechSession } from "../utils/realtimeSpeech";
+import {
+  createRealtimeSpeechSession,
+  isRealtimeSpeechSupported,
+  shouldFallbackToRecordedAudio,
+  type RealtimeSpeechSession,
+} from "../utils/realtimeSpeech";
 import { createTextToSpeechPlayer, type TextToSpeechPlayer } from "../utils/tts";
 
 function parseRouteSessionId(value: string | undefined) {
@@ -113,6 +118,9 @@ export function TrainingPage() {
   const voiceSocketChunkSentRef = useRef(false);
   const realtimeSpeechRef = useRef<RealtimeSpeechSession | null>(null);
   const realtimeFinalReceivedRef = useRef(false);
+  const realtimeStopRequestedRef = useRef(false);
+  const realtimeFallbackAttemptedRef = useRef(false);
+  const realtimeFallbackOnEndRef = useRef(false);
   const shouldSpeakNextAIRef = useRef(false);
   const spokenAIMessageIdsRef = useRef<Set<number>>(new Set());
   const ttsPlayerRef = useRef<TextToSpeechPlayer | null>(null);
@@ -320,6 +328,9 @@ export function TrainingPage() {
     }
 
     realtimeFinalReceivedRef.current = false;
+    realtimeStopRequestedRef.current = false;
+    realtimeFallbackAttemptedRef.current = false;
+    realtimeFallbackOnEndRef.current = false;
     setVoiceTranscript("");
     setVoiceError("");
     setSendError("");
@@ -336,12 +347,32 @@ export function TrainingPage() {
         void sendRealtimeTranscript(transcript);
       },
       onError: (code) => {
+        const shouldUseRecordedAudioFallback = shouldFallbackToRecordedAudio(code, {
+          finalReceived: realtimeFinalReceivedRef.current,
+          stopRequested: realtimeStopRequestedRef.current,
+          fallbackAttempted: realtimeFallbackAttemptedRef.current,
+        });
+        if (shouldUseRecordedAudioFallback) {
+          realtimeFallbackAttemptedRef.current = true;
+          realtimeFallbackOnEndRef.current = true;
+          setVoiceError("");
+          setStreamNotice("浏览器实时听写启动失败，已自动切换为录音上传。");
+          closeRealtimeSpeech();
+          return;
+        }
+
+        realtimeFallbackOnEndRef.current = false;
         closeRealtimeSpeech();
         setVoiceStatus("idle");
         setVoiceError(realtimeSpeechErrorMessage(code));
       },
       onEnd: () => {
         realtimeSpeechRef.current = null;
+        if (realtimeFallbackOnEndRef.current) {
+          realtimeFallbackOnEndRef.current = false;
+          void startRecording();
+          return;
+        }
         if (!realtimeFinalReceivedRef.current) {
           setVoiceStatus("idle");
         }
@@ -366,6 +397,8 @@ export function TrainingPage() {
       return false;
     }
 
+    realtimeStopRequestedRef.current = true;
+    realtimeFallbackOnEndRef.current = false;
     setVoiceStatus("recognizing");
     session.stop();
     return true;

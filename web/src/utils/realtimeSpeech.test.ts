@@ -3,6 +3,7 @@ import {
   createRealtimeSpeechSession,
   isRealtimeSpeechSupported,
   normalizeSpeechRecognitionResult,
+  shouldFallbackToRecordedAudio,
   type SpeechRecognitionLike,
 } from "./realtimeSpeech";
 
@@ -91,5 +92,19 @@ describe("realtime speech helper", () => {
     session.start();
 
     expect(onError).toHaveBeenCalledWith("realtime_speech_unsupported");
+  });
+
+  it("classifies recoverable startup errors for recorded audio fallback", () => {
+    expect(shouldFallbackToRecordedAudio("aborted")).toBe(true);
+    expect(shouldFallbackToRecordedAudio("audio-capture")).toBe(true);
+    expect(shouldFallbackToRecordedAudio("network")).toBe(true);
+    expect(shouldFallbackToRecordedAudio("service-not-allowed")).toBe(true);
+    expect(shouldFallbackToRecordedAudio("language-not-supported")).toBe(true);
+    expect(shouldFallbackToRecordedAudio("realtime_speech_error")).toBe(true);
+    expect(shouldFallbackToRecordedAudio("not-allowed")).toBe(false);
+    expect(shouldFallbackToRecordedAudio("no-speech")).toBe(false);
+    expect(shouldFallbackToRecordedAudio("network", { finalReceived: true })).toBe(false);
+    expect(shouldFallbackToRecordedAudio("network", { stopRequested: true })).toBe(false);
+    expect(shouldFallbackToRecordedAudio("network", { fallbackAttempted: true })).toBe(false);
   });
 });
