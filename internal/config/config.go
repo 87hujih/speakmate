@@ -57,12 +57,25 @@ type LLMConfig struct {
 }
 
 type ASRConfig struct {
-	Provider       string
-	BaseURL        string
-	APIKey         string
-	Model          string
-	TimeoutSeconds int
-	UseMock        bool
+	Provider               string
+	BaseURL                string
+	APIKey                 string
+	Model                  string
+	TimeoutSeconds         int
+	UseMock                bool
+	TencentAppID           string
+	TencentSecretID        string
+	TencentSecretKey       string
+	TencentEngineType      string
+	TencentVoiceFormat     string
+	TencentHotwordID       string
+	TencentHotwordList     string
+	TencentCustomizationID string
+	TencentFilterDirty     int
+	TencentFilterModal     int
+	TencentFilterPunc      int
+	TencentConvertNumMode  int
+	TencentWordInfo        int
 }
 
 type FeedbackConfig struct {
@@ -114,12 +127,25 @@ func Load() Config {
 			FallbackToMock: boolEnv("LLM_FALLBACK_TO_MOCK", true),
 		},
 		ASR: ASRConfig{
-			Provider:       stringEnv("ASR_PROVIDER", "mock"),
-			BaseURL:        strings.TrimSpace(os.Getenv("ASR_BASE_URL")),
-			APIKey:         strings.TrimSpace(os.Getenv("ASR_API_KEY")),
-			Model:          strings.TrimSpace(os.Getenv("ASR_MODEL")),
-			TimeoutSeconds: positiveIntEnv("ASR_TIMEOUT_SECONDS", externalServiceTimeoutSeconds),
-			UseMock:        boolEnv("ASR_USE_MOCK", true),
+			Provider:               stringEnv("ASR_PROVIDER", "mock"),
+			BaseURL:                strings.TrimSpace(os.Getenv("ASR_BASE_URL")),
+			APIKey:                 strings.TrimSpace(os.Getenv("ASR_API_KEY")),
+			Model:                  strings.TrimSpace(os.Getenv("ASR_MODEL")),
+			TimeoutSeconds:         positiveIntEnv("ASR_TIMEOUT_SECONDS", externalServiceTimeoutSeconds),
+			UseMock:                boolEnv("ASR_USE_MOCK", true),
+			TencentAppID:           strings.TrimSpace(os.Getenv("TENCENT_ASR_APP_ID")),
+			TencentSecretID:        strings.TrimSpace(os.Getenv("TENCENT_ASR_SECRET_ID")),
+			TencentSecretKey:       strings.TrimSpace(os.Getenv("TENCENT_ASR_SECRET_KEY")),
+			TencentEngineType:      strings.TrimSpace(os.Getenv("TENCENT_ASR_ENGINE_TYPE")),
+			TencentVoiceFormat:     stringEnv("TENCENT_ASR_VOICE_FORMAT", "ogg-opus"),
+			TencentHotwordID:       strings.TrimSpace(os.Getenv("TENCENT_ASR_HOTWORD_ID")),
+			TencentHotwordList:     strings.TrimSpace(os.Getenv("TENCENT_ASR_HOTWORD_LIST")),
+			TencentCustomizationID: strings.TrimSpace(os.Getenv("TENCENT_ASR_CUSTOMIZATION_ID")),
+			TencentFilterDirty:     nonNegativeIntEnv("TENCENT_ASR_FILTER_DIRTY", 0),
+			TencentFilterModal:     nonNegativeIntEnv("TENCENT_ASR_FILTER_MODAL", 0),
+			TencentFilterPunc:      nonNegativeIntEnv("TENCENT_ASR_FILTER_PUNC", 0),
+			TencentConvertNumMode:  nonNegativeIntEnv("TENCENT_ASR_CONVERT_NUM_MODE", 1),
+			TencentWordInfo:        nonNegativeIntEnv("TENCENT_ASR_WORD_INFO", 0),
 		},
 		Feedback: FeedbackConfig{
 			CorrectionUseMock: boolEnv("CORRECTION_USE_MOCK", true),
@@ -167,6 +193,13 @@ func (c ASRConfig) HasRequiredFields() bool {
 	return strings.TrimSpace(c.BaseURL) != "" &&
 		strings.TrimSpace(c.APIKey) != "" &&
 		strings.TrimSpace(c.Model) != ""
+}
+
+func (c ASRConfig) HasTencentRequiredFields() bool {
+	return strings.TrimSpace(c.TencentAppID) != "" &&
+		strings.TrimSpace(c.TencentSecretID) != "" &&
+		strings.TrimSpace(c.TencentSecretKey) != "" &&
+		strings.TrimSpace(c.TencentEngineType) != ""
 }
 
 func (c StorageConfig) Validate() error {
