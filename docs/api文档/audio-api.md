@@ -1,13 +1,20 @@
 # Audio Upload API 接口文档
 
 本文档说明单段音频上传接口。浏览器也可以使用实时 WebSocket 音频分片接口，见 [audio-websocket-api.md](audio-websocket-api.md)。
-单段上传后端使用 Mock ASR 生成稳定 transcript，然后复用现有文本消息训练链路。
+单段上传会调用当前配置的 ASR Provider 生成 transcript，然后复用现有文本消息训练链路。
 
 ```text
-浏览器录音 -> 上传音频 -> Mock ASR 转文本 -> SendMessage -> AI 回复 -> 纠错评分
+浏览器录音 -> 上传音频 -> ASR Provider 转文本 -> SendMessage -> AI 回复 -> 纠错评分
 ```
 
-当前版本不做音素级发音评分，也不请求真实 ASR 服务。
+当前支持两种 ASR 模式：
+
+| 模式 | 配置 | 行为 |
+|---|---|---|
+| Mock ASR | `ASR_USE_MOCK=true` 或 `ASR_PROVIDER=mock` | 返回稳定 transcript，适合本地演示和自动测试 |
+| 腾讯云 ASR | `ASR_USE_MOCK=false` 且 `ASR_PROVIDER=tencent` | 使用腾讯云 Go Speech SDK `FlashRecognizer` 识别完整音频 |
+
+当前版本不做音素级发音评分，也不实现腾讯云实时 partial transcript。
 
 ## 基本信息
 
@@ -21,15 +28,40 @@
 | 是否需要登录 | 当前版本不需要 |
 | 前置条件 | 必须先通过 `POST /api/v1/sessions` 创建 `running` Session |
 
+## ASR 配置
+
+Mock 模式是默认配置：
+
+```env
+ASR_PROVIDER=mock
+ASR_USE_MOCK=true
+ASR_TIMEOUT_SECONDS=30
+```
+
+腾讯云模式需要完整配置，缺少必填项时服务启动会失败，不会静默降级到 Mock：
+
+```env
+ASR_PROVIDER=tencent
+ASR_USE_MOCK=false
+ASR_TIMEOUT_SECONDS=30
+
+TENCENT_ASR_APP_ID=
+TENCENT_ASR_SECRET_ID=
+TENCENT_ASR_SECRET_KEY=
+TENCENT_ASR_ENGINE_TYPE=16k_en
+TENCENT_ASR_VOICE_FORMAT=ogg-opus
+```
+
+不要把真实 `TENCENT_ASR_APP_ID`、`TENCENT_ASR_SECRET_ID`、`TENCENT_ASR_SECRET_KEY` 写进 README、测试输出或 git。
+
 ## 能力边界
 
 | 能力 | 当前状态 |
 |---|---|
 | 单段录音上传 | 支持 |
-| ASR 转写 | Mock 实现，输出稳定文本 |
+| ASR 转写 | Mock 或腾讯云 `FlashRecognizer` |
 | 转写后进入训练链路 | 支持，复用 `SendMessage` |
 | 纠错和评分 | 支持，行为与文本消息一致 |
-| 真实 ASR Provider | 未接入 |
 | WebSocket 音频分片 | 支持，见 [audio-websocket-api.md](audio-websocket-api.md) |
 | 音素级发音评分 | 未包含在本接口 |
 
@@ -38,9 +70,11 @@
 | 限制项 | 说明 |
 |---|---|
 | 最大大小 | `10MB` |
-| 支持类型 | `audio/webm`、`audio/wav`、`audio/wave`、`audio/x-wav`、`audio/mpeg`、`audio/mp3`、`audio/mp4`、`audio/ogg`、`audio/x-m4a` |
+| 后端接受类型 | `audio/webm`、`audio/wav`、`audio/wave`、`audio/x-wav`、`audio/mpeg`、`audio/mp3`、`audio/mp4`、`audio/ogg`、`audio/x-m4a` |
+| 腾讯云真实识别支持 | 当前映射 `ogg -> ogg-opus`、`mp4/x-m4a -> m4a`、`wav/x-wav -> wav`、`mpeg/mp3 -> mp3` |
+| 腾讯云真实识别不支持 | `audio/webm` 当前会返回 ASR 失败，后续可增加后端转码 |
 | 空文件 | 返回 `400 / 7002` |
-| 不支持类型 | 返回 `400 / 7004` |
+| 后端不支持类型 | 返回 `400 / 7004` |
 
 ## 上传音频
 
@@ -127,8 +161,8 @@ HTTP 状态码：`200`
 | `400` | `7001` | `invalid audio request` | multipart 请求格式非法 |
 | `400` | `7002` | `audio file is required` | 缺少 `audio` 文件或文件为空 |
 | `413` | `7003` | `audio file too large` | 文件超过 `10MB` |
-| `400` | `7004` | `audio file type unsupported` | 音频类型不在支持列表中 |
-| `502` | `7005` | `asr client failed` | ASR Client 转写失败 |
+| `400` | `7004` | `audio file type unsupported` | 音频类型不在后端支持列表中 |
+| `502` | `7005` | `asr client failed` | ASR Client 转写失败，包括腾讯云鉴权失败、请求失败、真实模式下收到 `webm` 等 |
 | `400` | `7006` | `audio transcript is required` | ASR 没有返回有效文本 |
 | `404` | `2003` | `session not found` | Session 不存在 |
 | `409` | `2004` | `session already finished` | Session 已结束，不允许继续发送音频 |
@@ -138,6 +172,8 @@ HTTP 状态码：`200`
 
 ## curl 示例
 
+Mock 模式可以上传 `webm`：
+
 ```bash
 curl -X POST http://localhost:8080/api/v1/sessions \
   -H "Content-Type: application/json" \
@@ -145,6 +181,13 @@ curl -X POST http://localhost:8080/api/v1/sessions \
 
 curl -X POST http://localhost:8080/api/v1/sessions/1/audio \
   -F "audio=@answer.webm;type=audio/webm"
+```
+
+腾讯云模式建议上传 `ogg-opus`、`m4a/mp4` 或 `wav`：
+
+```bash
+curl -X POST http://localhost:8080/api/v1/sessions/1/audio \
+  -F "audio=@answer.ogg;type=audio/ogg"
 ```
 
 ## 前端使用建议
@@ -156,6 +199,7 @@ curl -X POST http://localhost:8080/api/v1/sessions/1/audio \
 - 收到 `409 / 2004` 后禁用录音入口，并提示训练已结束。
 - SSE 已连接时，音频上传同样会触发 `ai_message_delta`、`ai_message_done`、`correction_done`、`score_updated` 事件。
 - 如果浏览器支持 WebSocket，训练页会优先使用实时音频分片；连接失败时可回退到本单段上传接口。
+- 真实腾讯云模式下，只有 `webm` 录音能力的浏览器会识别失败；保持 Mock 模式或后续接入后端转码可以规避。
 
 ## 验证命令
 

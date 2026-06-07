@@ -1,12 +1,19 @@
 # Audio WebSocket API 接口文档
 
-本文档说明实时音频分片接口。当前版本使用 Mock ASR 生成稳定 partial/final transcript；final transcript 会复用现有 `SendMessage` 训练链路。
+本文档说明实时音频分片接口。服务端会缓存客户端发送的音频分片；客户端发送 `end` 后，服务端使用当前配置的 ASR Provider 生成 final transcript，并复用现有 `SendMessage` 训练链路。
 
 ```text
-WebSocket 录音分片 -> Mock ASR partial transcript -> end -> final transcript -> SendMessage -> AI 回复 -> 纠错评分
+WebSocket 录音分片 -> end -> ASR Provider final transcript -> SendMessage -> AI 回复 -> 纠错评分
 ```
 
-当前版本不请求真实 ASR 服务，也不做音素级发音评分。单段上传接口仍见 [audio-api.md](audio-api.md)。
+当前支持两种 ASR 模式：
+
+| 模式 | partial_transcript | final_transcript |
+|---|---|---|
+| Mock ASR | 每个分片后返回稳定 mock partial | 使用 Mock ASR |
+| 腾讯云 ASR | 不请求腾讯云实时识别，返回空 partial 占位和 sequence | 客户端 `end` 后用累计音频调用 `FlashRecognizer` |
+
+当前版本不做音素级发音评分，也不实现腾讯云实时 partial transcript。真实实时识别需要后续单独接入腾讯云 `SpeechRecognizer`。
 
 ## 基本信息
 
@@ -17,7 +24,8 @@ WebSocket 录音分片 -> Mock ASR partial transcript -> end -> final transcript
 | 是否需要登录 | 当前版本不需要 |
 | 前置条件 | 必须先创建 `running` Session |
 | 最大音频大小 | 单条连接累计 `10MB` |
-| 支持音频类型 | 与单段上传一致：`audio/webm`、`audio/wav`、`audio/mp4`、`audio/ogg` 等 |
+| 后端接受音频类型 | 与单段上传一致：`audio/webm`、`audio/wav`、`audio/mp4`、`audio/ogg` 等 |
+| 腾讯云真实识别限制 | `webm` 当前不支持；建议使用 `ogg-opus`、`m4a/mp4` 或 `wav` |
 
 ## 客户端事件
 
@@ -29,7 +37,7 @@ WebSocket 录音分片 -> Mock ASR partial transcript -> end -> final transcript
 {
   "type": "start",
   "payload": {
-    "content_type": "audio/webm"
+    "content_type": "audio/ogg"
   }
 }
 ```
@@ -80,21 +88,21 @@ JSON 文本帧格式：
   "type": "start",
   "session_id": 1,
   "payload": {
-    "content_type": "audio/webm"
+    "content_type": "audio/ogg"
   }
 }
 ```
 
 ### partial_transcript
 
-每个有效音频分片后返回稳定 partial transcript。
+每个有效音频分片后返回 `partial_transcript` 事件。Mock 模式会带稳定 mock 文本；腾讯云真实模式下不会对每个 chunk 请求 `FlashRecognizer`，因此 `transcript` 可以为空，前端应把它视为占位进度事件。
 
 ```json
 {
   "type": "partial_transcript",
   "session_id": 1,
   "payload": {
-    "transcript": "I am study",
+    "transcript": "",
     "sequence": 1
   }
 }
@@ -109,7 +117,7 @@ JSON 文本帧格式：
   "type": "final_transcript",
   "session_id": 1,
   "payload": {
-    "transcript": "I am study computer science and I have did a project.",
+    "transcript": "I built a speech practice app with Go.",
     "user_message": {},
     "ai_message": {},
     "stage": "项目经历",
@@ -153,8 +161,8 @@ JSON 文本帧格式：
   "type": "error",
   "session_id": 1,
   "payload": {
-    "code": "audio_file_required",
-    "message": "audio file is required"
+    "code": "asr_client_failed",
+    "message": "asr client failed"
   }
 }
 ```
@@ -166,8 +174,8 @@ JSON 文本帧格式：
 | `invalid_audio_request` | `invalid audio request` | 事件格式非法、顺序非法或缺少必要字段 |
 | `audio_file_required` | `audio file is required` | 分片为空或结束时没有音频 |
 | `audio_file_too_large` | `audio file too large` | 累计音频超过 `10MB` |
-| `audio_file_type_unsupported` | `audio file type unsupported` | `start.payload.content_type` 不支持 |
-| `asr_client_failed` | `asr client failed` | ASR 转写失败 |
+| `audio_file_type_unsupported` | `audio file type unsupported` | `start.payload.content_type` 不在后端支持列表中 |
+| `asr_client_failed` | `asr client failed` | ASR 转写失败，包括腾讯云鉴权失败、请求失败、真实模式下收到 `webm` 等 |
 | `audio_transcript_required` | `audio transcript is required` | ASR 没有返回有效文本 |
 | `session_not_found` | `session not found` | Session 不存在 |
 | `session_already_finished` | `session already finished` | Session 已结束 |
@@ -196,8 +204,9 @@ JSON 文本帧格式：
 ## 前端接入建议
 
 - 录音开始后先发送 `start`，再按 `MediaRecorder.start(timeslice)` 产生的分片发送二进制帧。
-- 展示 `partial_transcript.payload.transcript` 作为实时转写。
+- 展示 `partial_transcript.payload.transcript` 时允许空字符串；真实腾讯云模式下它不是实时识别结果。
 - 收到 `final_transcript` 后刷新训练详情；收到 `correction` / `score_updated` 后刷新反馈面板。
+- 收到 `asr_client_failed` 时允许用户重新录音；如果浏览器只能录 `webm`，真实腾讯云模式下需要换支持 `ogg/mp4/wav` 的浏览器或等待后端转码能力。
 - WebSocket 不可用或连接失败时，保留单段上传 fallback。
 
 ## 验证命令
