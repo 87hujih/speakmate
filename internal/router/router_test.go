@@ -3,6 +3,7 @@ package router
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -16,11 +17,14 @@ import (
 	"testing"
 	"time"
 
+	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/gorilla/websocket"
+	goredis "github.com/redis/go-redis/v9"
 
 	"speakmate/internal/agent"
 	"speakmate/internal/config"
 	infraasr "speakmate/internal/infra/asr"
+	infraredis "speakmate/internal/infra/redis"
 )
 
 func TestMain(m *testing.M) {
@@ -135,6 +139,49 @@ func TestNewWithErrorRejectsTencentASRConfigMissingRequiredFields(t *testing.T) 
 	if !errors.Is(err, infraasr.ErrTencentASRConfigRequired) {
 		t.Fatalf("NewWithError error = %v, want ErrTencentASRConfigRequired", err)
 	}
+}
+
+func TestNewWithErrorRejectsUnavailableRedisWhenEnabled(t *testing.T) {
+	_, err := NewWithError(redisRouterConfig("127.0.0.1:1"))
+
+	if !errors.Is(err, infraredis.ErrRedisUnavailable) {
+		t.Fatalf("NewWithError error = %v, want ErrRedisUnavailable", err)
+	}
+}
+
+func TestRedisModeWritesSessionStateAndEvents(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := goredis.NewClient(&goredis.Options{Addr: server.Addr()})
+	t.Cleanup(func() {
+		_ = client.Close()
+	})
+	engine, err := NewWithError(redisRouterConfig(server.Addr()))
+	if err != nil {
+		t.Fatalf("NewWithError returned error: %v", err)
+	}
+
+	sessionID := createSession(t, engine, 1)
+	postMessage(t, engine, sessionID, `{"content":"I am study computer science and I have did a project."}`)
+
+	ctx := context.Background()
+	stateKey := "session:" + strconv.Itoa(sessionID) + ":state"
+	if got := client.HGet(ctx, stateKey, "turn_count").Val(); got != "1" {
+		t.Fatalf("%s turn_count = %q, want 1", stateKey, got)
+	}
+	if got := client.LLen(ctx, "session:"+strconv.Itoa(sessionID)+":messages").Val(); got != 2 {
+		t.Fatalf("message snapshot length = %d, want 2", got)
+	}
+	if got := client.LLen(ctx, "session:"+strconv.Itoa(sessionID)+":corrections").Val(); got != 1 {
+		t.Fatalf("correction state length = %d, want 1", got)
+	}
+	if got := client.HGet(ctx, "session:"+strconv.Itoa(sessionID)+":partial_score", "total_score").Val(); got != "77" {
+		t.Fatalf("partial total_score = %q, want 77", got)
+	}
+	if got := client.LLen(ctx, "session:"+strconv.Itoa(sessionID)+":events").Val(); got < 3 {
+		t.Fatalf("events length = %d, want retained stream events", got)
+	}
+	assertRouterRedisTTL(t, ctx, client, stateKey)
+	assertRouterRedisTTL(t, ctx, client, "session:"+strconv.Itoa(sessionID)+":events")
 }
 
 // TestScenarioListReturnsBuiltInScenarios 验证场景列表接口返回 3 个内置场景。
@@ -1690,5 +1737,47 @@ func validRouterTencentASRConfig() config.ASRConfig {
 		TencentSecretKey:   "secret-key",
 		TencentEngineType:  "16k_en",
 		TencentVoiceFormat: "ogg-opus",
+	}
+}
+
+func redisRouterConfig(addr string) config.Config {
+	return config.Config{
+		Server: config.ServerConfig{RequestTimeoutSeconds: 30},
+		Storage: config.StorageConfig{
+			Mode: config.StorageModeMemory,
+		},
+		Redis: config.RedisConfig{
+			Enabled:               true,
+			Addr:                  addr,
+			DB:                    0,
+			ConnectTimeoutSeconds: 1,
+		},
+		LLM: config.LLMConfig{
+			Provider:       "openai-compatible",
+			UseMock:        true,
+			FallbackToMock: true,
+		},
+		ASR: config.ASRConfig{
+			Provider: "mock",
+			UseMock:  true,
+		},
+		Feedback: config.FeedbackConfig{
+			CorrectionUseMock: true,
+			ScoringUseMock:    true,
+			SummaryUseMock:    true,
+			FailOpen:          true,
+		},
+	}
+}
+
+func assertRouterRedisTTL(t *testing.T, ctx context.Context, client *goredis.Client, key string) {
+	t.Helper()
+
+	ttl, err := client.TTL(ctx, key).Result()
+	if err != nil {
+		t.Fatalf("TTL(%s) returned error: %v", key, err)
+	}
+	if ttl <= 0 {
+		t.Fatalf("TTL(%s) = %s, want positive TTL", key, ttl)
 	}
 }
