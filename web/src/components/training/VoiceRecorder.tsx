@@ -1,4 +1,4 @@
-import { Brain, LoaderCircle, Mic, Square } from "lucide-react";
+import { Brain, LoaderCircle, Mic, Square, Volume2 } from "lucide-react";
 import type { VoiceStatus } from "../../types";
 import { cn } from "../../utils/cn";
 import { Waveform } from "./Waveform";
@@ -15,8 +15,9 @@ interface VoiceRecorderProps {
 export function VoiceRecorder({ status, transcript, error, isDisabled = false, onToggle }: VoiceRecorderProps) {
   const copy = voiceStatusContent[status];
   const isActive = status !== "idle";
-  const StatusIcon = status === "thinking" ? Brain : status === "recognizing" ? LoaderCircle : status === "recording" ? Square : Mic;
-  const isButtonDisabled = isDisabled || status === "recognizing" || status === "thinking";
+  const StatusIcon =
+    status === "speaking" ? Volume2 : status === "thinking" ? Brain : status === "recognizing" ? LoaderCircle : status === "recording" ? Square : Mic;
+  const isButtonDisabled = isDisabled || status === "recognizing" || status === "thinking" || status === "speaking";
 
   return (
     <div className="border-t border-line bg-white px-5 py-4">
@@ -38,7 +39,7 @@ export function VoiceRecorder({ status, transcript, error, isDisabled = false, o
 
         <div className="min-w-0">
           <Waveform active={isActive} />
-          <div className="mt-2 grid grid-cols-4 gap-1.5">
+          <div className="mt-2 grid grid-cols-5 gap-1.5">
             {voiceStatusOrder.map((item) => (
               <span
                 key={item}

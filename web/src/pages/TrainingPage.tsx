@@ -13,6 +13,8 @@ import { TrainingHeader } from "../components/training/TrainingHeader";
 import { buttonClasses } from "../components/ui/Button";
 import type { ChatMessage, TrainingSession, VoiceStatus } from "../types";
 import { extensionForAudioMimeType, selectSupportedAudioMimeType } from "../utils/audioMime";
+import { createRealtimeSpeechSession, isRealtimeSpeechSupported, type RealtimeSpeechSession } from "../utils/realtimeSpeech";
+import { createTextToSpeechPlayer, type TextToSpeechPlayer } from "../utils/tts";
 
 function parseRouteSessionId(value: string | undefined) {
   const numeric = Number(value);
@@ -109,6 +111,11 @@ export function TrainingPage() {
   const voiceSocketRef = useRef<WebSocket | null>(null);
   const voiceSocketReadyRef = useRef(false);
   const voiceSocketChunkSentRef = useRef(false);
+  const realtimeSpeechRef = useRef<RealtimeSpeechSession | null>(null);
+  const realtimeFinalReceivedRef = useRef(false);
+  const shouldSpeakNextAIRef = useRef(false);
+  const spokenAIMessageIdsRef = useRef<Set<number>>(new Set());
+  const ttsPlayerRef = useRef<TextToSpeechPlayer | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
   async function reload(nextGoal?: string) {
@@ -141,6 +148,8 @@ export function TrainingPage() {
         recorder.onstop = null;
         recorder.stop();
       }
+      closeRealtimeSpeech();
+      ttsPlayerRef.current?.cancel();
       closeVoiceSocket();
       stopMediaStream();
     };
@@ -157,7 +166,12 @@ export function TrainingPage() {
         setSession((current) => (current ? appendAIStreamDelta(current, event) : current));
         return;
       }
-      if (event.type === "ai_message_done" || event.type === "correction_done" || event.type === "score_updated") {
+      if (event.type === "ai_message_done") {
+        speakAIReply(event.message_id ?? 0, event.content ?? "");
+        void reload();
+        return;
+      }
+      if (event.type === "correction_done" || event.type === "score_updated") {
         void reload();
         return;
       }
@@ -208,6 +222,153 @@ export function TrainingPage() {
     } finally {
       setIsSending(false);
     }
+  }
+
+  function realtimeSpeechErrorMessage(code: string) {
+    if (code === "not-allowed" || code === "service-not-allowed") {
+      return "浏览器实时听写没有麦克风权限，请授权后重试。";
+    }
+    if (code === "no-speech") {
+      return "没有检测到有效英文语音，请重新尝试。";
+    }
+    if (code === "network") {
+      return "浏览器实时听写网络不可用，请稍后重试或使用录音上传。";
+    }
+    if (code === "realtime_speech_unsupported") {
+      return "当前浏览器不支持实时听写，已改用录音上传。";
+    }
+
+    return "实时听写失败，请重新尝试或换用录音上传。";
+  }
+
+  function textToSpeechPlayer() {
+    if (!ttsPlayerRef.current) {
+      ttsPlayerRef.current = createTextToSpeechPlayer({
+        onUnavailable: () => {
+          setStreamNotice("当前浏览器不支持 AI 语音播放，已保留文本回复。");
+          setVoiceStatus("idle");
+        },
+        onEnd: () => {
+          setVoiceStatus((current) => (current === "speaking" ? "idle" : current));
+        },
+      });
+    }
+
+    return ttsPlayerRef.current;
+  }
+
+  function speakAIReply(messageId: number, content: string) {
+    const reply = content.trim();
+    if (!shouldSpeakNextAIRef.current || !reply) {
+      return;
+    }
+    if (messageId > 0 && spokenAIMessageIdsRef.current.has(messageId)) {
+      return;
+    }
+    if (messageId > 0) {
+      spokenAIMessageIdsRef.current.add(messageId);
+    }
+    shouldSpeakNextAIRef.current = false;
+    setVoiceStatus("speaking");
+    textToSpeechPlayer().speak(reply);
+  }
+
+  async function sendRealtimeTranscript(transcript: string) {
+    if (!numericSessionId || isSending) {
+      return;
+    }
+
+    const content = transcript.trim();
+    if (!content) {
+      setVoiceStatus("idle");
+      setVoiceError("实时听写没有生成有效文本，请重新尝试。");
+      return;
+    }
+
+    setIsSending(true);
+    setSendError("");
+    setVoiceError("");
+    setVoiceStatus("thinking");
+    shouldSpeakNextAIRef.current = true;
+    try {
+      const result = await sendTrainingText(numericSessionId, content);
+      setSession(result.session);
+      speakAIReply(result.result.ai_message.id, result.result.ai_message.content);
+    } catch (error) {
+      shouldSpeakNextAIRef.current = false;
+      if (error instanceof ApiError && error.code === 2004) {
+        setVoiceError("本次训练已结束，不能继续发送语音。");
+        void reload();
+      } else {
+        setVoiceError(demoErrorMessage(error, "实时语音发送失败，请稍后重试。"));
+      }
+      setVoiceStatus("idle");
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  function closeRealtimeSpeech() {
+    realtimeSpeechRef.current?.abort();
+    realtimeSpeechRef.current = null;
+    realtimeFinalReceivedRef.current = false;
+  }
+
+  function startRealtimeSpeech() {
+    if (!numericSessionId || !isRealtimeSpeechSupported()) {
+      return false;
+    }
+
+    realtimeFinalReceivedRef.current = false;
+    setVoiceTranscript("");
+    setVoiceError("");
+    setSendError("");
+    setStreamNotice("实时听写已启动，结束后会发送最终转写。");
+    const session = createRealtimeSpeechSession({
+      onPartial: setVoiceTranscript,
+      onFinal: (transcript) => {
+        if (realtimeFinalReceivedRef.current) {
+          return;
+        }
+        realtimeFinalReceivedRef.current = true;
+        setVoiceTranscript(transcript);
+        setVoiceStatus("recognizing");
+        void sendRealtimeTranscript(transcript);
+      },
+      onError: (code) => {
+        closeRealtimeSpeech();
+        setVoiceStatus("idle");
+        setVoiceError(realtimeSpeechErrorMessage(code));
+      },
+      onEnd: () => {
+        realtimeSpeechRef.current = null;
+        if (!realtimeFinalReceivedRef.current) {
+          setVoiceStatus("idle");
+        }
+      },
+    });
+    realtimeSpeechRef.current = session;
+    setVoiceStatus("recording");
+    try {
+      session.start();
+      return true;
+    } catch (error) {
+      closeRealtimeSpeech();
+      setVoiceStatus("idle");
+      setVoiceError(error instanceof Error ? error.message : "实时听写启动失败，已改用录音上传。");
+      return false;
+    }
+  }
+
+  function stopRealtimeSpeech() {
+    const session = realtimeSpeechRef.current;
+    if (!session) {
+      return false;
+    }
+
+    setVoiceStatus("recognizing");
+    session.stop();
+    return true;
   }
 
   function stopMediaStream() {
@@ -412,10 +573,17 @@ export function TrainingPage() {
       return;
     }
     if (voiceStatus === "recording") {
+      if (stopRealtimeSpeech()) {
+        return;
+      }
       stopRecording();
       return;
     }
     if (voiceStatus !== "idle" || isSending) {
+      return;
+    }
+
+    if (startRealtimeSpeech()) {
       return;
     }
 

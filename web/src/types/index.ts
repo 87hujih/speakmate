@@ -31,7 +31,7 @@ export interface Scenario {
 
 export type MessageRole = "ai" | "user";
 
-export type VoiceStatus = "idle" | "recording" | "recognizing" | "thinking";
+export type VoiceStatus = "idle" | "recording" | "recognizing" | "thinking" | "speaking";
 
 export interface MessageMeta {
   asrConfidence?: number;

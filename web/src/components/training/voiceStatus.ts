@@ -1,12 +1,13 @@
 import type { VoiceStatus } from "../../types";
 
-export const voiceStatusOrder = ["idle", "recording", "recognizing", "thinking"] as const satisfies readonly VoiceStatus[];
+export const voiceStatusOrder = ["idle", "recording", "recognizing", "thinking", "speaking"] as const satisfies readonly VoiceStatus[];
 
 const nextStatusByStatus: Record<VoiceStatus, VoiceStatus> = {
   idle: "recording",
   recording: "recognizing",
   recognizing: "thinking",
-  thinking: "idle",
+  thinking: "speaking",
+  speaking: "idle",
 };
 
 export const voiceStatusContent: Record<
@@ -23,19 +24,24 @@ export const voiceStatusContent: Record<
     action: "开始",
   },
   recording: {
-    title: "正在听你说",
-    description: "保持英文回答连贯，结束后进行整段识别。",
+    title: "正在实时听写",
+    description: "系统会持续显示英文转写，结束后进入本轮对话。",
     action: "结束",
   },
   recognizing: {
-    title: "正在识别",
-    description: "ASR 正在处理整段回答，完成后会接入本轮训练反馈。",
+    title: "正在提交转写",
+    description: "最终转写已生成，正在发送给 AI 教练。",
     action: "等待",
   },
   thinking: {
     title: "AI 正在思考",
     description: "AI 面试官正在生成追问和实时反馈。",
     action: "重置",
+  },
+  speaking: {
+    title: "AI 正在说话",
+    description: "正在播放本轮 AI 回复，播放结束后可以继续练习。",
+    action: "等待",
   },
 };
 

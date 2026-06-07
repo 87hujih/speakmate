@@ -13,7 +13,9 @@ WebSocket 录音分片 -> end -> ASR Provider final transcript -> SendMessage ->
 | Mock ASR | 每个分片后返回稳定 mock partial | 使用 Mock ASR |
 | 腾讯云 ASR | 不请求腾讯云实时识别，返回空 partial 占位和 sequence | 客户端 `end` 后用累计音频调用 `FlashRecognizer` |
 
-当前版本不做音素级发音评分，也不实现腾讯云实时 partial transcript。真实实时识别需要后续单独接入腾讯云 `SpeechRecognizer`。
+当前版本不做音素级发音评分，也不实现腾讯云实时 partial transcript。真实腾讯云实时识别需要后续单独接入腾讯云 `SpeechRecognizer`。
+
+前端训练页已经支持一个浏览器侧实时语音 MVP：优先使用浏览器 `SpeechRecognition` / `webkitSpeechRecognition` 输出实时 partial transcript；拿到 final transcript 后复用现有文本消息接口和 SSE 接收 LLM 文本流；AI 回复完成后使用浏览器 `speechSynthesis` 整句播放。浏览器不支持实时听写时，前端仍回退到本 WebSocket 音频分片或单段上传链路。
 
 ## 基本信息
 
@@ -210,6 +212,8 @@ JSON 文本帧格式：
 
 ## 前端接入建议
 
+- 如果目标浏览器支持 `SpeechRecognition` / `webkitSpeechRecognition`，可以优先走前端实时听写路径：展示 partial transcript，final transcript 生成后调用 `POST /api/v1/sessions/:id/messages`，再通过 SSE 接收 AI 文本流。
+- AI 回复语音播放当前使用浏览器 `speechSynthesis` 整句播放，不经过后端 TTS Provider，也不支持用户打断 AI 播放。
 - 录音开始后先发送 `start`，再按 `MediaRecorder.start(timeslice)` 产生的分片发送二进制帧。
 - 展示 `partial_transcript.payload.transcript` 时允许空字符串；真实腾讯云模式下它不是实时识别结果。
 - 收到 `final_transcript` 后刷新训练详情；收到 `correction` / `score_updated` 后刷新反馈面板。
