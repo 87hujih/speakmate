@@ -6,7 +6,7 @@
 创建 Session -> 发送用户文本 -> 收到 Conversation Agent 回复 -> 生成纠错/评分摘要 -> 查询消息历史 -> 结束训练
 ```
 
-当前版本只支持文本消息和普通 JSON 响应。服务默认使用本地 Mock Agent，配置完整且关闭 Mock 时可切换到 OpenAI-compatible LLM Agent。当前不做 SSE 流式输出、不处理语音。
+当前版本支持文本消息的普通 JSON 响应，并提供可选 SSE 流式事件增强。服务默认使用本地 Mock Agent，配置完整且关闭 Mock 时可切换到 OpenAI-compatible LLM Agent。当前不处理语音。
 
 ## 基本信息
 
@@ -54,6 +54,18 @@
 - 设置 `FEEDBACK_FAIL_OPEN=false` 后，反馈失败会返回 `502 / 3004 feedback agent failed`。
 
 反馈查询接口见 [feedback-api.md](feedback-api.md)。
+
+## SSE 事件
+
+如果前端已建立 `GET /api/v1/sessions/:id/stream` 连接，消息发送成功后会收到：
+
+- `ai_message_delta`：第一版使用完整 AI 回复作为模拟分片；
+- `ai_message_done`：AI 回复已生成并保存；
+- `correction_done`：本轮纠错已保存；
+- `score_updated`：当前评分已更新；
+- `error`：`FEEDBACK_FAIL_OPEN=false` 且反馈生成失败时发布。
+
+SSE 只推送连接建立后的实时事件，不回放历史事件。普通 `POST /messages` JSON 响应仍然返回完整结果。事件结构见 [sse-api.md](sse-api.md)。
 
 ## 错误码
 
@@ -325,9 +337,10 @@ curl -X POST http://localhost:8080/api/v1/sessions/1/messages \
 ## 前端使用建议
 
 - 训练页发送按钮调用 `POST /api/v1/sessions/:id/messages`。
+- 如果需要实时体验，进入训练页后先建立 `GET /api/v1/sessions/:id/stream`，再发送消息。
 - 发送前前端也应做一次 `content.trim()` 校验，避免空内容请求。
 - 发送中禁用输入框和发送按钮，避免用户重复点击造成连续轮次递增。
-- 成功后把 `user_message` 和 `ai_message` 直接追加到本地消息列表，不需要立即重新拉取 Session。
+- 成功后把 `user_message` 和 `ai_message` 直接追加到本地消息列表，不需要立即重新拉取 Session；如果已接入 SSE，可用 `ai_message_delta` 渐进展示并用 JSON 响应兜底校准最终状态。
 - 成功后可以先用 `correction_summary` 和 `score_summary` 更新轻量反馈区。
 - 需要纠错详情或累计反馈时，调用 [feedback-api.md](feedback-api.md) 中的反馈查询接口。
 - 如果需要恢复页面状态，调用 `GET /api/v1/sessions/:id`，使用返回的 `messages` 和 `turn_count` 重新渲染。
