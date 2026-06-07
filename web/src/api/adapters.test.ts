@@ -155,6 +155,31 @@ describe("api adapters", () => {
     expect(mapped.nextPracticePlan[0].title).toBe("练习建议 1");
   });
 
+  it("maps null backend report arrays to empty UI arrays", () => {
+    const report: BackendReport = {
+      session_id: 7,
+      scenario: { id: 1, code: "interview", name: "英语面试", difficulty: "medium" },
+      duration_seconds: 180,
+      turn_count: 1,
+      total_score: 77,
+      scores: score,
+      summary: "本次训练完成 1 轮。",
+      major_problems: null,
+      frequent_errors: null,
+      better_expressions: null,
+      next_practice_plan: null,
+      created_at: "2026-06-07T03:05:00Z",
+    };
+
+    const mapped = mapReport(report);
+
+    expect(mapped.issueCount).toBe(0);
+    expect(mapped.majorProblems).toEqual([]);
+    expect(mapped.frequentErrors).toEqual([]);
+    expect(mapped.betterExpressions).toEqual([]);
+    expect(mapped.nextPracticePlan).toEqual([]);
+  });
+
   it("maps history records with missing score and running state", () => {
     const record: BackendHistoryItem = {
       session_id: 7,

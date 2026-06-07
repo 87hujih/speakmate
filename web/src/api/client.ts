@@ -130,10 +130,10 @@ export interface BackendReport {
   total_score: number;
   scores: BackendScoreResult;
   summary: string;
-  major_problems: string[];
-  frequent_errors: string[];
-  better_expressions: string[];
-  next_practice_plan: string[];
+  major_problems: string[] | null;
+  frequent_errors: string[] | null;
+  better_expressions: string[] | null;
+  next_practice_plan: string[] | null;
   created_at: string;
 }
 

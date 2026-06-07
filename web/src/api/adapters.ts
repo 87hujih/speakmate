@@ -302,25 +302,34 @@ function parseFrequentError(error: string, index: number): Correction {
   };
 }
 
+function stringArray(value: string[] | null | undefined) {
+  return Array.isArray(value) ? value : [];
+}
+
 export function mapReport(report: BackendReport): TrainingReport {
+  const majorProblems = stringArray(report.major_problems);
+  const frequentErrors = stringArray(report.frequent_errors);
+  const betterExpressions = stringArray(report.better_expressions);
+  const nextPracticePlan = stringArray(report.next_practice_plan);
+
   return {
     sessionId: String(report.session_id),
     scenario: mapReportScenario(report),
     durationLabel: formatDurationSeconds(report.duration_seconds),
     turnCount: report.turn_count,
-    issueCount: report.frequent_errors.length,
+    issueCount: frequentErrors.length,
     completionRate: report.scores.completion,
     totalScore: report.total_score,
     grade: `${scoreTone(report.total_score)} / 100`,
     summary: report.summary,
     scores: mapSessionScore(report.scores),
-    majorProblems: report.major_problems,
-    frequentErrors: report.frequent_errors.map(parseFrequentError),
-    betterExpressions: report.better_expressions.map((expression) => ({
+    majorProblems,
+    frequentErrors: frequentErrors.map(parseFrequentError),
+    betterExpressions: betterExpressions.map((expression) => ({
       before: "原表达见纠错项",
       after: expression,
     })),
-    nextPracticePlan: report.next_practice_plan.map((item, index) => ({
+    nextPracticePlan: nextPracticePlan.map((item, index) => ({
       title: `练习建议 ${index + 1}`,
       description: item,
     })),
