@@ -967,6 +967,142 @@ func TestReportRoutesRequireFeedbackData(t *testing.T) {
 	assertErrorResponse(t, rec, http.StatusConflict, 5004, "report feedback missing")
 }
 
+// TestSessionHistoryRoutesReturnPaginatedSummaries 验证历史记录列表支持分页、用户过滤和报告状态摘要。
+func TestSessionHistoryRoutesReturnPaginatedSummaries(t *testing.T) {
+	engine := New()
+	reportedSessionID := createSessionForUser(t, engine, 1, 42)
+	postMessage(t, engine, reportedSessionID, `{"content":"I am study computer science and I have did a project."}`)
+	finishSession(t, engine, reportedSessionID)
+	generateReport(t, engine, reportedSessionID)
+
+	otherSessionID := createSessionForUser(t, engine, 2, 7)
+	postMessage(t, engine, otherSessionID, `{"content":"Could you recommend something light?"}`)
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions?page=1&page_size=1", nil)
+	listRec := httptest.NewRecorder()
+	engine.ServeHTTP(listRec, listReq)
+
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("history list status code = %d, want %d; body = %s", listRec.Code, http.StatusOK, listRec.Body.String())
+	}
+	var listBody sessionHistoryListResponse
+	if err := json.Unmarshal(listRec.Body.Bytes(), &listBody); err != nil {
+		t.Fatalf("history list response is not valid JSON: %v", err)
+	}
+	if listBody.Code != 0 {
+		t.Fatalf("history list code = %d, want 0", listBody.Code)
+	}
+	if listBody.Data.Page != 1 {
+		t.Fatalf("history page = %d, want 1", listBody.Data.Page)
+	}
+	if listBody.Data.PageSize != 1 {
+		t.Fatalf("history page_size = %d, want 1", listBody.Data.PageSize)
+	}
+	if listBody.Data.Total != 2 {
+		t.Fatalf("history total = %d, want 2", listBody.Data.Total)
+	}
+	if len(listBody.Data.Items) != 1 {
+		t.Fatalf("history items length = %d, want 1", len(listBody.Data.Items))
+	}
+
+	userReq := httptest.NewRequest(http.MethodGet, "/api/v1/users/42/sessions?page=1&page_size=10", nil)
+	userRec := httptest.NewRecorder()
+	engine.ServeHTTP(userRec, userReq)
+
+	if userRec.Code != http.StatusOK {
+		t.Fatalf("user history status code = %d, want %d; body = %s", userRec.Code, http.StatusOK, userRec.Body.String())
+	}
+	var userBody sessionHistoryListResponse
+	if err := json.Unmarshal(userRec.Body.Bytes(), &userBody); err != nil {
+		t.Fatalf("user history response is not valid JSON: %v", err)
+	}
+	if userBody.Data.Total != 1 {
+		t.Fatalf("user history total = %d, want 1", userBody.Data.Total)
+	}
+	if len(userBody.Data.Items) != 1 {
+		t.Fatalf("user history items length = %d, want 1", len(userBody.Data.Items))
+	}
+	item := userBody.Data.Items[0]
+	if item.SessionID != reportedSessionID {
+		t.Fatalf("history session_id = %d, want %d", item.SessionID, reportedSessionID)
+	}
+	if item.UserID != 42 {
+		t.Fatalf("history user_id = %d, want 42", item.UserID)
+	}
+	if item.Scenario.Code != "interview" {
+		t.Fatalf("history scenario code = %q, want interview", item.Scenario.Code)
+	}
+	if item.TurnCount != 1 {
+		t.Fatalf("history turn_count = %d, want 1", item.TurnCount)
+	}
+	if item.TotalScore == nil || *item.TotalScore != 77 {
+		t.Fatalf("history total_score = %v, want 77", item.TotalScore)
+	}
+	if item.ReportStatus != "generated" {
+		t.Fatalf("history report_status = %q, want generated", item.ReportStatus)
+	}
+	assertRFC3339(t, item.CreatedAt)
+	if item.EndedAt == nil {
+		t.Fatal("history ended_at = nil, want finished timestamp")
+	}
+	assertRFC3339(t, *item.EndedAt)
+}
+
+// TestSessionHistoryRoutesValidatePaginationAndUserID 验证历史记录路由对分页和用户 ID 做基础校验。
+func TestSessionHistoryRoutesValidatePaginationAndUserID(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+	}{
+		{name: "invalid page", path: "/api/v1/sessions?page=0&page_size=10"},
+		{name: "invalid page size", path: "/api/v1/sessions?page=1&page_size=0"},
+		{name: "invalid user id", path: "/api/v1/users/abc/sessions?page=1&page_size=10"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := New()
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			rec := httptest.NewRecorder()
+
+			engine.ServeHTTP(rec, req)
+
+			assertErrorResponse(t, rec, http.StatusBadRequest, 6001, "invalid history request")
+		})
+	}
+}
+
+type sessionHistoryListResponse struct {
+	Code int `json:"code"`
+	Data struct {
+		Items    []sessionHistoryItem `json:"items"`
+		Page     int                  `json:"page"`
+		PageSize int                  `json:"page_size"`
+		Total    int                  `json:"total"`
+	} `json:"data"`
+}
+
+type sessionHistoryItem struct {
+	SessionID    int             `json:"session_id"`
+	SessionNo    string          `json:"session_no"`
+	UserID       int             `json:"user_id"`
+	Scenario     historyScenario `json:"scenario"`
+	Status       string          `json:"status"`
+	TurnCount    int             `json:"turn_count"`
+	TotalScore   *int            `json:"total_score"`
+	ReportStatus string          `json:"report_status"`
+	CreatedAt    string          `json:"created_at"`
+	EndedAt      *string         `json:"ended_at"`
+}
+
+type historyScenario struct {
+	ID          int    `json:"id"`
+	Code        string `json:"code"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Difficulty  string `json:"difficulty"`
+}
+
 type messagePayload struct {
 	ID        int    `json:"id"`
 	SessionID int    `json:"session_id"`
@@ -1035,7 +1171,14 @@ func assertRFC3339(t *testing.T, value string) {
 func createSession(t *testing.T, engine http.Handler, scenarioID int) int {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(`{"scenario_id":`+strconv.Itoa(scenarioID)+`}`))
+	return createSessionForUser(t, engine, scenarioID, 1)
+}
+
+func createSessionForUser(t *testing.T, engine http.Handler, scenarioID int, userID int) int {
+	t.Helper()
+
+	requestBody := `{"scenario_id":` + strconv.Itoa(scenarioID) + `,"user_id":` + strconv.Itoa(userID) + `}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(requestBody))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -1058,6 +1201,32 @@ func createSession(t *testing.T, engine http.Handler, scenarioID int) int {
 	}
 
 	return body.Data.SessionID
+}
+
+func finishSession(t *testing.T, engine http.Handler, sessionID int) {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/finish", nil)
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("finish session status code = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+func generateReport(t *testing.T, engine http.Handler, sessionID int) {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/report", nil)
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("generate report status code = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
 }
 
 func assertErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, httpStatus int, code int, message string) {
