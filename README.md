@@ -4,7 +4,7 @@
 
 SpeakMate AI 不是一个开放闲聊机器人。它更像一个有训练目标的英语陪练教练：先给用户一个具体场景，再通过 AI 追问推动对话，最后把用户的表达问题整理成可执行的练习建议。
 
-本项目面向七牛云 XEngineer 暑期实训营「AI 英语口语陪练」议题设计。当前仓库已完成 Go + Gin 后端基础骨架和静态前端原型，并确定正式前端技术栈为 Vite + React + TypeScript。完整技术方案见 [docs/project-blueprint.md](docs/project-blueprint.md)。
+本项目面向七牛云 XEngineer 暑期实训营「AI 英语口语陪练」议题设计。当前仓库已完成 Go + Gin 后端基础骨架、正式 Vite + React + TypeScript 前端应用和静态前端原型参考。完整技术方案见 [docs/project-blueprint.md](docs/project-blueprint.md)。
 
 ## 项目背景
 
@@ -124,8 +124,8 @@ Browser
 | 健康检查接口 | 已完成 | `GET /health` 返回统一 JSON 响应 |
 | 配置加载 | 已完成 | 支持 `APP_PORT`、LLM、反馈 Mock 和存储模式环境变量，默认端口 `8080` |
 | 统一响应结构 | 已完成 | 成功响应格式为 `{ code, message, data }` |
-| 前端原型 | 已完成 | [web/preview.html](web/preview.html) 展示训练、对话、报告和历史记录页面 |
-| 前端技术选型 | 已确定 | 正式前端工程使用 Vite + React + TypeScript |
+| 前端原型 | 已完成 | `web/preview.html` 作为本地静态原型参考 |
+| 正式前端应用 | 已完成（第一版） | `web/` 已接入 Vite + React + TypeScript，覆盖场景选择、文本训练、反馈评分、报告和历史记录 |
 | 场景 API（Module 1） | 已完成 | 场景列表和详情接口，见 [docs/api文档/scenario-api-module1-api.md](docs/api文档/scenario-api-module1-api.md) |
 | 训练 Session API（Module 2） | 已完成 | 创建、查询、结束训练 Session，见 [docs/api文档/session-api-module2-api.md](docs/api文档/session-api-module2-api.md) |
 | 消息 API（Module 3） | 已完成 | 发送文本、AI 回复、轮次更新和消息历史查询，见 [docs/api文档/message-api-module3-api.md](docs/api文档/message-api-module3-api.md) |
@@ -186,6 +186,60 @@ curl http://localhost:8080/health
 
 ```bash
 go test ./...
+```
+
+### 前端启动
+
+首次启动前安装依赖：
+
+```bash
+cd web
+npm install
+```
+
+如果前后端分开启动，建议显式配置后端 API 地址：
+
+```powershell
+$env:VITE_API_BASE_URL="http://localhost:8080/api/v1"
+npm run dev
+```
+
+macOS / Linux：
+
+```bash
+VITE_API_BASE_URL=http://localhost:8080/api/v1 npm run dev
+```
+
+前端默认端口是 `5173`。如果不设置 `VITE_API_BASE_URL`，前端会请求同源 `/api/v1`，适合反向代理或同源部署场景。
+
+前端验证命令：
+
+```bash
+cd web
+npm test
+npm run build
+```
+
+### 前后端联调路径
+
+1. 启动后端：
+
+```bash
+go run ./cmd/server
+```
+
+2. 启动前端并配置 API 地址：
+
+```powershell
+cd web
+$env:VITE_API_BASE_URL="http://localhost:8080/api/v1"
+npm run dev
+```
+
+3. 在浏览器打开 `http://localhost:5173`，验证完整文本训练闭环：
+
+```text
+选择场景 -> 创建训练 -> 发送文本消息 -> AI 回复 -> 查看纠错评分 -> 结束训练 -> 生成报告 -> 查询历史记录 -> 回到报告/训练详情
 ```
 
 ### 存储配置
@@ -263,13 +317,13 @@ go run ./cmd/server
 `FEEDBACK_FAIL_OPEN=true` 表示反馈生成失败时不阻断主对话链路；设置为 `false` 时，纠错或评分失败会让消息接口返回 `502 / 3004 feedback agent failed`。
 课后报告的 Summary Agent 自带 Mock fallback；模型调用或 JSON 解析失败时会尽量返回 Mock 报告内容。关闭 `SUMMARY_USE_MOCK` 且 LLM 配置完整时才会请求真实模型。
 
-查看前端原型：
+查看静态前端原型参考：
 
 ```text
 web/preview.html
 ```
 
-该页面是静态交互原型，用于展示目标产品体验，不依赖后端接口。正式前端工程后续将在 `web/` 目录下使用 Vite + React + TypeScript 初始化。
+该页面是早期静态交互原型，用于展示目标产品体验，不依赖后端接口。正式前端应用位于 `web/src/`，通过 `web/src/api/client.ts` 统一访问后端接口。
 
 ## 项目结构
 
@@ -287,8 +341,10 @@ speakmate/
 │   ├── stream/              # Session 级 SSE 事件模型和内存事件总线
 │   └── router/              # Gin 路由
 ├── migrations/              # MySQL 表结构和默认场景 seed
-├── web/                     # 前端目录，后续使用 Vite + React + TypeScript
-│   └── preview.html         # 当前静态交互原型
+├── web/                     # Vite + React + TypeScript 前端应用
+│   ├── src/                 # 页面、组件、API client 和类型定义
+│   ├── package.json
+│   └── preview.html         # 静态交互原型参考
 ├── docs/project-blueprint.md # 完整产品与技术方案
 ├── go.mod
 ├── go.sum

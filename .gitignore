@@ -2,6 +2,7 @@
 bin/
 build/
 dist/
+node_modules/
 tmp/
 *.exe
 *.exe~
