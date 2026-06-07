@@ -26,6 +26,7 @@ WebSocket 录音分片 -> end -> ASR Provider final transcript -> SendMessage ->
 | 最大音频大小 | 单条连接累计 `10MB` |
 | 后端接受音频类型 | 与单段上传一致：`audio/webm`、`audio/wav`、`audio/mp4`、`audio/ogg` 等 |
 | 腾讯云真实识别限制 | `webm` 当前不支持；建议使用 `ogg-opus`、`m4a/mp4` 或 `wav` |
+| Redis 连接状态 | `REDIS_ENABLED=true` 时写入 `ws:{session_id}:connection`，TTL 30m |
 
 ## 客户端事件
 
@@ -177,6 +178,7 @@ JSON 文本帧格式：
 | `audio_file_type_unsupported` | `audio file type unsupported` | `start.payload.content_type` 不在后端支持列表中 |
 | `asr_client_failed` | `asr client failed` | ASR 转写失败，包括腾讯云鉴权失败、请求失败、真实模式下收到 `webm` 等 |
 | `audio_transcript_required` | `audio transcript is required` | ASR 没有返回有效文本 |
+| `session_state_store_failed` | `session state store failed` | Redis/memory 短期连接状态写入失败 |
 | `session_not_found` | `session not found` | Session 不存在 |
 | `session_already_finished` | `session already finished` | Session 已结束 |
 
@@ -200,6 +202,7 @@ JSON 文本帧格式：
 - 服务端完成 final transcript、纠错摘要和评分摘要推送后发送 `end` 事件，并以 close code `1000` 关闭连接。
 - 客户端直接断开时，本次连接丢弃未完成音频，不会生成 final transcript。
 - WebSocket 失败不影响 `POST /api/v1/sessions/:id/messages` 和 `POST /api/v1/sessions/:id/audio`。
+- Redis 模式下，服务端会在 `start`、`audio_chunk`、`end`、`error`、`close` 时更新 `ws:{session_id}:connection`，用于短期状态排查；该状态 30 分钟后自动过期，不作为历史记录来源。
 
 ## 前端接入建议
 

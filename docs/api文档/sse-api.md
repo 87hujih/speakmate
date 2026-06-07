@@ -12,6 +12,7 @@
 | 是否需要登录 | 当前版本不需要 |
 | 是否回放历史事件 | 不回放。只推送连接建立后的实时事件 |
 | 心跳 | 服务端定期发送 `: ping` 注释帧 |
+| Redis 模式 | `REDIS_ENABLED=true` 时使用 Redis Pub/Sub 分发，并把事件短期写入 `session:{id}:events` List，TTL 30m |
 
 ## 建立连接
 
@@ -118,7 +119,7 @@ source.addEventListener('error', (event) => {
 7. SSE 接收 report_done
 ```
 
-普通 JSON 接口仍然返回完整结果。前端应把 SSE 作为实时体验增强，不应只依赖 SSE 保存最终状态。
+普通 JSON 接口仍然返回完整结果。前端应把 SSE 作为实时体验增强，不应只依赖 SSE 保存最终状态。Redis 模式下的 `session:{id}:events` 只用于多实例实时分发和短期排障留存，当前接口仍不向新连接回放历史事件。
 
 ## curl 验证
 
@@ -139,6 +140,15 @@ curl -X POST http://localhost:8080/api/v1/sessions/1/report
 ```
 
 客户端主动断开连接后，服务端会取消订阅并释放对应连接资源。
+
+## Redis 模式说明
+
+开启 `REDIS_ENABLED=true` 后：
+
+- 服务启动时会连接并 ping Redis，失败时直接启动失败；
+- 事件发布失败会让触发该事件的业务请求返回明确错误，不会静默切回 memory bus；
+- `session:{id}:events` 同时作为 Pub/Sub channel 和短期 List，TTL 为 30m；
+- MySQL 仍保存长期消息、反馈和报告，Redis 事件过期不影响历史数据查询。
 
 ## 验证命令
 
