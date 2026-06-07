@@ -7,7 +7,7 @@ services:
       MYSQL_PASSWORD: ${COMPOSE_MYSQL_PASSWORD:-speakmate}
       MYSQL_ROOT_PASSWORD: ${COMPOSE_MYSQL_ROOT_PASSWORD:-speakmate-root}
     ports:
-      - "3306:3306"
+      - "${COMPOSE_MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -20,7 +20,7 @@ services:
     image: redis:7.4-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "${COMPOSE_REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -57,6 +57,9 @@ services:
       REDIS_DB: "${REDIS_DB:-0}"
       REDIS_CONNECT_TIMEOUT_SECONDS: "${REDIS_CONNECT_TIMEOUT_SECONDS:-30}"
       REQUEST_TIMEOUT_SECONDS: "${REQUEST_TIMEOUT_SECONDS:-30}"
+      REQUEST_BODY_LIMIT_BYTES: "${REQUEST_BODY_LIMIT_BYTES:-12582912}"
+      RATE_LIMIT_REQUESTS: "${RATE_LIMIT_REQUESTS:-120}"
+      RATE_LIMIT_WINDOW_SECONDS: "${RATE_LIMIT_WINDOW_SECONDS:-60}"
       EXTERNAL_SERVICE_TIMEOUT_SECONDS: "${EXTERNAL_SERVICE_TIMEOUT_SECONDS:-30}"
       CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
       CORS_ALLOWED_METHODS: "${CORS_ALLOWED_METHODS:-GET,POST,OPTIONS}"
@@ -92,7 +95,7 @@ services:
       TENCENT_ASR_CONVERT_NUM_MODE: "${TENCENT_ASR_CONVERT_NUM_MODE:-1}"
       TENCENT_ASR_WORD_INFO: "${TENCENT_ASR_WORD_INFO:-0}"
     ports:
-      - "8080:8080"
+      - "${BACKEND_HOST_PORT:-8080}:8080"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -106,7 +109,7 @@ services:
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
     ports:
-      - "5173:80"
+      - "${FRONTEND_HOST_PORT:-5173}:80"
     depends_on:
       backend:
         condition: service_started

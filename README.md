@@ -186,7 +186,7 @@ curl http://localhost:8080/health
 
 | 用途 | 变量 |
 |---|---|
-| 服务 | `APP_PORT`、`REQUEST_TIMEOUT_SECONDS` |
+| 服务 | `APP_PORT`、`REQUEST_TIMEOUT_SECONDS`、`REQUEST_BODY_LIMIT_BYTES`、`RATE_LIMIT_REQUESTS`、`RATE_LIMIT_WINDOW_SECONDS` |
 | 跨域 | `CORS_ALLOWED_ORIGINS`、`CORS_ALLOWED_METHODS`、`CORS_ALLOWED_HEADERS`、`CORS_ALLOW_CREDENTIALS` |
 | MySQL | `STORAGE_MODE=mysql`、`MYSQL_DSN` |
 | Redis 短期状态 | `REDIS_ENABLED`、`REDIS_ADDR`、`REDIS_PASSWORD`、`REDIS_DB`、`REDIS_CONNECT_TIMEOUT_SECONDS` |
@@ -315,6 +315,43 @@ docker compose down -v
 
 部署时建议保持前端 `VITE_API_BASE_URL=/api/v1`，由 Nginx 反向代理到后端；如果前后端分域部署，需要把前端域名加入 `CORS_ALLOWED_ORIGINS`。
 后端 Compose 默认设置 `REDIS_ENABLED=true` 并连接 `redis:6379`，因此 Redis 健康检查失败时后端不会启动。
+如果本机端口已被占用，可以避让宿主端口，容器内部服务名和端口不变：
+
+```powershell
+$env:COMPOSE_MYSQL_PORT="33306"
+$env:COMPOSE_REDIS_PORT="36379"
+$env:BACKEND_HOST_PORT="18080"
+$env:FRONTEND_HOST_PORT="15173"
+docker compose up --build
+```
+
+### Demo Readiness
+
+固定演示路径见 [docs/demo-readiness.md](docs/demo-readiness.md)，推荐输入：
+
+```text
+I am study computer science and I have did a project about robot control.
+```
+
+Mock 模式 API 闭环脚本：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/demo-mock.ps1
+```
+
+真实 LLM / ASR / Redis 联调脚本：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/demo-real-services.ps1
+```
+
+如需验证 ASR 上传：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/demo-real-services.ps1 -AudioFile .\answer.ogg -AudioContentType audio/ogg
+```
+
+常见启动、API Key、MySQL、Redis、ASR、LLM、CORS、timeout、请求体大小和限流问题见 [docs/troubleshooting.md](docs/troubleshooting.md)。
 
 ### LLM Streaming / ASR Provider
 
@@ -355,6 +392,26 @@ TENCENT_ASR_VOICE_FORMAT=ogg-opus
 ```
 
 腾讯云模式使用 `FlashRecognizer` 识别完整音频，支持单段上传和 WebSocket `end` 后的 final transcript。当前不实现腾讯云实时 partial transcript；WebSocket 分片阶段只缓存音频并返回 partial 占位。`webm` 容器当前不支持真实腾讯云识别，建议使用 `ogg-opus`、`m4a/mp4` 或 `wav`，后续可以通过后端转码兼容只支持 `webm` 的浏览器。真实密钥只应放在本地环境变量或部署密钥系统中，不要提交到 git。
+
+### 基础安全策略
+
+后端默认启用：
+
+- CORS 白名单，WebSocket Origin 使用同一组 `CORS_ALLOWED_ORIGINS` 校验；
+- Recover middleware，panic 统一返回 `{ code, message }`，不暴露内部细节；
+- 请求日志脱敏，常见 API Key、token、password、secret、Bearer token 和 MySQL DSN 密码不会明文输出；
+- 普通请求 timeout，默认 `REQUEST_TIMEOUT_SECONDS=30`，SSE 和 WebSocket 不套普通请求超时；
+- 通用请求体大小限制，默认 `REQUEST_BODY_LIMIT_BYTES=12582912`，音频文件仍由业务层限制为 `10MB`；
+- 基础 IP 窗口限流，默认 `RATE_LIMIT_REQUESTS=120`、`RATE_LIMIT_WINDOW_SECONDS=60`。
+
+通用安全错误：
+
+| HTTP | code | message |
+|---|---:|---|
+| `500` | `9001` | `internal server error` |
+| `504` | `9002` | `request timeout` |
+| `413` | `9003` | `request body too large` |
+| `429` | `9004` | `rate limit exceeded` |
 
 ### 前后端联调路径
 
