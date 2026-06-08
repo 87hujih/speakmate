@@ -67,6 +67,7 @@ type ASRConfig struct {
 	Model                  string
 	TimeoutSeconds         int
 	UseMock                bool
+	MockTranscript         string
 	TencentAppID           string
 	TencentSecretID        string
 	TencentSecretKey       string
@@ -144,6 +145,7 @@ func Load() Config {
 			Model:                  strings.TrimSpace(os.Getenv("ASR_MODEL")),
 			TimeoutSeconds:         positiveIntEnv("ASR_TIMEOUT_SECONDS", externalServiceTimeoutSeconds),
 			UseMock:                boolEnv("ASR_USE_MOCK", true),
+			MockTranscript:         strings.TrimSpace(os.Getenv("ASR_MOCK_TRANSCRIPT")),
 			TencentAppID:           strings.TrimSpace(os.Getenv("TENCENT_ASR_APP_ID")),
 			TencentSecretID:        strings.TrimSpace(os.Getenv("TENCENT_ASR_SECRET_ID")),
 			TencentSecretKey:       strings.TrimSpace(os.Getenv("TENCENT_ASR_SECRET_KEY")),

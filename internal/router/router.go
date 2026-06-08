@@ -272,7 +272,7 @@ func NewSummaryAgent(cfg config.Config) agent.SummaryAgent {
 
 func NewASRClient(cfg config.Config) (agent.ASRClient, error) {
 	if cfg.ASR.UseMock || strings.EqualFold(cfg.ASR.Provider, "mock") {
-		return agent.NewMockASRClient(), nil
+		return agent.NewMockASRClient(agent.WithMockASRTranscript(cfg.ASR.MockTranscript)), nil
 	}
 	if strings.EqualFold(cfg.ASR.Provider, "tencent") {
 		return infraasr.NewTencentFlashClient(cfg.ASR)

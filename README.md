@@ -45,7 +45,7 @@ demo视频：https://www.bilibili.com/video/BV1orE86hEJd/?vd_source=e0d0a3eee43f
 
 ## 快速开始
 
-默认配置使用 Mock Agent、Mock ASR 和内存存储，不需要 API Key、MySQL 或 Redis。
+默认配置使用 Mock Agent、Mock ASR 和内存存储，不需要 API Key、MySQL 或 Redis。为避免把测试句误当成真实语音识别结果，Mock ASR 默认不会产生转写；语音演示需要显式设置 `ASR_MOCK_TRANSCRIPT`，真实语音识别请配置腾讯云 ASR。
 
 ### 前置要求
 
@@ -68,6 +68,12 @@ $env:STORAGE_MODE="memory"
 $env:LLM_USE_MOCK="true"
 $env:ASR_USE_MOCK="true"
 go run ./cmd/server
+```
+
+如果要在 Mock 模式演示语音入口，请显式配置一条醒目的测试转写：
+
+```powershell
+$env:ASR_MOCK_TRANSCRIPT="[MOCK ASR] This is a configured test transcript."
 ```
 
 检查服务状态：
@@ -124,7 +130,7 @@ MySQL：127.0.0.1:3306
 Redis：127.0.0.1:6379
 ```
 
-Compose 默认使用 MySQL 持久化、Redis 短期状态和 Mock Agent。迁移任务会在后端启动前执行。
+Compose 默认使用 MySQL 持久化、Redis 短期状态和 Mock Agent。迁移任务会在后端启动前执行。Mock ASR 默认不输出转写；需要语音 mock 演示时设置 `ASR_MOCK_TRANSCRIPT`，需要真实识别时设置 `ASR_PROVIDER=tencent`、`ASR_USE_MOCK=false` 和腾讯云密钥。
 
 如果本机端口已被占用，可以通过环境变量避让宿主端口：
 
@@ -138,7 +144,7 @@ docker compose up --build
 
 ## 配置
 
-示例环境变量见 [.env.example](.env.example)。Go 服务不会自动读取 `.env` 文件，可以用 shell、direnv、dotenv 工具或 Docker Compose 注入环境变量。
+示例环境变量见 [.env.example](.env.example)。Go 服务启动时会从当前目录或父目录加载 `.env`，但已有的进程环境变量优先级更高；Docker Compose 也会从 `.env` 注入同名变量。
 
 常用配置：
 
@@ -149,7 +155,7 @@ docker compose up --build
 | 存储 | `STORAGE_MODE`、`MYSQL_DSN` |
 | Redis | `REDIS_ENABLED`、`REDIS_ADDR`、`REDIS_PASSWORD`、`REDIS_DB` |
 | LLM | `LLM_USE_MOCK`、`LLM_PROVIDER`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL` |
-| ASR | `ASR_USE_MOCK`、`ASR_PROVIDER`、`TENCENT_ASR_APP_ID`、`TENCENT_ASR_SECRET_ID`、`TENCENT_ASR_SECRET_KEY` |
+| ASR | `ASR_USE_MOCK`、`ASR_PROVIDER`、`ASR_MOCK_TRANSCRIPT`、`TENCENT_ASR_APP_ID`、`TENCENT_ASR_SECRET_ID`、`TENCENT_ASR_SECRET_KEY` |
 | 前端 | `VITE_API_BASE_URL` |
 
 真实密钥只应放在本地环境变量或部署密钥系统中，不要提交到 git。

@@ -2,10 +2,11 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"strings"
 )
 
-const defaultMockASRTranscript = "I am study computer science and I have did a project."
+var ErrMockASRTranscriptRequired = errors.New("mock asr transcript required")
 
 // MockASRClient 返回稳定转写文本，供本地开发和自动测试使用。
 type MockASRClient struct {
@@ -23,9 +24,7 @@ func WithMockASRTranscript(transcript string) MockASROption {
 
 // NewMockASRClient 创建 Mock ASR Client。
 func NewMockASRClient(opts ...MockASROption) *MockASRClient {
-	client := &MockASRClient{
-		transcript: defaultMockASRTranscript,
-	}
+	client := &MockASRClient{}
 	for _, opt := range opts {
 		opt(client)
 	}
@@ -41,7 +40,7 @@ func (c *MockASRClient) Transcribe(ctx context.Context, input ASRInput) (ASROutp
 
 	transcript := strings.TrimSpace(c.transcript)
 	if transcript == "" {
-		transcript = defaultMockASRTranscript
+		return ASROutput{}, ErrMockASRTranscriptRequired
 	}
 
 	return ASROutput{

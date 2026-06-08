@@ -6,23 +6,17 @@ import (
 	"testing"
 )
 
-func TestMockASRClientReturnsStableTranscript(t *testing.T) {
+func TestMockASRClientRejectsMissingConfiguredTranscript(t *testing.T) {
 	client := NewMockASRClient()
 
-	output, err := client.Transcribe(context.Background(), ASRInput{
+	_, err := client.Transcribe(context.Background(), ASRInput{
 		Filename:    "answer.webm",
 		ContentType: "audio/webm",
 		Audio:       []byte{0x01, 0x02, 0x03},
 	})
-	if err != nil {
-		t.Fatalf("Transcribe returned error: %v", err)
-	}
 
-	if output.Transcript != "I am study computer science and I have did a project." {
-		t.Fatalf("transcript = %q, want stable mock transcript", output.Transcript)
-	}
-	if output.Confidence <= 0 {
-		t.Fatalf("confidence = %f, want positive", output.Confidence)
+	if !errors.Is(err, ErrMockASRTranscriptRequired) {
+		t.Fatalf("error = %v, want ErrMockASRTranscriptRequired", err)
 	}
 }
 
@@ -40,6 +34,9 @@ func TestMockASRClientTrimsConfiguredTranscript(t *testing.T) {
 
 	if output.Transcript != "Could you recommend something light?" {
 		t.Fatalf("transcript = %q, want trimmed configured transcript", output.Transcript)
+	}
+	if output.Confidence <= 0 {
+		t.Fatalf("confidence = %f, want positive", output.Confidence)
 	}
 }
 

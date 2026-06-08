@@ -204,6 +204,7 @@ func TestLoadReadsInfrastructureEnvironment(t *testing.T) {
 	t.Setenv("ASR_MODEL", "asr-test-model")
 	t.Setenv("ASR_TIMEOUT_SECONDS", "7")
 	t.Setenv("ASR_USE_MOCK", "false")
+	t.Setenv("ASR_MOCK_TRANSCRIPT", "I built a billing dashboard.")
 	t.Setenv("TENCENT_ASR_APP_ID", "1250000000")
 	t.Setenv("TENCENT_ASR_SECRET_ID", "test-secret-id")
 	t.Setenv("TENCENT_ASR_SECRET_KEY", "test-secret-key")
@@ -267,6 +268,9 @@ func TestLoadReadsInfrastructureEnvironment(t *testing.T) {
 	}
 	if cfg.ASR.UseMock {
 		t.Fatal("ASR.UseMock = true, want false")
+	}
+	if cfg.ASR.MockTranscript != "I built a billing dashboard." {
+		t.Fatalf("ASR.MockTranscript = %q, want configured mock transcript", cfg.ASR.MockTranscript)
 	}
 	if cfg.ASR.TencentAppID != "1250000000" {
 		t.Fatalf("ASR.TencentAppID = %q, want configured app id", cfg.ASR.TencentAppID)
@@ -625,6 +629,7 @@ func clearInfrastructureEnv(t *testing.T) {
 	t.Setenv("ASR_MODEL", "")
 	t.Setenv("ASR_TIMEOUT_SECONDS", "")
 	t.Setenv("ASR_USE_MOCK", "")
+	t.Setenv("ASR_MOCK_TRANSCRIPT", "")
 	t.Setenv("TENCENT_ASR_APP_ID", "")
 	t.Setenv("TENCENT_ASR_SECRET_ID", "")
 	t.Setenv("TENCENT_ASR_SECRET_KEY", "")
