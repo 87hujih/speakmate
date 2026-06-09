@@ -12,6 +12,7 @@ interface HistoryInsightsPanelProps {
   isInsightsLoading: boolean;
   insightsError: string;
   isStartingRecommendation?: boolean;
+  isPracticeStarting?: boolean;
   onDaysChange: (days: 7 | 30) => void;
   retryInsights: () => void;
   onRecommendationStart: (recommendation: NextPracticeRecommendation) => void;
@@ -23,6 +24,7 @@ export function HistoryInsightsPanel({
   isInsightsLoading,
   insightsError,
   isStartingRecommendation = false,
+  isPracticeStarting = false,
   onDaysChange,
   retryInsights,
   onRecommendationStart,
@@ -39,6 +41,7 @@ export function HistoryInsightsPanel({
             <button
               key={days}
               type="button"
+              aria-pressed={days === insightsDays}
               className={
                 days === insightsDays
                   ? "h-9 rounded-xl bg-brand-blue px-4 text-sm font-black text-white"
@@ -77,6 +80,7 @@ export function HistoryInsightsPanel({
           <HistoryRecommendationCard
             recommendation={insights.nextRecommendation}
             isStarting={isStartingRecommendation}
+            isPracticeStarting={isPracticeStarting}
             onStart={onRecommendationStart}
           />
           <HistoryScoreTrend points={insights.scoreTrend} />

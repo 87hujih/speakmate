@@ -1,6 +1,6 @@
 import { LoaderCircle, Plus, TrendingDown, TrendingUp } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createTrainingSession, loadHistoryInsights, loadHistoryState } from "../api/loaders";
 import { HistoryInsightsPanel } from "../components/history/HistoryInsightsPanel";
 import { HistorySessionCard } from "../components/history/HistorySessionCard";
@@ -37,41 +37,69 @@ export function HistoryPage() {
   const [error, setError] = useState("");
   const [insightsDays, setInsightsDays] = useState<7 | 30>(30);
   const [insights, setInsights] = useState<HistoryInsights | null>(null);
+  const [loadedInsightsDays, setLoadedInsightsDays] = useState<7 | 30 | null>(null);
   const [isInsightsLoading, setIsInsightsLoading] = useState(true);
   const [insightsError, setInsightsError] = useState("");
   const [startError, setStartError] = useState("");
-  const [startingScenarioId, setStartingScenarioId] = useState<number | null>(null);
-  const [isRecommendationStarting, setIsRecommendationStarting] = useState(false);
+  const [startingAction, setStartingAction] = useState<{ type: "repeat" | "recommendation"; id: string } | null>(null);
+  const historyRequestID = useRef(0);
+  const insightsRequestID = useRef(0);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const summary = insights?.summary;
+  const displayedInsights = loadedInsightsDays === insightsDays ? insights : null;
+  const summary = displayedInsights?.summary;
   const finishedPercent = percent(summary?.finishedSessions ?? 0, summary?.totalSessions ?? 0);
   const reportPercent = percent(summary?.generatedReports ?? 0, summary?.totalSessions ?? 0);
   const ScoreDeltaIcon = (summary?.scoreDelta ?? 0) >= 0 ? TrendingUp : TrendingDown;
 
   async function loadHistoryList(targetPage = page) {
+    const requestID = historyRequestID.current + 1;
+    historyRequestID.current = requestID;
     setIsLoading(true);
     setError("");
     try {
       const result = await loadHistoryState(targetPage, pageSize);
+      if (historyRequestID.current !== requestID) {
+        return;
+      }
       setRecords(result.records);
       setPage(result.page);
       setTotal(result.total);
     } catch (loadError) {
+      if (historyRequestID.current !== requestID) {
+        return;
+      }
       setError(loadError instanceof Error ? loadError.message : "历史记录加载失败");
     } finally {
-      setIsLoading(false);
+      if (historyRequestID.current === requestID) {
+        setIsLoading(false);
+      }
     }
   }
 
   async function loadInsights(days = insightsDays) {
+    const requestID = insightsRequestID.current + 1;
+    insightsRequestID.current = requestID;
     setIsInsightsLoading(true);
     setInsightsError("");
+    setLoadedInsightsDays(null);
     try {
-      setInsights(await loadHistoryInsights(days));
+      const result = await loadHistoryInsights(days);
+      if (insightsRequestID.current !== requestID) {
+        return;
+      }
+      setInsights(result);
+      setLoadedInsightsDays(days);
     } catch (loadError) {
+      if (insightsRequestID.current !== requestID) {
+        return;
+      }
+      setInsights(null);
+      setLoadedInsightsDays(null);
       setInsightsError(loadError instanceof Error ? loadError.message : "学习洞察加载失败");
     } finally {
-      setIsInsightsLoading(false);
+      if (insightsRequestID.current === requestID) {
+        setIsInsightsLoading(false);
+      }
     }
   }
 
@@ -79,8 +107,11 @@ export function HistoryPage() {
     void loadInsights(insightsDays);
   }
 
-  async function startPracticeForScenario(scenarioId: number) {
-    setStartingScenarioId(scenarioId);
+  async function startPracticeForScenario(scenarioId: number, action: { type: "repeat" | "recommendation"; id: string }) {
+    if (startingAction) {
+      return;
+    }
+    setStartingAction(action);
     setStartError("");
     try {
       const session = await createTrainingSession(scenarioId);
@@ -88,16 +119,19 @@ export function HistoryPage() {
     } catch (startError) {
       setStartError(startError instanceof Error ? startError.message : "创建复练失败");
     } finally {
-      setStartingScenarioId(null);
+      setStartingAction(null);
     }
   }
 
   async function handleRepeat(record: HistoryRecord) {
-    await startPracticeForScenario(record.scenario.id);
+    await startPracticeForScenario(record.scenario.id, { type: "repeat", id: record.sessionId });
   }
 
   async function handleRecommendationStart(recommendation: NextPracticeRecommendation) {
-    setIsRecommendationStarting(true);
+    if (startingAction) {
+      return;
+    }
+    setStartingAction({ type: "recommendation", id: recommendation.sessionId });
     setStartError("");
     try {
       if (recommendation.type === "continue_session") {
@@ -105,7 +139,8 @@ export function HistoryPage() {
         return;
       }
       if (recommendation.scenario) {
-        await startPracticeForScenario(recommendation.scenario.id);
+        const session = await createTrainingSession(recommendation.scenario.id);
+        navigate(`/training/${session.session_id}`);
         return;
       }
 
@@ -113,7 +148,7 @@ export function HistoryPage() {
     } catch (startError) {
       setStartError(startError instanceof Error ? startError.message : "创建复练失败");
     } finally {
-      setIsRecommendationStarting(false);
+      setStartingAction(null);
     }
   }
 
@@ -139,7 +174,7 @@ export function HistoryPage() {
       />
 
       {startError ? (
-        <div className="mb-5 rounded-[22px] border border-rose-100 bg-rose-50 p-4 text-sm font-bold text-rose-700">
+        <div className="mb-5 rounded-[22px] border border-rose-100 bg-rose-50 p-4 text-sm font-bold text-rose-700" aria-live="polite">
           {startError}
         </div>
       ) : null}
@@ -190,11 +225,12 @@ export function HistoryPage() {
 
         <section className="grid content-start gap-5">
           <HistoryInsightsPanel
-            insights={insights}
+            insights={displayedInsights}
             insightsDays={insightsDays}
             isInsightsLoading={isInsightsLoading}
             insightsError={insightsError}
-            isStartingRecommendation={isRecommendationStarting}
+            isStartingRecommendation={startingAction?.type === "recommendation"}
+            isPracticeStarting={startingAction !== null}
             onDaysChange={setInsightsDays}
             retryInsights={retryInsights}
             onRecommendationStart={handleRecommendationStart}
@@ -231,7 +267,8 @@ export function HistoryPage() {
                     key={record.sessionId}
                     record={record}
                     onRepeat={handleRepeat}
-                    isRepeating={startingScenarioId === record.scenario.id}
+                    isRepeating={startingAction?.type === "repeat" && startingAction.id === record.sessionId}
+                    isPracticeStarting={startingAction !== null}
                   />
                 ))}
                 <div className="mt-2 flex items-center justify-between rounded-panel border border-line bg-white p-4 shadow-soft">

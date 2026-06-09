@@ -13,9 +13,10 @@ interface HistorySessionCardProps {
   record: HistoryRecord;
   onRepeat?: (record: HistoryRecord) => void;
   isRepeating?: boolean;
+  isPracticeStarting?: boolean;
 }
 
-export function HistorySessionCard({ record, onRepeat, isRepeating = false }: HistorySessionCardProps) {
+export function HistorySessionCard({ record, onRepeat, isRepeating = false, isPracticeStarting = false }: HistorySessionCardProps) {
   const Icon = scenarioIconMap[record.scenario.code as ScenarioCode] ?? MessageCircle;
   const actionTo = record.status === "running" ? `/training/${record.sessionId}` : `/report/${record.sessionId}`;
   const actionLabel = record.status === "running" ? "继续训练" : record.reportStatus === "generated" ? "查看报告" : "生成报告";
@@ -51,7 +52,7 @@ export function HistorySessionCard({ record, onRepeat, isRepeating = false }: Hi
           <button
             type="button"
             className={buttonClasses("soft", "h-10 rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-70")}
-            disabled={isRepeating || !onRepeat}
+            disabled={isRepeating || isPracticeStarting || !onRepeat}
             onClick={() => onRepeat?.(record)}
           >
             {isRepeating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
