@@ -117,6 +117,45 @@ LIMIT ? OFFSET ?`,
 	}, nil
 }
 
+// ListSessionsByWindow 按创建时间窗口查询训练 Session。
+func (r *MySQLSessionRepository) ListSessionsByWindow(query model.SessionWindowQuery) ([]model.Session, error) {
+	where := "WHERE created_at >= ? AND created_at < ?"
+	args := []any{query.StartedAt, query.EndedAt}
+	if query.UserID > 0 {
+		where = "WHERE user_id = ? AND created_at >= ? AND created_at < ?"
+		args = []any{query.UserID, query.StartedAt, query.EndedAt}
+	}
+	args = append(args, query.Limit)
+
+	rows, err := r.db.Query(
+		`SELECT id, session_no, scenario_id, user_id, status, turn_count, created_at, ended_at
+FROM training_sessions
+`+where+`
+ORDER BY created_at DESC, id DESC
+LIMIT ?`,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	sessions := []model.Session{}
+	for rows.Next() {
+		session, err := scanSession(rows)
+		if err != nil {
+			return nil, err
+		}
+		session.Messages = []model.Message{}
+		sessions = append(sessions, session)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return sessions, nil
+}
+
 // Finish 把 running Session 原子地结束为 finished。
 func (r *MySQLSessionRepository) Finish(id int, endedAt time.Time) (model.Session, error) {
 	result, err := r.db.Exec(
