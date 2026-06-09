@@ -190,6 +190,79 @@ func TestHistoryInsightsBuildsScenarioTrendFirstLatestAndDelta(t *testing.T) {
 	}
 }
 
+func TestHistoryInsightsScenarioTrendsOnlyIncludeScoredScenarios(t *testing.T) {
+	now := fixedHistoryInsightsNow()
+	currentStart := now.AddDate(0, 0, -30)
+	previousStart := now.AddDate(0, 0, -60)
+	scored := historyInsightSession(1, 1, model.SessionStatusFinished, now.AddDate(0, 0, -3))
+	runningOnly := historyInsightSession(2, 2, model.SessionStatusRunning, now.AddDate(0, 0, -2))
+	unscoredFinished := historyInsightSession(3, 3, model.SessionStatusFinished, now.AddDate(0, 0, -1))
+	sessionRepo := newFakeHistoryInsightSessionRepository()
+	sessionRepo.setWindow(currentStart, now, []model.Session{unscoredFinished, runningOnly, scored})
+	sessionRepo.setWindow(previousStart, currentStart, nil)
+	feedbackRepo := newFakeFeedbackRepository()
+	feedbackRepo.scoresBySessionID[scored.ID] = historyInsightScore(scored.ID, 76)
+	scenarios := map[int]model.Scenario{
+		1: {ID: 1, Code: "interview", Name: "Interview", Difficulty: "medium"},
+		2: {ID: 2, Code: "presentation", Name: "Presentation", Difficulty: "hard"},
+		3: {ID: 3, Code: "small-talk", Name: "Small Talk", Difficulty: "easy"},
+	}
+	insightsService := newHistoryInsightsTestService(t, sessionRepo, feedbackRepo, nil, scenarios, now)
+
+	result, err := insightsService.GetInsights(service.HistoryInsightsInput{UserID: 1, Days: 30})
+	if err != nil {
+		t.Fatalf("GetInsights returned error: %v", err)
+	}
+
+	if result.Summary.TotalSessions != 3 {
+		t.Fatalf("total sessions = %d, want 3", result.Summary.TotalSessions)
+	}
+	if result.Summary.RunningSessions != 1 {
+		t.Fatalf("running sessions = %d, want 1", result.Summary.RunningSessions)
+	}
+	if result.Summary.FinishedSessions != 2 {
+		t.Fatalf("finished sessions = %d, want 2", result.Summary.FinishedSessions)
+	}
+	if result.Summary.ScoredSessions != 1 {
+		t.Fatalf("scored sessions = %d, want 1", result.Summary.ScoredSessions)
+	}
+	if len(result.ScenarioTrends) != 1 {
+		t.Fatalf("scenario trends length = %d, want only scored scenario: %+v", len(result.ScenarioTrends), result.ScenarioTrends)
+	}
+	if result.ScenarioTrends[0].Scenario.ID != scored.ScenarioID {
+		t.Fatalf("scenario trend id = %d, want scored scenario %d", result.ScenarioTrends[0].Scenario.ID, scored.ScenarioID)
+	}
+	assertHistoryInsightIntPtr(t, result.ScenarioTrends[0].AverageScore, 76, "scenario average score")
+}
+
+func TestHistoryInsightsScenarioTrendFirstLatestScoreUsesIDTieBreaks(t *testing.T) {
+	now := fixedHistoryInsightsNow()
+	currentStart := now.AddDate(0, 0, -30)
+	previousStart := now.AddDate(0, 0, -60)
+	createdAt := now.AddDate(0, 0, -4)
+	lowerID := historyInsightSession(10, 1, model.SessionStatusFinished, createdAt)
+	middleID := historyInsightSession(20, 1, model.SessionStatusFinished, createdAt)
+	higherID := historyInsightSession(30, 1, model.SessionStatusFinished, createdAt)
+	sessionRepo := newFakeHistoryInsightSessionRepository()
+	sessionRepo.setWindow(currentStart, now, []model.Session{middleID, higherID, lowerID})
+	sessionRepo.setWindow(previousStart, currentStart, nil)
+	feedbackRepo := newFakeFeedbackRepository()
+	feedbackRepo.scoresBySessionID[lowerID.ID] = historyInsightScore(lowerID.ID, 60)
+	feedbackRepo.scoresBySessionID[middleID.ID] = historyInsightScore(middleID.ID, 70)
+	feedbackRepo.scoresBySessionID[higherID.ID] = historyInsightScore(higherID.ID, 84)
+	insightsService := newHistoryInsightsTestService(t, sessionRepo, feedbackRepo, nil, nil, now)
+
+	result, err := insightsService.GetInsights(service.HistoryInsightsInput{UserID: 1, Days: 30})
+	if err != nil {
+		t.Fatalf("GetInsights returned error: %v", err)
+	}
+
+	trend := findHistoryScenarioTrend(t, result.ScenarioTrends, 1)
+	assertHistoryInsightIntPtr(t, trend.FirstScore, 60, "scenario first score")
+	assertHistoryInsightIntPtr(t, trend.LatestScore, 84, "scenario latest score")
+	assertHistoryInsightIntPtr(t, trend.ScoreDelta, 24, "scenario score delta")
+}
+
 func TestHistoryInsightsAggregatesFrequentErrors(t *testing.T) {
 	now := fixedHistoryInsightsNow()
 	currentStart := now.AddDate(0, 0, -30)

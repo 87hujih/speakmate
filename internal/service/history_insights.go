@@ -359,8 +359,10 @@ type scenarioTrendBucket struct {
 	scores         []int
 	firstScore     *int
 	firstScoreAt   time.Time
+	firstScoreID   int
 	latestScore    *int
 	latestScoreAt  time.Time
+	latestScoreID  int
 	lastTrainedAt  time.Time
 }
 
@@ -389,18 +391,27 @@ func buildScenarioTrends(
 		}
 		bucket.scoredSessions++
 		bucket.scores = append(bucket.scores, score.TotalScore)
-		if bucket.firstScore == nil || session.CreatedAt.Before(bucket.firstScoreAt) {
+		if bucket.firstScore == nil ||
+			session.CreatedAt.Before(bucket.firstScoreAt) ||
+			(session.CreatedAt.Equal(bucket.firstScoreAt) && session.ID < bucket.firstScoreID) {
 			bucket.firstScore = intPtr(score.TotalScore)
 			bucket.firstScoreAt = session.CreatedAt
+			bucket.firstScoreID = session.ID
 		}
-		if bucket.latestScore == nil || session.CreatedAt.After(bucket.latestScoreAt) {
+		if bucket.latestScore == nil ||
+			session.CreatedAt.After(bucket.latestScoreAt) ||
+			(session.CreatedAt.Equal(bucket.latestScoreAt) && session.ID > bucket.latestScoreID) {
 			bucket.latestScore = intPtr(score.TotalScore)
 			bucket.latestScoreAt = session.CreatedAt
+			bucket.latestScoreID = session.ID
 		}
 	}
 
 	trends := make([]ScenarioTrend, 0, len(buckets))
 	for _, bucket := range buckets {
+		if bucket.scoredSessions == 0 {
+			continue
+		}
 		scenario, err := scenarioLookup(bucket.scenarioID)
 		if err != nil {
 			return nil, err
