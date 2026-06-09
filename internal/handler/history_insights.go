@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"net/http"
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 
 	"speakmate/internal/model"
@@ -25,11 +28,11 @@ func NewHistoryInsightsHandler(service HistoryInsightsService) *HistoryInsightsH
 
 // Get returns aggregated training history insights.
 func (h *HistoryInsightsHandler) Get(c *gin.Context) {
-	days, ok := parsePositiveQueryInt(c, "days")
+	days, ok := parseHistoryInsightsPositiveQueryInt(c, "days")
 	if !ok {
 		return
 	}
-	userID, ok := parsePositiveQueryInt(c, "user_id")
+	userID, ok := parseHistoryInsightsPositiveQueryInt(c, "user_id")
 	if !ok {
 		return
 	}
@@ -44,6 +47,20 @@ func (h *HistoryInsightsHandler) Get(c *gin.Context) {
 	}
 
 	response.Success(c, toHistoryInsightsResponse(result))
+}
+
+func parseHistoryInsightsPositiveQueryInt(c *gin.Context, key string) (int, bool) {
+	raw, exists := c.GetQuery(key)
+	if !exists {
+		return 0, true
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		response.Error(c, http.StatusBadRequest, invalidHistoryRequestCode, "invalid history request")
+		return 0, false
+	}
+
+	return value, true
 }
 
 type historyInsightsResponse struct {

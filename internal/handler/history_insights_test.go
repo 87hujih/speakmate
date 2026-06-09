@@ -93,6 +93,9 @@ func TestHistoryInsightsHandlerGetsInsights(t *testing.T) {
 	if body.Data.NextRecommendation == nil {
 		t.Fatal("next_recommendation = nil, want recommendation")
 	}
+	if body.Data.NextRecommendation.Scenario == nil {
+		t.Fatal("next_recommendation.scenario = nil, want scenario")
+	}
 	if body.Data.NextRecommendation.Scenario.Code != "interview" {
 		t.Fatalf("next_recommendation.scenario.code = %q, want interview", body.Data.NextRecommendation.Scenario.Code)
 	}
@@ -123,8 +126,14 @@ func TestHistoryInsightsHandlerRejectsInvalidQueryValues(t *testing.T) {
 		name string
 		path string
 	}{
-		{name: "invalid days", path: "/api/v1/history/insights?days=0&user_id=42"},
-		{name: "invalid user id", path: "/api/v1/history/insights?days=30&user_id=abc"},
+		{name: "empty days", path: "/api/v1/history/insights?days=&user_id=42"},
+		{name: "zero days", path: "/api/v1/history/insights?days=0&user_id=42"},
+		{name: "negative days", path: "/api/v1/history/insights?days=-1&user_id=42"},
+		{name: "non-numeric days", path: "/api/v1/history/insights?days=abc&user_id=42"},
+		{name: "empty user id", path: "/api/v1/history/insights?days=30&user_id="},
+		{name: "zero user id", path: "/api/v1/history/insights?days=30&user_id=0"},
+		{name: "negative user id", path: "/api/v1/history/insights?days=30&user_id=-1"},
+		{name: "non-numeric user id", path: "/api/v1/history/insights?days=30&user_id=abc"},
 	}
 
 	for _, tt := range tests {
@@ -145,6 +154,43 @@ func TestHistoryInsightsHandlerRejectsInvalidQueryValues(t *testing.T) {
 				t.Fatalf("call count = %d, want 0", insightService.callCount)
 			}
 		})
+	}
+}
+
+func TestHistoryInsightsHandlerSerializesRecommendationScenarioNull(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	insightService := &fakeHistoryInsightsService{
+		result: service.HistoryInsightsResult{
+			NextRecommendation: &service.NextPracticeRecommendation{
+				Type:      "continue_session",
+				Reason:    "A recent practice session is still running.",
+				SessionID: 7,
+				Focus:     "英语面试",
+			},
+		},
+	}
+	handler := NewHistoryInsightsHandler(insightService)
+	engine := gin.New()
+	engine.GET("/api/v1/history/insights", handler.Get)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/history/insights", nil)
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var raw struct {
+		Data struct {
+			NextRecommendation struct {
+				Scenario json.RawMessage `json:"scenario"`
+			} `json:"next_recommendation"`
+		} `json:"data"`
+	}
+	mustUnmarshalHistoryInsightsJSON(t, rec.Body.Bytes(), &raw)
+	if string(raw.Data.NextRecommendation.Scenario) != "null" {
+		t.Fatalf("next_recommendation.scenario = %s, want null", string(raw.Data.NextRecommendation.Scenario))
 	}
 }
 
@@ -238,11 +284,11 @@ type historyInsightsHandlerResponse struct {
 			SourceSessionID int    `json:"source_session_id"`
 		} `json:"frequent_errors"`
 		NextRecommendation *struct {
-			Type      string                         `json:"type"`
-			Reason    string                         `json:"reason"`
-			Scenario  historyInsightsHandlerScenario `json:"scenario"`
-			SessionID int                            `json:"session_id"`
-			Focus     string                         `json:"focus"`
+			Type      string                          `json:"type"`
+			Reason    string                          `json:"reason"`
+			Scenario  *historyInsightsHandlerScenario `json:"scenario"`
+			SessionID int                             `json:"session_id"`
+			Focus     string                          `json:"focus"`
 		} `json:"next_recommendation"`
 	} `json:"data"`
 }
