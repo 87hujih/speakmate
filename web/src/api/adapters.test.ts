@@ -472,6 +472,7 @@ describe("api adapters", () => {
       scoreDelta: 12,
     });
     expect(mapped.scenarioTrends[0].lastTrainedAt).toContain("2026");
+    expect(mapped.scenarioTrends[0].lastTrainedAt).not.toBe("2026-06-07T03:00:00Z");
     expect(mapped.frequentErrors[0]).toMatchObject({
       key: "am study",
       title: "am study",
@@ -482,6 +483,7 @@ describe("api adapters", () => {
       sourceSessionId: "7",
     });
     expect(mapped.frequentErrors[0].lastSeenAt).toContain("2026");
+    expect(mapped.frequentErrors[0].lastSeenAt).not.toBe("2026-06-07T03:05:00Z");
     expect(mapped.nextRecommendation).toMatchObject({
       type: "scenario_repractice",
       scenario: expect.objectContaining({ id: 1 }),
@@ -503,5 +505,39 @@ describe("api adapters", () => {
     expect(mapped.scenarioTrends).toEqual([]);
     expect(mapped.frequentErrors).toEqual([]);
     expect(mapped.nextRecommendation).toBeNull();
+  });
+
+  it("treats null insight arrays as empty arrays", () => {
+    const mapped = mapHistoryInsights({
+      ...backendInsights,
+      score_trend: null,
+      scenario_trends: null,
+      frequent_errors: null,
+    });
+
+    expect(mapped.scoreTrend).toEqual([]);
+    expect(mapped.scenarioTrends).toEqual([]);
+    expect(mapped.frequentErrors).toEqual([]);
+  });
+
+  it("preserves a recommendation with a null scenario", () => {
+    const mapped = mapHistoryInsights({
+      ...backendInsights,
+      next_recommendation: {
+        type: "continue_session",
+        reason: "A session is still running.",
+        scenario: null,
+        session_id: 7,
+        focus: "继续训练",
+      },
+    });
+
+    expect(mapped.nextRecommendation).toEqual({
+      type: "continue_session",
+      reason: "A session is still running.",
+      scenario: null,
+      sessionId: "7",
+      focus: "继续训练",
+    });
   });
 });

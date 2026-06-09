@@ -207,9 +207,9 @@ export interface BackendNextPracticeRecommendation {
 
 export interface BackendHistoryInsights {
   summary: BackendHistoryInsightSummary;
-  score_trend: BackendHistoryScoreTrendPoint[];
-  scenario_trends: BackendScenarioTrend[];
-  frequent_errors: BackendFrequentErrorInsight[];
+  score_trend: BackendHistoryScoreTrendPoint[] | null;
+  scenario_trends: BackendScenarioTrend[] | null;
+  frequent_errors: BackendFrequentErrorInsight[] | null;
   next_recommendation: BackendNextPracticeRecommendation | null;
 }
 
@@ -290,6 +290,16 @@ function withPagination(path: string, page: number, pageSize: number) {
   return `${path}?${params.toString()}`;
 }
 
+function withHistoryInsightsParams(days: number, userId?: number) {
+  const params = new URLSearchParams();
+  params.set("days", String(days));
+  if (userId !== undefined) {
+    params.set("user_id", String(userId));
+  }
+
+  return `/history/insights?${params.toString()}`;
+}
+
 export const apiClient = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
@@ -331,8 +341,5 @@ export const apiClient = {
   listHistory: (page = 1, pageSize = 20) => request<BackendHistoryListResult>(withPagination("/sessions", page, pageSize)),
   listUserHistory: (userId: number, page = 1, pageSize = 20) =>
     request<BackendHistoryListResult>(withPagination(`/users/${userId}/sessions`, page, pageSize)),
-  getHistoryInsights: (days = 30, userId?: number) =>
-    request<BackendHistoryInsights>(
-      userId === undefined ? `/history/insights?days=${days}` : `/history/insights?days=${days}&user_id=${userId}`,
-    ),
+  getHistoryInsights: (days = 30, userId?: number) => request<BackendHistoryInsights>(withHistoryInsightsParams(days, userId)),
 };
