@@ -125,14 +125,18 @@ func (r *MySQLSessionRepository) ListSessionsByWindow(query model.SessionWindowQ
 		where = "WHERE user_id = ? AND created_at >= ? AND created_at < ?"
 		args = []any{query.UserID, query.StartedAt, query.EndedAt}
 	}
-	args = append(args, query.Limit)
+	limit := ""
+	if query.Limit > 0 {
+		limit = `
+LIMIT ?`
+		args = append(args, query.Limit)
+	}
 
 	rows, err := r.db.Query(
 		`SELECT id, session_no, scenario_id, user_id, status, turn_count, created_at, ended_at
 FROM training_sessions
 `+where+`
-ORDER BY created_at DESC, id DESC
-LIMIT ?`,
+ORDER BY created_at DESC, id DESC`+limit,
 		args...,
 	)
 	if err != nil {

@@ -112,6 +112,24 @@ func TestMemorySessionRepositoryListSessionsByWindow(t *testing.T) {
 		})
 	})
 
+	t.Run("treats zero limit as uncapped", func(t *testing.T) {
+		sessions, err := repo.ListSessionsByWindow(model.SessionWindowQuery{
+			StartedAt: base,
+			EndedAt:   base.Add(3 * time.Hour),
+			Limit:     0,
+		})
+		if err != nil {
+			t.Fatalf("ListSessionsByWindow returned error: %v", err)
+		}
+
+		assertSessionIDs(t, sessions, []int{
+			newest.ID,
+			insideSameTimeHighID.ID,
+			insideSameTimeLowID.ID,
+			atStart.ID,
+		})
+	})
+
 	t.Run("returns cloned sessions", func(t *testing.T) {
 		sessions, err := repo.ListSessionsByWindow(model.SessionWindowQuery{
 			UserID:    1,

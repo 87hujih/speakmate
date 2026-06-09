@@ -112,6 +112,33 @@ LIMIT ?`
 		t.Fatalf("sessions[0].Messages = %#v, want empty slice", sessions[0].Messages)
 	}
 
+	uncappedWindowSQL := `SELECT id, session_no, scenario_id, user_id, status, turn_count, created_at, ended_at
+FROM training_sessions
+WHERE created_at >= ? AND created_at < ?
+ORDER BY created_at DESC, id DESC`
+	mock.ExpectQuery(regexp.QuoteMeta(uncappedWindowSQL)).
+		WithArgs(startedAt, endedAt).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "session_no", "scenario_id", "user_id", "status", "turn_count", "created_at", "ended_at",
+		}).
+			AddRow(9, "S202606080009", 1, 42, string(model.SessionStatusFinished), 2, createdAt, createdAt.Add(time.Minute)).
+			AddRow(8, "S202606080008", 1, 43, string(model.SessionStatusRunning), 1, createdAt.Add(-time.Minute), nil))
+
+	uncappedSessions, err := repo.ListSessionsByWindow(model.SessionWindowQuery{
+		StartedAt: startedAt,
+		EndedAt:   endedAt,
+		Limit:     0,
+	})
+	if err != nil {
+		t.Fatalf("ListSessionsByWindow with zero limit returned error: %v", err)
+	}
+	if len(uncappedSessions) != 2 {
+		t.Fatalf("uncapped sessions length = %d, want 2", len(uncappedSessions))
+	}
+	if uncappedSessions[0].ID != 9 || uncappedSessions[1].ID != 8 {
+		t.Fatalf("uncapped session ids = [%d, %d], want [9, 8]", uncappedSessions[0].ID, uncappedSessions[1].ID)
+	}
+
 	userWindowSQL := `SELECT id, session_no, scenario_id, user_id, status, turn_count, created_at, ended_at
 FROM training_sessions
 WHERE user_id = ? AND created_at >= ? AND created_at < ?
