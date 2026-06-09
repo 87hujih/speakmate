@@ -107,6 +107,8 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 	reportHandler := handler.NewReportHandler(reportService)
 	historyService := service.NewHistoryService(scenarioService, sessionRepo, feedbackRepo, reportRepo)
 	historyHandler := handler.NewHistoryHandler(historyService)
+	historyInsightsService := service.NewHistoryInsightsService(scenarioService, sessionRepo, feedbackRepo, reportRepo)
+	historyInsightsHandler := handler.NewHistoryInsightsHandler(historyInsightsService)
 	streamHandler := handler.NewStreamHandler(eventBus)
 
 	// v1 API 路由组承载场景、训练 Session 和消息等后续接口。
@@ -115,6 +117,7 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 	api.GET("/scenarios/:id", scenarioHandler.Detail)
 	api.GET("/sessions", historyHandler.List)
 	api.GET("/users/:user_id/sessions", historyHandler.ListByUser)
+	api.GET("/history/insights", historyInsightsHandler.Get)
 	api.POST("/sessions", sessionHandler.Create)
 	api.GET("/sessions/:id", sessionHandler.Detail)
 	api.GET("/sessions/:id/stream", streamHandler.Stream)
@@ -153,6 +156,7 @@ type sessionStore interface {
 	service.SessionRepository
 	service.ReportSessionReader
 	service.HistorySessionRepository
+	service.HistoryInsightSessionRepository
 }
 
 type feedbackStore interface {
