@@ -49,6 +49,7 @@ logs/
 /.cache/
 /.tmp/
 /scripts/
+/.worktrees
 
 # Environment and local config
 .env
