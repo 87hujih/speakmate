@@ -157,6 +157,62 @@ export interface BackendHistoryListResult {
   total: number;
 }
 
+export interface BackendHistoryInsightSummary {
+  days: number;
+  total_sessions: number;
+  finished_sessions: number;
+  running_sessions: number;
+  scored_sessions: number;
+  generated_reports: number;
+  average_score: number | null;
+  previous_average_score: number | null;
+  score_delta: number | null;
+}
+
+export interface BackendHistoryScoreTrendPoint {
+  date: string;
+  average_score: number;
+  session_count: number;
+}
+
+export interface BackendScenarioTrend {
+  scenario: BackendScenarioSummary;
+  session_count: number;
+  scored_sessions: number;
+  average_score: number | null;
+  first_score: number | null;
+  latest_score: number | null;
+  score_delta: number | null;
+  last_trained_at: string;
+}
+
+export interface BackendFrequentErrorInsight {
+  key: string;
+  title: string;
+  category: "grammar" | "expression" | "vocabulary" | string;
+  suggestion: string;
+  count: number;
+  latest_evidence: string;
+  last_seen_at: string;
+  source_session_id: number;
+}
+
+export interface BackendNextPracticeRecommendation {
+  type: "scenario_repractice" | "continue_session" | string;
+  reason: string;
+  scenario: BackendScenarioSummary | null;
+  session_id: number;
+  focus: string;
+}
+
+export interface BackendHistoryInsights {
+  summary: BackendHistoryInsightSummary;
+  score_trend: BackendHistoryScoreTrendPoint[];
+  scenario_trends: BackendScenarioTrend[];
+  frequent_errors: BackendFrequentErrorInsight[];
+  next_recommendation: BackendNextPracticeRecommendation | null;
+}
+
 export class ApiError extends Error {
   code: number;
   status: number;
@@ -275,4 +331,8 @@ export const apiClient = {
   listHistory: (page = 1, pageSize = 20) => request<BackendHistoryListResult>(withPagination("/sessions", page, pageSize)),
   listUserHistory: (userId: number, page = 1, pageSize = 20) =>
     request<BackendHistoryListResult>(withPagination(`/users/${userId}/sessions`, page, pageSize)),
+  getHistoryInsights: (days = 30, userId?: number) =>
+    request<BackendHistoryInsights>(
+      userId === undefined ? `/history/insights?days=${days}` : `/history/insights?days=${days}&user_id=${userId}`,
+    ),
 };

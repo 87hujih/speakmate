@@ -1,6 +1,7 @@
 import type {
   BackendCorrectionError,
   BackendCorrectionResult,
+  BackendHistoryInsights,
   BackendHistoryItem,
   BackendMessage,
   BackendReport,
@@ -12,6 +13,7 @@ import type {
 import type {
   BetterExpression,
   Correction,
+  HistoryInsights,
   HistoryRecord,
   PracticePlanItem,
   Scenario,
@@ -408,5 +410,55 @@ export function mapHistoryRecord(record: BackendHistoryItem): HistoryRecord {
     turnCount: record.turn_count,
     majorProblem: record.total_score === null ? "暂无评分" : record.status === "finished" ? "已完成训练" : "训练进行中",
     reportStatus: record.report_status,
+  };
+}
+
+export function mapHistoryInsights(insights: BackendHistoryInsights): HistoryInsights {
+  return {
+    summary: {
+      days: insights.summary.days,
+      totalSessions: insights.summary.total_sessions,
+      finishedSessions: insights.summary.finished_sessions,
+      runningSessions: insights.summary.running_sessions,
+      scoredSessions: insights.summary.scored_sessions,
+      generatedReports: insights.summary.generated_reports,
+      averageScore: insights.summary.average_score,
+      previousAverageScore: insights.summary.previous_average_score,
+      scoreDelta: insights.summary.score_delta,
+    },
+    scoreTrend: arrayOrEmpty(insights.score_trend).map((point) => ({
+      date: point.date,
+      averageScore: point.average_score,
+      sessionCount: point.session_count,
+    })),
+    scenarioTrends: arrayOrEmpty(insights.scenario_trends).map((trend) => ({
+      scenario: mapScenarioSummary(trend.scenario),
+      sessionCount: trend.session_count,
+      scoredSessions: trend.scored_sessions,
+      averageScore: trend.average_score,
+      firstScore: trend.first_score,
+      latestScore: trend.latest_score,
+      scoreDelta: trend.score_delta,
+      lastTrainedAt: formatDateTime(trend.last_trained_at),
+    })),
+    frequentErrors: arrayOrEmpty(insights.frequent_errors).map((error) => ({
+      key: error.key,
+      title: error.title,
+      category: error.category,
+      suggestion: error.suggestion,
+      count: error.count,
+      latestEvidence: error.latest_evidence,
+      lastSeenAt: formatDateTime(error.last_seen_at),
+      sourceSessionId: String(error.source_session_id),
+    })),
+    nextRecommendation: insights.next_recommendation
+      ? {
+          type: insights.next_recommendation.type,
+          reason: insights.next_recommendation.reason,
+          scenario: insights.next_recommendation.scenario ? mapScenarioSummary(insights.next_recommendation.scenario) : null,
+          sessionId: String(insights.next_recommendation.session_id),
+          focus: insights.next_recommendation.focus,
+        }
+      : null,
   };
 }

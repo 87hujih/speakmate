@@ -10,6 +10,7 @@ import {
   type BackendSessionDetail,
 } from "./client";
 import {
+  mapHistoryInsights,
   mapHistoryRecord,
   mapReport,
   mapScenarioDetail,
@@ -25,6 +26,7 @@ type FinishClient = Pick<typeof apiClient, "finishSession">;
 type ReportClient = Pick<typeof apiClient, "getReport">;
 type GenerateReportClient = Pick<typeof apiClient, "generateReport">;
 type HistoryClient = Pick<typeof apiClient, "listHistory">;
+type HistoryInsightsClient = Pick<typeof apiClient, "getHistoryInsights">;
 
 function hasApiCode(error: unknown, code: number) {
   return error instanceof ApiError && error.code === code;
@@ -168,6 +170,10 @@ export async function loadHistoryState(page: number, pageSize: number, client: H
     pageSize: result.page_size || pageSize,
     total: result.total,
   };
+}
+
+export async function loadHistoryInsights(days = 30, client: HistoryInsightsClient = apiClient) {
+  return mapHistoryInsights(await client.getHistoryInsights(days));
 }
 
 export function mapScenarioFallback(scenario: BackendScenarioSummary) {

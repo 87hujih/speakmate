@@ -134,3 +134,59 @@ export interface HistoryRecord {
   majorProblem: string;
   reportStatus: "generated" | "not_generated";
 }
+
+export interface HistoryInsightSummary {
+  days: number;
+  totalSessions: number;
+  finishedSessions: number;
+  runningSessions: number;
+  scoredSessions: number;
+  generatedReports: number;
+  averageScore: number | null;
+  previousAverageScore: number | null;
+  scoreDelta: number | null;
+}
+
+export interface HistoryScoreTrendPoint {
+  date: string;
+  averageScore: number;
+  sessionCount: number;
+}
+
+export interface ScenarioTrend {
+  scenario: Scenario;
+  sessionCount: number;
+  scoredSessions: number;
+  averageScore: number | null;
+  firstScore: number | null;
+  latestScore: number | null;
+  scoreDelta: number | null;
+  lastTrainedAt: string;
+}
+
+export interface FrequentErrorInsight {
+  key: string;
+  title: string;
+  category: "grammar" | "expression" | "vocabulary" | string;
+  suggestion: string;
+  count: number;
+  latestEvidence: string;
+  lastSeenAt: string;
+  sourceSessionId: string;
+}
+
+export interface NextPracticeRecommendation {
+  type: "scenario_repractice" | "continue_session" | string;
+  reason: string;
+  scenario: Scenario | null;
+  sessionId: string;
+  focus: string;
+}
+
+export interface HistoryInsights {
+  summary: HistoryInsightSummary;
+  scoreTrend: HistoryScoreTrendPoint[];
+  scenarioTrends: ScenarioTrend[];
+  frequentErrors: FrequentErrorInsight[];
+  nextRecommendation: NextPracticeRecommendation | null;
+}
