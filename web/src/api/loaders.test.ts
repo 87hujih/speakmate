@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiError, type BackendScenario, type BackendSessionDetail } from "./client";
-import { loadReportState, loadTrainingSessionState, sendTrainingAudio } from "./loaders";
+import { ApiError, type BackendHistoryInsights, type BackendScenario, type BackendSessionDetail } from "./client";
+import { loadHistoryInsights, loadReportState, loadTrainingSessionState, sendTrainingAudio } from "./loaders";
 
 const scenario: BackendScenario = {
   id: 1,
@@ -30,6 +30,24 @@ const session: BackendSessionDetail = {
   messages: [],
   created_at: "2026-06-07T03:00:00Z",
   ended_at: null,
+};
+
+const backendInsights: BackendHistoryInsights = {
+  summary: {
+    days: 7,
+    total_sessions: 1,
+    finished_sessions: 1,
+    running_sessions: 0,
+    scored_sessions: 1,
+    generated_reports: 1,
+    average_score: 77,
+    previous_average_score: null,
+    score_delta: null,
+  },
+  score_trend: [],
+  scenario_trends: [],
+  frequent_errors: [],
+  next_recommendation: null,
 };
 
 describe("api loaders", () => {
@@ -118,5 +136,16 @@ describe("api loaders", () => {
     expect(client.uploadAudioMessage).toHaveBeenCalledWith(7, file);
     expect(result.result.transcript).toBe("I am study computer science and I have did a project.");
     expect(result.session.coachSummary).toBe("ask project details");
+  });
+
+  it("loads history insights for the selected window", async () => {
+    const client = {
+      getHistoryInsights: vi.fn(async () => backendInsights),
+    };
+
+    const result = await loadHistoryInsights(7, client);
+
+    expect(client.getHistoryInsights).toHaveBeenCalledWith(7);
+    expect(result.summary.days).toBe(7);
   });
 });

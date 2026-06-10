@@ -3,6 +3,7 @@ package repository_test
 import (
 	"database/sql"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -65,6 +66,104 @@ func TestMySQLSessionRepositoryCreateAndFindByID(t *testing.T) {
 	}
 	if found.Messages[0].Content != "hello" {
 		t.Fatalf("message content = %q, want hello", found.Messages[0].Content)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet SQL expectations: %v", err)
+	}
+}
+
+func TestMySQLSessionRepositoryListSessionsByWindow(t *testing.T) {
+	db, mock, cleanup := newSQLMock(t)
+	defer cleanup()
+	repo := repository.NewMySQLSessionRepository(db)
+	startedAt := time.Date(2026, 6, 8, 0, 0, 0, 0, time.UTC)
+	endedAt := startedAt.Add(24 * time.Hour)
+	createdAt := startedAt.Add(2 * time.Hour)
+
+	windowSQL := `SELECT id, session_no, scenario_id, user_id, status, turn_count, created_at, ended_at
+FROM training_sessions
+WHERE created_at >= ? AND created_at < ?
+ORDER BY created_at DESC, id DESC
+LIMIT ?`
+	mock.ExpectQuery(regexp.QuoteMeta(windowSQL)).
+		WithArgs(startedAt, endedAt, 2).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "session_no", "scenario_id", "user_id", "status", "turn_count", "created_at", "ended_at",
+		}).
+			AddRow(9, "S202606080009", 1, 42, string(model.SessionStatusFinished), 2, createdAt, createdAt.Add(time.Minute)).
+			AddRow(8, "S202606080008", 1, 43, string(model.SessionStatusRunning), 1, createdAt.Add(-time.Minute), nil))
+
+	sessions, err := repo.ListSessionsByWindow(model.SessionWindowQuery{
+		StartedAt: startedAt,
+		EndedAt:   endedAt,
+		Limit:     2,
+	})
+	if err != nil {
+		t.Fatalf("ListSessionsByWindow returned error: %v", err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("sessions length = %d, want 2", len(sessions))
+	}
+	if sessions[0].ID != 9 || sessions[1].ID != 8 {
+		t.Fatalf("session ids = [%d, %d], want [9, 8]", sessions[0].ID, sessions[1].ID)
+	}
+	if len(sessions[0].Messages) != 0 || sessions[0].Messages == nil {
+		t.Fatalf("sessions[0].Messages = %#v, want empty slice", sessions[0].Messages)
+	}
+
+	uncappedWindowSQL := `SELECT id, session_no, scenario_id, user_id, status, turn_count, created_at, ended_at
+FROM training_sessions
+WHERE created_at >= ? AND created_at < ?
+ORDER BY created_at DESC, id DESC`
+	mock.ExpectQuery(regexp.QuoteMeta(uncappedWindowSQL)).
+		WithArgs(startedAt, endedAt).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "session_no", "scenario_id", "user_id", "status", "turn_count", "created_at", "ended_at",
+		}).
+			AddRow(9, "S202606080009", 1, 42, string(model.SessionStatusFinished), 2, createdAt, createdAt.Add(time.Minute)).
+			AddRow(8, "S202606080008", 1, 43, string(model.SessionStatusRunning), 1, createdAt.Add(-time.Minute), nil))
+
+	uncappedSessions, err := repo.ListSessionsByWindow(model.SessionWindowQuery{
+		StartedAt: startedAt,
+		EndedAt:   endedAt,
+		Limit:     0,
+	})
+	if err != nil {
+		t.Fatalf("ListSessionsByWindow with zero limit returned error: %v", err)
+	}
+	if len(uncappedSessions) != 2 {
+		t.Fatalf("uncapped sessions length = %d, want 2", len(uncappedSessions))
+	}
+	if uncappedSessions[0].ID != 9 || uncappedSessions[1].ID != 8 {
+		t.Fatalf("uncapped session ids = [%d, %d], want [9, 8]", uncappedSessions[0].ID, uncappedSessions[1].ID)
+	}
+
+	userWindowSQL := `SELECT id, session_no, scenario_id, user_id, status, turn_count, created_at, ended_at
+FROM training_sessions
+WHERE user_id = ? AND created_at >= ? AND created_at < ?
+ORDER BY created_at DESC, id DESC
+LIMIT ?`
+	mock.ExpectQuery(regexp.QuoteMeta(userWindowSQL)).
+		WithArgs(42, startedAt, endedAt, 1).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "session_no", "scenario_id", "user_id", "status", "turn_count", "created_at", "ended_at",
+		}).AddRow(9, "S202606080009", 1, 42, string(model.SessionStatusFinished), 2, createdAt, createdAt.Add(time.Minute)))
+
+	userSessions, err := repo.ListSessionsByWindow(model.SessionWindowQuery{
+		UserID:    42,
+		StartedAt: startedAt,
+		EndedAt:   endedAt,
+		Limit:     1,
+	})
+	if err != nil {
+		t.Fatalf("ListSessionsByWindow with user filter returned error: %v", err)
+	}
+	if len(userSessions) != 1 {
+		t.Fatalf("user sessions length = %d, want 1", len(userSessions))
+	}
+	if userSessions[0].UserID != 42 {
+		t.Fatalf("user session user id = %d, want 42", userSessions[0].UserID)
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {

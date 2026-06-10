@@ -102,6 +102,35 @@ func (r *MemorySessionRepository) ListSessions(query model.SessionListQuery) (mo
 	}, nil
 }
 
+// ListSessionsByWindow 按创建时间窗口查询训练 Session。
+func (r *MemorySessionRepository) ListSessionsByWindow(query model.SessionWindowQuery) ([]model.Session, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	sessions := make([]model.Session, 0, len(r.sessions))
+	for _, session := range r.sessions {
+		if query.UserID > 0 && session.UserID != query.UserID {
+			continue
+		}
+		if session.CreatedAt.Before(query.StartedAt) || !session.CreatedAt.Before(query.EndedAt) {
+			continue
+		}
+		sessions = append(sessions, cloneSession(session))
+	}
+	sort.Slice(sessions, func(i int, j int) bool {
+		if sessions[i].CreatedAt.Equal(sessions[j].CreatedAt) {
+			return sessions[i].ID > sessions[j].ID
+		}
+
+		return sessions[i].CreatedAt.After(sessions[j].CreatedAt)
+	})
+	if query.Limit > 0 && len(sessions) > query.Limit {
+		sessions = sessions[:query.Limit]
+	}
+
+	return sessions, nil
+}
+
 // Finish 把 running Session 原子地结束为 finished。
 func (r *MemorySessionRepository) Finish(id int, endedAt time.Time) (model.Session, error) {
 	r.mu.Lock()

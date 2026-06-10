@@ -1449,6 +1449,104 @@ func TestSessionHistoryRoutesValidatePaginationAndUserID(t *testing.T) {
 	}
 }
 
+// TestHistoryInsightsRouteReturnsEmptyInsights 验证历史洞察路由已注册并可返回空洞察摘要。
+func TestHistoryInsightsRouteReturnsEmptyInsights(t *testing.T) {
+	engine := New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/history/insights", nil)
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("history insights status code = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var body historyInsightsRouteResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("history insights response is not valid JSON: %v", err)
+	}
+	if body.Code != 0 {
+		t.Fatalf("history insights code = %d, want 0", body.Code)
+	}
+	if body.Data.Summary.Days != 30 {
+		t.Fatalf("history insights days = %d, want 30", body.Data.Summary.Days)
+	}
+	if body.Data.Summary.TotalSessions != 0 {
+		t.Fatalf("history insights total_sessions = %d, want 0", body.Data.Summary.TotalSessions)
+	}
+	if body.Data.Summary.AverageScore != nil {
+		t.Fatalf("history insights average_score = %v, want nil", *body.Data.Summary.AverageScore)
+	}
+	if len(body.Data.ScoreTrend) != 0 {
+		t.Fatalf("history insights score_trend length = %d, want 0", len(body.Data.ScoreTrend))
+	}
+	if len(body.Data.ScenarioTrends) != 0 {
+		t.Fatalf("history insights scenario_trends length = %d, want 0", len(body.Data.ScenarioTrends))
+	}
+	if len(body.Data.FrequentErrors) != 0 {
+		t.Fatalf("history insights frequent_errors length = %d, want 0", len(body.Data.FrequentErrors))
+	}
+	if body.Data.NextRecommendation != nil {
+		t.Fatalf("history insights next_recommendation = %+v, want nil", body.Data.NextRecommendation)
+	}
+}
+
+// TestHistoryInsightsRouteRejectsInvalidServiceDays 验证 days 通过参数解析后由洞察服务执行业务校验。
+func TestHistoryInsightsRouteRejectsInvalidServiceDays(t *testing.T) {
+	engine := New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/history/insights?days=14", nil)
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	assertErrorResponse(t, rec, http.StatusBadRequest, 6001, "invalid history request")
+}
+
+// TestHistoryInsightsRouteSummarizesFinishedReportedSession 验证完成训练并生成报告后洞察摘要包含评分和报告数。
+func TestHistoryInsightsRouteSummarizesFinishedReportedSession(t *testing.T) {
+	engine := New()
+	sessionID := createSessionForUser(t, engine, 1, 42)
+	postMessage(t, engine, sessionID, `{"content":"I am study computer science and I have did a project."}`)
+	finishSession(t, engine, sessionID)
+	generateReport(t, engine, sessionID)
+
+	var body historyInsightsRouteResponse
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/history/insights?days=30&user_id=42", nil)
+		rec := httptest.NewRecorder()
+
+		engine.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("history insights status code = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("history insights response is not valid JSON: %v", err)
+		}
+		if body.Data.Summary.GeneratedReports == 1 &&
+			body.Data.Summary.AverageScore != nil &&
+			*body.Data.Summary.AverageScore > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if body.Data.Summary.GeneratedReports != 1 {
+		t.Fatalf("history insights generated_reports = %d, want 1", body.Data.Summary.GeneratedReports)
+	}
+	if body.Data.Summary.AverageScore == nil || *body.Data.Summary.AverageScore <= 0 {
+		t.Fatalf("history insights average_score = %v, want non-zero score", body.Data.Summary.AverageScore)
+	}
+	if len(body.Data.ScoreTrend) == 0 {
+		t.Fatal("history insights score_trend is empty, want scored trend")
+	}
+	if len(body.Data.ScenarioTrends) == 0 {
+		t.Fatal("history insights scenario_trends is empty, want scored scenario trend")
+	}
+}
+
 type sessionHistoryListResponse struct {
 	Code int `json:"code"`
 	Data struct {
@@ -1478,6 +1576,55 @@ type historyScenario struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Difficulty  string `json:"difficulty"`
+}
+
+type historyInsightsRouteResponse struct {
+	Code int `json:"code"`
+	Data struct {
+		Summary struct {
+			Days                 int  `json:"days"`
+			TotalSessions        int  `json:"total_sessions"`
+			FinishedSessions     int  `json:"finished_sessions"`
+			RunningSessions      int  `json:"running_sessions"`
+			ScoredSessions       int  `json:"scored_sessions"`
+			GeneratedReports     int  `json:"generated_reports"`
+			AverageScore         *int `json:"average_score"`
+			PreviousAverageScore *int `json:"previous_average_score"`
+			ScoreDelta           *int `json:"score_delta"`
+		} `json:"summary"`
+		ScoreTrend []struct {
+			Date         string `json:"date"`
+			AverageScore int    `json:"average_score"`
+			SessionCount int    `json:"session_count"`
+		} `json:"score_trend"`
+		ScenarioTrends []struct {
+			Scenario       historyScenario `json:"scenario"`
+			SessionCount   int             `json:"session_count"`
+			ScoredSessions int             `json:"scored_sessions"`
+			AverageScore   *int            `json:"average_score"`
+			FirstScore     *int            `json:"first_score"`
+			LatestScore    *int            `json:"latest_score"`
+			ScoreDelta     *int            `json:"score_delta"`
+			LastTrainedAt  string          `json:"last_trained_at"`
+		} `json:"scenario_trends"`
+		FrequentErrors []struct {
+			Key             string `json:"key"`
+			Title           string `json:"title"`
+			Category        string `json:"category"`
+			Suggestion      string `json:"suggestion"`
+			Count           int    `json:"count"`
+			LatestEvidence  string `json:"latest_evidence"`
+			LastSeenAt      string `json:"last_seen_at"`
+			SourceSessionID int    `json:"source_session_id"`
+		} `json:"frequent_errors"`
+		NextRecommendation *struct {
+			Type      string          `json:"type"`
+			Reason    string          `json:"reason"`
+			Scenario  historyScenario `json:"scenario"`
+			SessionID int             `json:"session_id"`
+			Focus     string          `json:"focus"`
+		} `json:"next_recommendation"`
+	} `json:"data"`
 }
 
 type messagePayload struct {

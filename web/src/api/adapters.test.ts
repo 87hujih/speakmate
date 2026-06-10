@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   mapCorrections,
+  mapHistoryInsights,
   mapHistoryRecord,
   mapReport,
   mapScenarioDetail,
@@ -9,6 +10,7 @@ import {
 } from "./adapters";
 import type {
   BackendCorrectionResult,
+  BackendHistoryInsights,
   BackendHistoryItem,
   BackendReport,
   BackendScenario,
@@ -42,6 +44,67 @@ const score: BackendScoreResult = {
   completion: 85,
   total_score: 77,
   comment: "语法需要加强。",
+};
+
+const backendInsights: BackendHistoryInsights = {
+  summary: {
+    days: 7,
+    total_sessions: 3,
+    finished_sessions: 2,
+    running_sessions: 1,
+    scored_sessions: 2,
+    generated_reports: 1,
+    average_score: 78,
+    previous_average_score: 72,
+    score_delta: 6,
+  },
+  score_trend: [
+    { date: "2026-06-01", average_score: 72, session_count: 1 },
+    { date: "2026-06-07", average_score: 84, session_count: 1 },
+  ],
+  scenario_trends: [
+    {
+      scenario: {
+        id: 1,
+        code: "interview",
+        name: "英语面试",
+        description: "练习自我介绍、项目经历和技术追问",
+        difficulty: "medium",
+      },
+      session_count: 2,
+      scored_sessions: 2,
+      average_score: 78,
+      first_score: 72,
+      latest_score: 84,
+      score_delta: 12,
+      last_trained_at: "2026-06-07T03:00:00Z",
+    },
+  ],
+  frequent_errors: [
+    {
+      key: "am study",
+      title: "am study",
+      category: "grammar",
+      suggestion: "am studying",
+      count: 2,
+      latest_evidence: "I am study computer science.",
+      last_seen_at: "2026-06-07T03:05:00Z",
+      source_session_id: 7,
+    },
+  ],
+  next_recommendation: {
+    type: "scenario_repractice",
+    reason: "am study 出现 2 次",
+    scenario: {
+      id: 1,
+      code: "interview",
+      name: "英语面试",
+      description: "练习自我介绍、项目经历和技术追问",
+      difficulty: "medium",
+    },
+    session_id: 7,
+    focus: "am study",
+  },
 };
 
 describe("api adapters", () => {
@@ -379,5 +442,102 @@ describe("api adapters", () => {
     expect(mapped.score).toBe(0);
     expect(mapped.majorProblem).toBe("暂无评分");
     expect(mapped.durationLabel).toBe("进行中");
+  });
+
+  it("maps history insights into camelCase UI fields", () => {
+    const mapped = mapHistoryInsights(backendInsights);
+
+    expect(mapped.summary).toMatchObject({
+      days: 7,
+      totalSessions: 3,
+      finishedSessions: 2,
+      runningSessions: 1,
+      scoredSessions: 2,
+      generatedReports: 1,
+      averageScore: 78,
+      previousAverageScore: 72,
+      scoreDelta: 6,
+    });
+    expect(mapped.scoreTrend).toEqual([
+      { date: "2026-06-01", averageScore: 72, sessionCount: 1 },
+      { date: "2026-06-07", averageScore: 84, sessionCount: 1 },
+    ]);
+    expect(mapped.scenarioTrends[0]).toMatchObject({
+      scenario: expect.objectContaining({ code: "interview", name: "英语面试" }),
+      sessionCount: 2,
+      scoredSessions: 2,
+      averageScore: 78,
+      firstScore: 72,
+      latestScore: 84,
+      scoreDelta: 12,
+    });
+    expect(mapped.scenarioTrends[0].lastTrainedAt).toContain("2026");
+    expect(mapped.scenarioTrends[0].lastTrainedAt).not.toBe("2026-06-07T03:00:00Z");
+    expect(mapped.frequentErrors[0]).toMatchObject({
+      key: "am study",
+      title: "am study",
+      category: "grammar",
+      suggestion: "am studying",
+      count: 2,
+      latestEvidence: "I am study computer science.",
+      sourceSessionId: "7",
+    });
+    expect(mapped.frequentErrors[0].lastSeenAt).toContain("2026");
+    expect(mapped.frequentErrors[0].lastSeenAt).not.toBe("2026-06-07T03:05:00Z");
+    expect(mapped.nextRecommendation).toMatchObject({
+      type: "scenario_repractice",
+      scenario: expect.objectContaining({ id: 1 }),
+      sessionId: "7",
+      focus: "am study",
+    });
+  });
+
+  it("preserves null recommendations and empty insight arrays", () => {
+    const mapped = mapHistoryInsights({
+      ...backendInsights,
+      score_trend: [],
+      scenario_trends: [],
+      frequent_errors: [],
+      next_recommendation: null,
+    });
+
+    expect(mapped.scoreTrend).toEqual([]);
+    expect(mapped.scenarioTrends).toEqual([]);
+    expect(mapped.frequentErrors).toEqual([]);
+    expect(mapped.nextRecommendation).toBeNull();
+  });
+
+  it("treats null insight arrays as empty arrays", () => {
+    const mapped = mapHistoryInsights({
+      ...backendInsights,
+      score_trend: null,
+      scenario_trends: null,
+      frequent_errors: null,
+    });
+
+    expect(mapped.scoreTrend).toEqual([]);
+    expect(mapped.scenarioTrends).toEqual([]);
+    expect(mapped.frequentErrors).toEqual([]);
+  });
+
+  it("preserves a recommendation with a null scenario", () => {
+    const mapped = mapHistoryInsights({
+      ...backendInsights,
+      next_recommendation: {
+        type: "continue_session",
+        reason: "A session is still running.",
+        scenario: null,
+        session_id: 7,
+        focus: "继续训练",
+      },
+    });
+
+    expect(mapped.nextRecommendation).toEqual({
+      type: "continue_session",
+      reason: "A session is still running.",
+      scenario: null,
+      sessionId: "7",
+      focus: "继续训练",
+    });
   });
 });
