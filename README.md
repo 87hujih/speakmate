@@ -23,7 +23,7 @@ demo视频：https://www.bilibili.com/video/BV1orE86hEJd/?vd_source=e0d0a3eee43f
 | Go + Gin 后端 API | 已支持 |
 | Vite + React + TypeScript 前端 | 已支持 |
 | 文本训练闭环 | 已支持 |
-| Mock Agent / Mock ASR | 已支持 |
+| 测试用 Agent / Mock ASR | 已支持 |
 | OpenAI-compatible LLM streaming | 已支持 |
 | 腾讯云 ASR FlashRecognizer | 已支持 |
 | MySQL 持久化 | 已支持 |
@@ -45,7 +45,7 @@ demo视频：https://www.bilibili.com/video/BV1orE86hEJd/?vd_source=e0d0a3eee43f
 
 ## 快速开始
 
-默认配置使用 Mock Agent、Mock ASR 和内存存储，不需要 API Key、MySQL 或 Redis。为避免把测试句误当成真实语音识别结果，Mock ASR 默认不会产生转写；语音演示需要显式设置 `ASR_MOCK_TRANSCRIPT`，真实语音识别请配置腾讯云 ASR。
+默认配置不再为用户对话生成 Mock 追问。未配置真实 LLM 时，发送消息会返回明确提醒，而不是展示模拟回复。为避免把测试句误当成真实语音识别结果，Mock ASR 默认不会产生转写；语音演示需要显式设置 `ASR_MOCK_TRANSCRIPT`，真实语音识别请配置腾讯云 ASR。
 
 ### 前置要求
 
@@ -58,19 +58,22 @@ demo视频：https://www.bilibili.com/video/BV1orE86hEJd/?vd_source=e0d0a3eee43f
 macOS / Linux：
 
 ```bash
-STORAGE_MODE=memory LLM_USE_MOCK=true ASR_USE_MOCK=true go run ./cmd/server
+STORAGE_MODE=memory LLM_USE_MOCK=false LLM_BASE_URL=https://your-llm.example/v1 LLM_API_KEY=your-key LLM_MODEL=your-model ASR_USE_MOCK=true go run ./cmd/server
 ```
 
 PowerShell：
 
 ```powershell
 $env:STORAGE_MODE="memory"
-$env:LLM_USE_MOCK="true"
+$env:LLM_USE_MOCK="false"
+$env:LLM_BASE_URL="https://your-llm.example/v1"
+$env:LLM_API_KEY="your-key"
+$env:LLM_MODEL="your-model"
 $env:ASR_USE_MOCK="true"
 go run ./cmd/server
 ```
 
-如果要在 Mock 模式演示语音入口，请显式配置一条醒目的测试转写：
+如果要在 ASR Mock 模式演示语音入口，请显式配置一条醒目的测试转写：
 
 ```powershell
 $env:ASR_MOCK_TRANSCRIPT="[MOCK ASR] This is a configured test transcript."
@@ -130,7 +133,7 @@ MySQL：127.0.0.1:3306
 Redis：127.0.0.1:6379
 ```
 
-Compose 默认使用 MySQL 持久化、Redis 短期状态和 Mock Agent。迁移任务会在后端启动前执行。Mock ASR 默认不输出转写；需要语音 mock 演示时设置 `ASR_MOCK_TRANSCRIPT`，需要真实识别时设置 `ASR_PROVIDER=tencent`、`ASR_USE_MOCK=false` 和腾讯云密钥。
+Compose 默认使用 MySQL 持久化、Redis 短期状态和真实 LLM 配置。迁移任务会在后端启动前执行。缺少 LLM 配置时，对话接口会返回明确错误而不是 Mock 追问。Mock ASR 默认不输出转写；需要语音 mock 演示时设置 `ASR_MOCK_TRANSCRIPT`，需要真实识别时设置 `ASR_PROVIDER=tencent`、`ASR_USE_MOCK=false` 和腾讯云密钥。
 
 如果本机端口已被占用，可以通过环境变量避让宿主端口：
 

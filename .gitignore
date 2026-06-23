@@ -51,6 +51,10 @@ logs/
 /scripts/
 /.worktrees
 
+# Local CodeGraph tooling and index
+/codegraph/
+/.codegraph/
+
 # Environment and local config
 .env
 .env.*
