@@ -10,11 +10,12 @@ import (
 	"speakmate/internal/model"
 )
 
+// 仓库层复用的哨兵错误。
 var (
 	// ErrSessionNotFound 表示内存仓库中没有找到对应 Session。
-	ErrSessionNotFound = errors.New("session not found")
+	ErrSessionNotFound = errors.New("未找到训练")
 	// ErrSessionAlreadyFinished 表示 Session 已经结束，不能再次结束。
-	ErrSessionAlreadyFinished = errors.New("session already finished")
+	ErrSessionAlreadyFinished = errors.New("训练已结束")
 )
 
 // MemorySessionRepository 使用内存 map 保存训练 Session。
@@ -178,6 +179,7 @@ func (r *MemorySessionRepository) AppendTurn(id int, userMessage model.Message, 
 	return cloneSession(session), nil
 }
 
+// cloneSession 复制 Session 及消息列表，保护仓库内部状态。
 func cloneSession(session model.Session) model.Session {
 	if session.Messages != nil {
 		session.Messages = append([]model.Message(nil), session.Messages...)

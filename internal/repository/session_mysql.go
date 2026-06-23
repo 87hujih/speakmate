@@ -248,6 +248,7 @@ func (r *MySQLSessionRepository) AppendTurn(id int, userMessage model.Message, a
 	return r.FindByID(id)
 }
 
+// findSessionOnly 只查询 Session 主表数据。
 func (r *MySQLSessionRepository) findSessionOnly(id int) (model.Session, error) {
 	row := r.db.QueryRow(
 		`SELECT id, session_no, scenario_id, user_id, status, turn_count, created_at, ended_at FROM training_sessions WHERE id = ?`,
@@ -262,6 +263,7 @@ func (r *MySQLSessionRepository) findSessionOnly(id int) (model.Session, error) 
 	return session, nil
 }
 
+// listMessagesBySessionID 查询指定 Session 的全部消息。
 func (r *MySQLSessionRepository) listMessagesBySessionID(sessionID int) ([]model.Message, error) {
 	rows, err := r.db.Query(
 		`SELECT id, session_id, role, content, stage, created_at FROM messages WHERE session_id = ? ORDER BY id ASC`,
@@ -289,6 +291,7 @@ func (r *MySQLSessionRepository) listMessagesBySessionID(sessionID int) ([]model
 	return messages, nil
 }
 
+// scanSession 从数据库行读取 Session 主体字段。
 func scanSession(row scanner) (model.Session, error) {
 	var session model.Session
 	var status string
@@ -311,6 +314,7 @@ func scanSession(row scanner) (model.Session, error) {
 	return session, nil
 }
 
+// insertMessage 向数据库写入单条消息。
 func insertMessage(tx *sql.Tx, message model.Message) (int, error) {
 	result, err := tx.Exec(
 		`INSERT INTO messages (session_id, role, content, stage, created_at) VALUES (?, ?, ?, ?, ?)`,
@@ -331,6 +335,7 @@ func insertMessage(tx *sql.Tx, message model.Message) (int, error) {
 	return int(id), nil
 }
 
+// provisionalSessionNo 生成创建阶段使用的临时 Session 编号。
 func provisionalSessionNo(createdAt time.Time) string {
 	return fmt.Sprintf("S%s%06d", createdAt.Format("20060102"), time.Now().UnixNano()%1000000)
 }

@@ -7,6 +7,7 @@ import (
 	"speakmate/internal/repository"
 )
 
+// 当前服务使用的默认值和业务常量。
 const (
 	defaultHistoryPage     = 1
 	defaultHistoryPageSize = 20
@@ -14,7 +15,7 @@ const (
 )
 
 // ErrInvalidHistoryRequest 表示历史记录查询参数非法。
-var ErrInvalidHistoryRequest = errors.New("invalid history request")
+var ErrInvalidHistoryRequest = errors.New("历史记录请求无效")
 
 // HistorySessionRepository 定义历史记录服务依赖的 Session 列表能力。
 type HistorySessionRepository interface {
@@ -121,6 +122,7 @@ func (s *HistoryService) ListSessions(input HistoryListInput) (HistoryListResult
 	}, nil
 }
 
+// normalizeHistoryPagination 归一化历史列表分页参数。
 func normalizeHistoryPagination(page int, pageSize int) (int, int, error) {
 	if page == 0 {
 		page = defaultHistoryPage
@@ -138,6 +140,7 @@ func normalizeHistoryPagination(page int, pageSize int) (int, int, error) {
 	return page, pageSize, nil
 }
 
+// currentTotalScore 读取历史摘要中的当前总分。
 func (s *HistoryService) currentTotalScore(sessionID int) (*int, error) {
 	if s.feedbackRepo == nil {
 		return nil, nil
@@ -154,6 +157,7 @@ func (s *HistoryService) currentTotalScore(sessionID int) (*int, error) {
 	return &score.TotalScore, nil
 }
 
+// hasReport 判断指定 Session 是否已有报告。
 func (s *HistoryService) hasReport(sessionID int) (bool, error) {
 	if s.reportRepo == nil {
 		return false, nil

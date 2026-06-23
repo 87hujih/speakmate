@@ -51,7 +51,7 @@ func (h *HistoryHandler) List(c *gin.Context) {
 func (h *HistoryHandler) ListByUser(c *gin.Context) {
 	userID, err := strconv.Atoi(c.Param("user_id"))
 	if err != nil || userID <= 0 {
-		response.Error(c, http.StatusBadRequest, invalidHistoryRequestCode, "invalid history request")
+		response.Error(c, http.StatusBadRequest, invalidHistoryRequestCode, "历史记录请求无效")
 		return
 	}
 	page, pageSize, ok := parseHistoryPagination(c)
@@ -72,6 +72,7 @@ func (h *HistoryHandler) ListByUser(c *gin.Context) {
 	response.Success(c, toHistoryListResponse(result))
 }
 
+// historyListResponse 是历史记录列表接口返回结构。
 type historyListResponse struct {
 	Items    []historyItemResponse `json:"items"`
 	Page     int                   `json:"page"`
@@ -79,6 +80,7 @@ type historyListResponse struct {
 	Total    int                   `json:"total"`
 }
 
+// historyItemResponse 是历史记录列表中的单条响应结构。
 type historyItemResponse struct {
 	SessionID    int             `json:"session_id"`
 	SessionNo    string          `json:"session_no"`
@@ -92,6 +94,7 @@ type historyItemResponse struct {
 	EndedAt      *string         `json:"ended_at"`
 }
 
+// parseHistoryPagination 解析历史列表分页参数。
 func parseHistoryPagination(c *gin.Context) (int, int, bool) {
 	page, ok := parsePositiveQueryInt(c, "page")
 	if !ok {
@@ -105,6 +108,7 @@ func parseHistoryPagination(c *gin.Context) (int, int, bool) {
 	return page, pageSize, true
 }
 
+// parsePositiveQueryInt 解析查询参数中的正整数。
 func parsePositiveQueryInt(c *gin.Context, key string) (int, bool) {
 	raw := c.Query(key)
 	if raw == "" {
@@ -112,13 +116,14 @@ func parsePositiveQueryInt(c *gin.Context, key string) (int, bool) {
 	}
 	value, err := strconv.Atoi(raw)
 	if err != nil || value <= 0 {
-		response.Error(c, http.StatusBadRequest, invalidHistoryRequestCode, "invalid history request")
+		response.Error(c, http.StatusBadRequest, invalidHistoryRequestCode, "历史记录请求无效")
 		return 0, false
 	}
 
 	return value, true
 }
 
+// toHistoryListResponse 将历史业务结果转换为 HTTP 响应结构。
 func toHistoryListResponse(result service.HistoryListResult) historyListResponse {
 	items := make([]historyItemResponse, 0, len(result.Items))
 	for _, item := range result.Items {
@@ -154,11 +159,12 @@ func toHistoryListResponse(result service.HistoryListResult) historyListResponse
 	}
 }
 
+// writeHistoryError 将历史查询错误转换为统一 HTTP 响应。
 func writeHistoryError(c *gin.Context, err error) {
 	if errors.Is(err, service.ErrInvalidHistoryRequest) {
-		response.Error(c, http.StatusBadRequest, invalidHistoryRequestCode, "invalid history request")
+		response.Error(c, http.StatusBadRequest, invalidHistoryRequestCode, "历史记录请求无效")
 		return
 	}
 
-	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "internal server error")
+	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "服务器内部错误")
 }

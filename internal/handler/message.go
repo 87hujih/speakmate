@@ -10,6 +10,7 @@ import (
 	"speakmate/internal/service"
 )
 
+// 当前模块使用的业务错误码和事件常量。
 const (
 	invalidMessageRequestCode    = 3001
 	messageContentRequiredCode   = 3002
@@ -45,7 +46,7 @@ func (h *MessageHandler) Send(c *gin.Context) {
 
 	var req sendMessageRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.Content == nil {
-		response.Error(c, http.StatusBadRequest, invalidMessageRequestCode, "invalid message request")
+		response.Error(c, http.StatusBadRequest, invalidMessageRequestCode, "消息请求无效")
 		return
 	}
 
@@ -70,10 +71,12 @@ func (h *MessageHandler) Send(c *gin.Context) {
 	})
 }
 
+// sendMessageRequest 是发送文本消息接口请求结构。
 type sendMessageRequest struct {
 	Content *string `json:"content"`
 }
 
+// sendMessageResponse 是发送文本消息接口返回结构。
 type sendMessageResponse struct {
 	UserMessage       messageResponse           `json:"user_message"`
 	AIMessage         messageResponse           `json:"ai_message"`
@@ -84,17 +87,20 @@ type sendMessageResponse struct {
 	ScoreSummary      scoreSummaryResponse      `json:"score_summary"`
 }
 
+// correctionSummaryResponse 是消息响应中的纠错摘要结构。
 type correctionSummaryResponse struct {
 	HasErrors  bool `json:"has_errors"`
 	ErrorCount int  `json:"error_count"`
 }
 
+// scoreSummaryResponse 是消息响应中的评分摘要结构。
 type scoreSummaryResponse struct {
 	TotalScore int `json:"total_score"`
 	Grammar    int `json:"grammar"`
 	Expression int `json:"expression"`
 }
 
+// toCorrectionSummaryResponse 将纠错摘要转换为消息响应结构。
 func toCorrectionSummaryResponse(summary service.CorrectionSummary) correctionSummaryResponse {
 	return correctionSummaryResponse{
 		HasErrors:  summary.HasErrors,
@@ -102,6 +108,7 @@ func toCorrectionSummaryResponse(summary service.CorrectionSummary) correctionSu
 	}
 }
 
+// toScoreSummaryResponse 将评分摘要转换为消息响应结构。
 func toScoreSummaryResponse(summary service.ScoreSummary) scoreSummaryResponse {
 	return scoreSummaryResponse{
 		TotalScore: summary.TotalScore,
@@ -110,43 +117,44 @@ func toScoreSummaryResponse(summary service.ScoreSummary) scoreSummaryResponse {
 	}
 }
 
+// writeMessageError 将消息发送错误转换为统一 HTTP 响应。
 func writeMessageError(c *gin.Context, err error) {
 	if errors.Is(err, service.ErrInvalidMessageRequest) {
-		response.Error(c, http.StatusBadRequest, invalidMessageRequestCode, "invalid message request")
+		response.Error(c, http.StatusBadRequest, invalidMessageRequestCode, "消息请求无效")
 		return
 	}
 	if errors.Is(err, service.ErrMessageContentRequired) {
-		response.Error(c, http.StatusBadRequest, messageContentRequiredCode, "message content is required")
+		response.Error(c, http.StatusBadRequest, messageContentRequiredCode, "消息内容不能为空")
 		return
 	}
 	if errors.Is(err, service.ErrSessionNotFound) {
-		response.Error(c, http.StatusNotFound, sessionNotFoundCode, "session not found")
+		response.Error(c, http.StatusNotFound, sessionNotFoundCode, "未找到训练")
 		return
 	}
 	if errors.Is(err, service.ErrSessionAlreadyFinished) {
-		response.Error(c, http.StatusConflict, sessionAlreadyFinishedCode, "session already finished")
+		response.Error(c, http.StatusConflict, sessionAlreadyFinishedCode, "训练已结束")
 		return
 	}
 	if errors.Is(err, service.ErrScenarioNotFound) {
-		response.Error(c, http.StatusNotFound, scenarioNotFoundCode, "scenario not found")
+		response.Error(c, http.StatusNotFound, scenarioNotFoundCode, "未找到训练场景")
 		return
 	}
 	if errors.Is(err, service.ErrConversationAgentFailed) {
-		response.Error(c, http.StatusBadGateway, conversationAgentFailedCode, "conversation agent failed")
+		response.Error(c, http.StatusBadGateway, conversationAgentFailedCode, "对话 AI 回复失败")
 		return
 	}
 	if errors.Is(err, service.ErrFeedbackAgentFailed) {
-		response.Error(c, http.StatusBadGateway, feedbackAgentFailedCode, "feedback agent failed")
+		response.Error(c, http.StatusBadGateway, feedbackAgentFailedCode, "反馈 AI 生成失败")
 		return
 	}
 	if errors.Is(err, service.ErrStateStoreFailed) {
-		response.Error(c, http.StatusServiceUnavailable, sessionStateStoreFailedCode, "session state store failed")
+		response.Error(c, http.StatusServiceUnavailable, sessionStateStoreFailedCode, "训练短期状态写入失败")
 		return
 	}
 	if errors.Is(err, service.ErrEventPublishFailed) {
-		response.Error(c, http.StatusServiceUnavailable, streamEventPublishFailedCode, "stream event publish failed")
+		response.Error(c, http.StatusServiceUnavailable, streamEventPublishFailedCode, "实时事件发布失败")
 		return
 	}
 
-	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "internal server error")
+	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "服务器内部错误")
 }

@@ -149,7 +149,7 @@ func TestHistoryInsightsHandlerRejectsInvalidQueryValues(t *testing.T) {
 
 			engine.ServeHTTP(rec, req)
 
-			assertHistoryInsightsErrorResponse(t, rec, http.StatusBadRequest, 6001, "invalid history request")
+			assertHistoryInsightsErrorResponse(t, rec, http.StatusBadRequest, 6001, "历史记录请求无效")
 			if insightService.callCount != 0 {
 				t.Fatalf("call count = %d, want 0", insightService.callCount)
 			}
@@ -206,7 +206,7 @@ func TestHistoryInsightsHandlerMapsInvalidServiceRequest(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertHistoryInsightsErrorResponse(t, rec, http.StatusBadRequest, 6001, "invalid history request")
+	assertHistoryInsightsErrorResponse(t, rec, http.StatusBadRequest, 6001, "历史记录请求无效")
 	if insightService.lastInput != (service.HistoryInsightsInput{Days: 14}) {
 		t.Fatalf("input = %+v, want days 14", insightService.lastInput)
 	}
@@ -224,7 +224,7 @@ func TestHistoryInsightsHandlerMapsInternalServiceError(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertHistoryInsightsErrorResponse(t, rec, http.StatusInternalServerError, http.StatusInternalServerError, "internal server error")
+	assertHistoryInsightsErrorResponse(t, rec, http.StatusInternalServerError, http.StatusInternalServerError, "服务器内部错误")
 }
 
 type fakeHistoryInsightsService struct {

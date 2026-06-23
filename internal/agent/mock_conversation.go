@@ -4,12 +4,15 @@ import "context"
 
 const mockStreamChunkRunes = 24
 
+// MockConversationAgent 返回稳定的本地对话回复。
 type MockConversationAgent struct{}
 
+// NewMockConversationAgent 创建并返回对应组件实例。
 func NewMockConversationAgent() *MockConversationAgent {
 	return &MockConversationAgent{}
 }
 
+// GenerateReply 封装当前文件中的辅助处理逻辑。
 func (a *MockConversationAgent) GenerateReply(ctx context.Context, input ConversationInput) (ConversationOutput, error) {
 	stageIndex := input.Session.TurnCount + 1
 	stage := StageNameForTurn(input.Scenario.Stages, stageIndex)
@@ -24,6 +27,7 @@ func (a *MockConversationAgent) GenerateReply(ctx context.Context, input Convers
 	}, nil
 }
 
+// StreamReply 封装当前文件中的辅助处理逻辑。
 func (a *MockConversationAgent) StreamReply(ctx context.Context, input ConversationInput, onDelta func(ConversationDelta) error) (ConversationOutput, error) {
 	output, err := a.GenerateReply(ctx, input)
 	if err != nil {
@@ -42,6 +46,7 @@ func (a *MockConversationAgent) StreamReply(ctx context.Context, input Conversat
 	return output, nil
 }
 
+// splitMockStreamChunks 将 Mock 回复拆成稳定的流式片段。
 func splitMockStreamChunks(content string) []string {
 	runes := []rune(content)
 	if len(runes) == 0 {
@@ -60,6 +65,7 @@ func splitMockStreamChunks(content string) []string {
 	return chunks
 }
 
+// repliesForScenario 返回不同训练场景的 Mock 回复集合。
 func repliesForScenario(code string) []string {
 	switch code {
 	case "interview":
@@ -87,6 +93,7 @@ func repliesForScenario(code string) []string {
 	}
 }
 
+// nextGoalsForScenario 返回不同训练场景的 Mock 下一目标集合。
 func nextGoalsForScenario(code string) []string {
 	switch code {
 	case "interview":

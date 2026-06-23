@@ -12,6 +12,7 @@ import (
 	"speakmate/internal/service"
 )
 
+// 当前模块使用的业务错误码和事件常量。
 const (
 	invalidFeedbackRequestCode = 4001
 	correctionNotFoundCode     = 4002
@@ -85,6 +86,7 @@ func (h *FeedbackHandler) GetSessionScore(c *gin.Context) {
 	response.Success(c, score)
 }
 
+// parsePositiveMessageID 从路径参数解析正整数消息 ID。
 func parsePositiveMessageID(c *gin.Context) (int, bool) {
 	rawID := c.Param("message_id")
 	if rawID == "" {
@@ -93,26 +95,27 @@ func parsePositiveMessageID(c *gin.Context) (int, bool) {
 
 	id, err := strconv.Atoi(rawID)
 	if err != nil || id <= 0 {
-		response.Error(c, http.StatusBadRequest, invalidFeedbackRequestCode, "invalid feedback request")
+		response.Error(c, http.StatusBadRequest, invalidFeedbackRequestCode, "反馈请求无效")
 		return 0, false
 	}
 
 	return id, true
 }
 
+// writeFeedbackError 将反馈业务错误转换为统一 HTTP 响应。
 func writeFeedbackError(c *gin.Context, err error) {
 	if errors.Is(err, service.ErrInvalidFeedbackRequest) {
-		response.Error(c, http.StatusBadRequest, invalidFeedbackRequestCode, "invalid feedback request")
+		response.Error(c, http.StatusBadRequest, invalidFeedbackRequestCode, "反馈请求无效")
 		return
 	}
 	if errors.Is(err, service.ErrCorrectionNotFound) {
-		response.Error(c, http.StatusNotFound, correctionNotFoundCode, "correction not found")
+		response.Error(c, http.StatusNotFound, correctionNotFoundCode, "未找到纠错结果")
 		return
 	}
 	if errors.Is(err, service.ErrScoreNotFound) {
-		response.Error(c, http.StatusNotFound, scoreNotFoundCode, "score not found")
+		response.Error(c, http.StatusNotFound, scoreNotFoundCode, "未找到评分结果")
 		return
 	}
 
-	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "internal server error")
+	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "服务器内部错误")
 }

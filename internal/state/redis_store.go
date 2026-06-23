@@ -18,6 +18,7 @@ type RedisSessionStateStore struct {
 	webSocketTTL time.Duration
 }
 
+// RedisStoreOption 用于配置 Redis 短期状态存储。
 type RedisStoreOption func(*RedisSessionStateStore)
 
 // NewRedisSessionStateStore 创建 Redis 短期状态存储。
@@ -58,6 +59,7 @@ func WithRedisWebSocketTTL(ttl time.Duration) RedisStoreOption {
 	}
 }
 
+// SaveMessageSnapshot 封装当前文件中的辅助处理逻辑。
 func (s *RedisSessionStateStore) SaveMessageSnapshot(ctx context.Context, sessionID int, messages []model.Message) error {
 	if sessionID <= 0 || s.client == nil {
 		return ErrInvalidState
@@ -80,6 +82,7 @@ func (s *RedisSessionStateStore) SaveMessageSnapshot(ctx context.Context, sessio
 	return err
 }
 
+// GetMessageSnapshot 封装当前文件中的辅助处理逻辑。
 func (s *RedisSessionStateStore) GetMessageSnapshot(ctx context.Context, sessionID int) ([]model.Message, error) {
 	if sessionID <= 0 || s.client == nil {
 		return nil, ErrInvalidState
@@ -103,6 +106,7 @@ func (s *RedisSessionStateStore) GetMessageSnapshot(ctx context.Context, session
 	return messages, nil
 }
 
+// SaveSessionState 封装当前文件中的辅助处理逻辑。
 func (s *RedisSessionStateStore) SaveSessionState(ctx context.Context, state SessionState) error {
 	if state.SessionID <= 0 || s.client == nil {
 		return ErrInvalidState
@@ -127,6 +131,7 @@ func (s *RedisSessionStateStore) SaveSessionState(ctx context.Context, state Ses
 	return err
 }
 
+// GetSessionState 封装当前文件中的辅助处理逻辑。
 func (s *RedisSessionStateStore) GetSessionState(ctx context.Context, sessionID int) (SessionState, error) {
 	if sessionID <= 0 || s.client == nil {
 		return SessionState{}, ErrInvalidState
@@ -151,6 +156,7 @@ func (s *RedisSessionStateStore) GetSessionState(ctx context.Context, sessionID 
 	}, nil
 }
 
+// SavePartialScore 封装当前文件中的辅助处理逻辑。
 func (s *RedisSessionStateStore) SavePartialScore(ctx context.Context, score model.ScoreResult) error {
 	if score.SessionID <= 0 || s.client == nil {
 		return ErrInvalidState
@@ -174,6 +180,7 @@ func (s *RedisSessionStateStore) SavePartialScore(ctx context.Context, score mod
 	return err
 }
 
+// GetPartialScore 封装当前文件中的辅助处理逻辑。
 func (s *RedisSessionStateStore) GetPartialScore(ctx context.Context, sessionID int) (model.ScoreResult, error) {
 	if sessionID <= 0 || s.client == nil {
 		return model.ScoreResult{}, ErrInvalidState
@@ -199,6 +206,7 @@ func (s *RedisSessionStateStore) GetPartialScore(ctx context.Context, sessionID 
 	}, nil
 }
 
+// AppendCorrection 封装当前文件中的辅助处理逻辑。
 func (s *RedisSessionStateStore) AppendCorrection(ctx context.Context, correction model.CorrectionResult) error {
 	if correction.SessionID <= 0 || s.client == nil {
 		return ErrInvalidState
@@ -216,6 +224,7 @@ func (s *RedisSessionStateStore) AppendCorrection(ctx context.Context, correctio
 	return err
 }
 
+// ListCorrections 封装当前文件中的辅助处理逻辑。
 func (s *RedisSessionStateStore) ListCorrections(ctx context.Context, sessionID int) ([]model.CorrectionResult, error) {
 	if sessionID <= 0 || s.client == nil {
 		return nil, ErrInvalidState
@@ -239,6 +248,7 @@ func (s *RedisSessionStateStore) ListCorrections(ctx context.Context, sessionID 
 	return corrections, nil
 }
 
+// SaveWebSocketConnection 封装当前文件中的辅助处理逻辑。
 func (s *RedisSessionStateStore) SaveWebSocketConnection(ctx context.Context, connection WebSocketConnectionState) error {
 	if connection.SessionID <= 0 || s.client == nil {
 		return ErrInvalidState
@@ -263,6 +273,7 @@ func (s *RedisSessionStateStore) SaveWebSocketConnection(ctx context.Context, co
 	return err
 }
 
+// GetWebSocketConnection 封装当前文件中的辅助处理逻辑。
 func (s *RedisSessionStateStore) GetWebSocketConnection(ctx context.Context, sessionID int) (WebSocketConnectionState, error) {
 	if sessionID <= 0 || s.client == nil {
 		return WebSocketConnectionState{}, ErrInvalidState
@@ -287,26 +298,32 @@ func (s *RedisSessionStateStore) GetWebSocketConnection(ctx context.Context, ses
 	}, nil
 }
 
+// sessionMessagesKey 构造 Redis 消息快照键。
 func sessionMessagesKey(sessionID int) string {
 	return "session:" + strconv.Itoa(sessionID) + ":messages"
 }
 
+// sessionStateKey 构造 Redis Session 状态键。
 func sessionStateKey(sessionID int) string {
 	return "session:" + strconv.Itoa(sessionID) + ":state"
 }
 
+// sessionPartialScoreKey 构造 Redis 当前评分键。
 func sessionPartialScoreKey(sessionID int) string {
 	return "session:" + strconv.Itoa(sessionID) + ":partial_score"
 }
 
+// sessionCorrectionsKey 构造 Redis 纠错列表键。
 func sessionCorrectionsKey(sessionID int) string {
 	return "session:" + strconv.Itoa(sessionID) + ":corrections"
 }
 
+// webSocketConnectionKey 构造 Redis WebSocket 连接状态键。
 func webSocketConnectionKey(sessionID int) string {
 	return "ws:" + strconv.Itoa(sessionID) + ":connection"
 }
 
+// intField 将 Redis 字段解析为整数。
 func intField(values map[string]string, key string) int {
 	parsed, _ := strconv.Atoi(values[key])
 	return parsed

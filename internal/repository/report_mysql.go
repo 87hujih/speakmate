@@ -95,6 +95,7 @@ func (r *MySQLReportRepository) FindBySessionID(sessionID int) (model.Report, er
 	return report, nil
 }
 
+// scanReport 从数据库行读取报告结果。
 func scanReport(row scanner) (model.Report, error) {
 	var report model.Report
 	var scoresJSON string
@@ -140,6 +141,7 @@ func scanReport(row scanner) (model.Report, error) {
 	return report, nil
 }
 
+// unmarshalStringList 将数据库 JSON 字符串解析为字符串数组。
 func unmarshalStringList(raw string, values *[]string) error {
 	if err := unmarshalJSON(raw, values); err != nil {
 		return err

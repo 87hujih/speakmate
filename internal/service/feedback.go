@@ -7,13 +7,14 @@ import (
 	"speakmate/internal/repository"
 )
 
+// 服务层复用的哨兵错误。
 var (
 	// ErrInvalidFeedbackRequest 表示反馈查询参数非法。
-	ErrInvalidFeedbackRequest = errors.New("invalid feedback request")
+	ErrInvalidFeedbackRequest = errors.New("反馈请求无效")
 	// ErrCorrectionNotFound 表示业务层没有找到对应纠错结果。
-	ErrCorrectionNotFound = errors.New("correction not found")
+	ErrCorrectionNotFound = errors.New("未找到纠错结果")
 	// ErrScoreNotFound 表示业务层没有找到对应评分结果。
-	ErrScoreNotFound = errors.New("score not found")
+	ErrScoreNotFound = errors.New("未找到评分结果")
 )
 
 // FeedbackRepository 定义 Feedback 服务依赖的数据访问能力。

@@ -257,7 +257,7 @@ func TestFeedbackHandlerListSessionCorrectionsRejectsInvalidSessionID(t *testing
 
 	engine.ServeHTTP(rec, req)
 
-	assertFeedbackErrorResponse(t, rec, http.StatusBadRequest, 2002, "invalid session id")
+	assertFeedbackErrorResponse(t, rec, http.StatusBadRequest, 2002, "训练 ID 无效")
 	if feedbackService.callCount != 0 {
 		t.Fatalf("call count = %d, want 0", feedbackService.callCount)
 	}
@@ -275,7 +275,7 @@ func TestFeedbackHandlerListSessionCorrectionsReturnsNotFound(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertFeedbackErrorResponse(t, rec, http.StatusNotFound, 4002, "correction not found")
+	assertFeedbackErrorResponse(t, rec, http.StatusNotFound, 4002, "未找到纠错结果")
 }
 
 func TestFeedbackHandlerGetMessageCorrectionRejectsInvalidMessageID(t *testing.T) {
@@ -290,7 +290,7 @@ func TestFeedbackHandlerGetMessageCorrectionRejectsInvalidMessageID(t *testing.T
 
 	engine.ServeHTTP(rec, req)
 
-	assertFeedbackErrorResponse(t, rec, http.StatusBadRequest, 4001, "invalid feedback request")
+	assertFeedbackErrorResponse(t, rec, http.StatusBadRequest, 4001, "反馈请求无效")
 	if feedbackService.callCount != 0 {
 		t.Fatalf("call count = %d, want 0", feedbackService.callCount)
 	}
@@ -308,7 +308,7 @@ func TestFeedbackHandlerGetMessageCorrectionReturnsNotFound(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertFeedbackErrorResponse(t, rec, http.StatusNotFound, 4002, "correction not found")
+	assertFeedbackErrorResponse(t, rec, http.StatusNotFound, 4002, "未找到纠错结果")
 }
 
 func TestFeedbackHandlerGetSessionScoreRejectsInvalidSessionID(t *testing.T) {
@@ -323,7 +323,7 @@ func TestFeedbackHandlerGetSessionScoreRejectsInvalidSessionID(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertFeedbackErrorResponse(t, rec, http.StatusBadRequest, 2002, "invalid session id")
+	assertFeedbackErrorResponse(t, rec, http.StatusBadRequest, 2002, "训练 ID 无效")
 	if feedbackService.callCount != 0 {
 		t.Fatalf("call count = %d, want 0", feedbackService.callCount)
 	}
@@ -341,7 +341,7 @@ func TestFeedbackHandlerGetSessionScoreReturnsNotFound(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertFeedbackErrorResponse(t, rec, http.StatusNotFound, 4003, "score not found")
+	assertFeedbackErrorResponse(t, rec, http.StatusNotFound, 4003, "未找到评分结果")
 }
 
 func TestFeedbackHandlerGetSessionScoreReturnsInternalError(t *testing.T) {
@@ -356,7 +356,7 @@ func TestFeedbackHandlerGetSessionScoreReturnsInternalError(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertFeedbackErrorResponse(t, rec, http.StatusInternalServerError, http.StatusInternalServerError, "internal server error")
+	assertFeedbackErrorResponse(t, rec, http.StatusInternalServerError, http.StatusInternalServerError, "服务器内部错误")
 }
 
 type fakeFeedbackService struct {

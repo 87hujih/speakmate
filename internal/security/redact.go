@@ -8,13 +8,14 @@ import (
 
 const redacted = "[REDACTED]"
 
+// 敏感信息脱敏使用的匹配规则。
 var (
 	sensitiveKeyValuePattern = regexp.MustCompile(`(?i)\b([A-Za-z0-9_.-]*(?:api[_-]?key|token|password|passwd|secret|authorization)[A-Za-z0-9_.-]*)\b\s*([:=])\s*([^&\s,;]+)`)
 	bearerTokenPattern       = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
 	mysqlDSNPasswordPattern  = regexp.MustCompile(`([A-Za-z0-9_.%+-]+):([^@\s]+)@tcp\(`)
 )
 
-// RedactString removes common secret values from strings before logging.
+// RedactString 在写日志前移除字符串中的常见敏感值。
 func RedactString(value string) string {
 	value = bearerTokenPattern.ReplaceAllString(value, `Bearer `+redacted)
 	value = sensitiveKeyValuePattern.ReplaceAllString(value, `${1}${2}`+redacted)
@@ -23,8 +24,7 @@ func RedactString(value string) string {
 	return value
 }
 
-// RedactURL redacts sensitive query values from request URIs while preserving
-// non-sensitive values for debugging.
+// RedactURL 脱敏请求 URI 中的敏感查询参数，同时保留非敏感参数便于排查。
 func RedactURL(requestURI string) string {
 	parsed, err := url.ParseRequestURI(requestURI)
 	if err != nil {
@@ -42,6 +42,7 @@ func RedactURL(requestURI string) string {
 	return RedactString(parsed.RequestURI())
 }
 
+// isSensitiveKey 判断参数名是否属于敏感字段。
 func isSensitiveKey(key string) bool {
 	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "-", "_"), ".", "_"))
 	return strings.Contains(normalized, "api_key") ||

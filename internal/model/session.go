@@ -5,6 +5,7 @@ import "time"
 // SessionStatus 表示训练 Session 当前生命周期状态。
 type SessionStatus string
 
+// 当前模型使用的枚举常量。
 const (
 	// SessionStatusRunning 表示训练正在进行中。
 	SessionStatusRunning SessionStatus = "running"

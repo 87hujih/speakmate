@@ -205,7 +205,7 @@ func TestReportServicePublishesErrorEventWhenGenerationFails(t *testing.T) {
 	if !ok {
 		t.Fatalf("payload type = %T, want ErrorPayload", event.Payload)
 	}
-	if payload.Code != "summary_agent_failed" || payload.Message != "summary agent failed" {
+	if payload.Code != "summary_agent_failed" || payload.Message != "报告摘要生成失败" {
 		t.Fatalf("payload = %+v, want summary failure", payload)
 	}
 }

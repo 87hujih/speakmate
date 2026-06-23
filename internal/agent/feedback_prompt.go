@@ -8,6 +8,7 @@ import (
 	"speakmate/internal/model"
 )
 
+// BuildCorrectionPrompt 组装纠错 Agent 的结构化提示词。
 func BuildCorrectionPrompt(input CorrectionInput) []PromptMessage {
 	system := strings.Join([]string{
 		"You are SpeakMate's English expression correction agent.",
@@ -35,6 +36,7 @@ func BuildCorrectionPrompt(input CorrectionInput) []PromptMessage {
 	}
 }
 
+// BuildScoringPrompt 组装评分 Agent 的结构化提示词。
 func BuildScoringPrompt(input ScoringInput) []PromptMessage {
 	correctionJSON := mustMarshalPromptJSON(input.Correction)
 	system := strings.Join([]string{
@@ -65,6 +67,7 @@ func BuildScoringPrompt(input ScoringInput) []PromptMessage {
 	}
 }
 
+// HistoryMessages 将消息历史转换为 Agent 可消费的上下文列表。
 func (input CorrectionInput) HistoryMessages() []model.Message {
 	if input.History != nil {
 		return input.History
@@ -73,6 +76,7 @@ func (input CorrectionInput) HistoryMessages() []model.Message {
 	return input.Session.Messages
 }
 
+// HistoryMessages 将消息历史转换为 Agent 可消费的上下文列表。
 func (input ScoringInput) HistoryMessages() []model.Message {
 	if input.History != nil {
 		return input.History
@@ -81,6 +85,7 @@ func (input ScoringInput) HistoryMessages() []model.Message {
 	return input.Session.Messages
 }
 
+// formatScenarioContext 将场景信息整理为提示词上下文。
 func formatScenarioContext(scenario model.Scenario) string {
 	lines := []string{
 		"Scenario:",
@@ -101,6 +106,7 @@ func formatScenarioContext(scenario model.Scenario) string {
 	return strings.Join(nonEmptyLines(lines), "\n")
 }
 
+// formatSessionContext 将 Session 状态整理为提示词上下文。
 func formatSessionContext(session model.Session, currentStage string) string {
 	lines := []string{
 		fmt.Sprintf("session_id: %d", session.ID),
@@ -111,6 +117,7 @@ func formatSessionContext(session model.Session, currentStage string) string {
 	return strings.Join(nonEmptyLines(lines), "\n")
 }
 
+// formatRubricContext 将评分维度整理为提示词上下文。
 func formatRubricContext(rubric []model.ScenarioRubric) string {
 	if len(rubric) == 0 {
 		return "Rubric:\n- Use the standard SpeakMate scoring dimensions."
@@ -124,6 +131,7 @@ func formatRubricContext(rubric []model.ScenarioRubric) string {
 	return strings.Join(nonEmptyLines(lines), "\n")
 }
 
+// formatHistoryContext 将对话历史整理为提示词上下文。
 func formatHistoryContext(history []model.Message) string {
 	if len(history) == 0 {
 		return "Recent conversation history: none"
@@ -148,6 +156,7 @@ func formatHistoryContext(history []model.Message) string {
 	return strings.Join(lines, "\n")
 }
 
+// nonEmptyLines 过滤空行并保留有效提示词片段。
 func nonEmptyLines(lines []string) []string {
 	kept := make([]string, 0, len(lines))
 	for _, line := range lines {
@@ -160,6 +169,7 @@ func nonEmptyLines(lines []string) []string {
 	return kept
 }
 
+// mustMarshalPromptJSON 将示例对象序列化为提示词 JSON。
 func mustMarshalPromptJSON(value any) string {
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {

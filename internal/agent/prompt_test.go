@@ -53,6 +53,44 @@ func TestBuildConversationPromptIncludesScenarioStageHistoryAndUserInput(t *test
 	assertContains(t, joined, "natural follow-up")
 }
 
+func TestBuildConversationPromptKeepsStageMetadataOutOfHistoryText(t *testing.T) {
+	input := ConversationInput{
+		Scenario: model.Scenario{
+			Code:   "meeting",
+			AIRole: "project manager",
+			Stages: []model.ScenarioStage{
+				{Name: "进度同步"},
+				{Name: "澄清确认"},
+			},
+		},
+		Session: model.Session{
+			TurnCount: 1,
+			Messages: []model.Message{
+				{
+					Role:      model.MessageRoleAI,
+					Content:   "Could you confirm the owner and next step?",
+					Stage:     "澄清确认",
+					CreatedAt: time.Now(),
+				},
+			},
+		},
+		UserContent: "Alice will own the follow-up.",
+	}
+
+	messages := BuildConversationPrompt(input)
+
+	for _, message := range messages {
+		if message.Role == "assistant" && strings.Contains(message.Content, "Could you confirm") {
+			if message.Content != "Could you confirm the owner and next step?" {
+				t.Fatalf("history content = %q, want plain conversation text", message.Content)
+			}
+			return
+		}
+	}
+
+	t.Fatalf("assistant history message not found: %#v", messages)
+}
+
 func TestStageNameForTurnFallsBackToLastStage(t *testing.T) {
 	stages := []model.ScenarioStage{
 		{Name: "first"},

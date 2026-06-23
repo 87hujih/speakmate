@@ -21,6 +21,7 @@ type AudioStreamService struct {
 	transcribePartials bool
 }
 
+// AudioStreamOption 用于配置 AudioStreamService。
 type AudioStreamOption func(*AudioStreamService)
 
 // WithMaxAudioStreamBytes 覆盖 WebSocket 音频流大小上限。
@@ -250,6 +251,7 @@ func (s *AudioStreamService) RecordConnectionClosed(ctx context.Context, session
 	})
 }
 
+// saveConnectionState 保存实时音频 WebSocket 连接状态。
 func (s *AudioStreamService) saveConnectionState(ctx context.Context, connection state.WebSocketConnectionState) error {
 	if s.stateStore == nil {
 		return nil
@@ -258,12 +260,13 @@ func (s *AudioStreamService) saveConnectionState(ctx context.Context, connection
 		ctx = context.Background()
 	}
 	if err := s.stateStore.SaveWebSocketConnection(ctx, connection); err != nil {
-		return fmt.Errorf("%w: save websocket connection: %v", ErrStateStoreFailed, err)
+		return fmt.Errorf("%w: 保存 WebSocket 连接状态失败：%v", ErrStateStoreFailed, err)
 	}
 
 	return nil
 }
 
+// transcribe 调用 ASR 客户端完成音频转写。
 func (s *AudioStreamService) transcribe(ctx context.Context, audio []byte, filename string, contentType string) (agent.ASROutput, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -285,10 +288,12 @@ func (s *AudioStreamService) transcribe(ctx context.Context, audio []byte, filen
 	return output, nil
 }
 
+// timeNowUTC 返回当前 UTC 时间，便于测试替换。
 func timeNowUTC() time.Time {
 	return time.Now().UTC()
 }
 
+// normalizeAudioStreamContentType 归一化实时音频分片类型。
 func normalizeAudioStreamContentType(contentType string) string {
 	trimmed := strings.TrimSpace(contentType)
 	if trimmed == "" {
@@ -298,6 +303,7 @@ func normalizeAudioStreamContentType(contentType string) string {
 	return trimmed
 }
 
+// partialTranscript 生成实时音频 partial 文案。
 func partialTranscript(transcript string, sequence int) string {
 	words := strings.Fields(transcript)
 	if len(words) == 0 {

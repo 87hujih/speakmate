@@ -95,7 +95,7 @@ func TestAudioHandlerRequiresMultipartAudioFile(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertAudioErrorResponse(t, rec, http.StatusBadRequest, 7002, "audio file is required")
+	assertAudioErrorResponse(t, rec, http.StatusBadRequest, 7002, "请上传音频文件")
 	if audioService.callCount != 0 {
 		t.Fatalf("call count = %d, want 0", audioService.callCount)
 	}
@@ -109,11 +109,11 @@ func TestAudioHandlerMapsServiceErrors(t *testing.T) {
 		wantCode   int
 		wantMsg    string
 	}{
-		{name: "unsupported type", err: service.ErrAudioFileTypeUnsupported, wantStatus: http.StatusBadRequest, wantCode: 7004, wantMsg: "audio file type unsupported"},
-		{name: "too large", err: service.ErrAudioFileTooLarge, wantStatus: http.StatusRequestEntityTooLarge, wantCode: 7003, wantMsg: "audio file too large"},
-		{name: "blank transcript", err: service.ErrAudioTranscriptRequired, wantStatus: http.StatusBadRequest, wantCode: 7006, wantMsg: "audio transcript is required"},
-		{name: "asr failed", err: service.ErrASRClientFailed, wantStatus: http.StatusBadGateway, wantCode: 7005, wantMsg: "asr client failed"},
-		{name: "session finished", err: service.ErrSessionAlreadyFinished, wantStatus: http.StatusConflict, wantCode: 2004, wantMsg: "session already finished"},
+		{name: "unsupported type", err: service.ErrAudioFileTypeUnsupported, wantStatus: http.StatusBadRequest, wantCode: 7004, wantMsg: "不支持该音频格式"},
+		{name: "too large", err: service.ErrAudioFileTooLarge, wantStatus: http.StatusRequestEntityTooLarge, wantCode: 7003, wantMsg: "音频文件过大"},
+		{name: "blank transcript", err: service.ErrAudioTranscriptRequired, wantStatus: http.StatusBadRequest, wantCode: 7006, wantMsg: "语音识别未返回有效文本"},
+		{name: "asr failed", err: service.ErrASRClientFailed, wantStatus: http.StatusBadGateway, wantCode: 7005, wantMsg: "语音识别服务调用失败"},
+		{name: "session finished", err: service.ErrSessionAlreadyFinished, wantStatus: http.StatusConflict, wantCode: 2004, wantMsg: "训练已结束"},
 	}
 
 	for _, tt := range tests {

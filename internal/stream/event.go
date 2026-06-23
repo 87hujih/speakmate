@@ -5,6 +5,7 @@ import "time"
 // EventType 表示 SSE 推送给前端的业务事件类型。
 type EventType string
 
+// 事件流模块使用的事件类型和默认值。
 const (
 	// EventTypeAIMessageDelta 表示 AI 回复的一个文本片段。
 	EventTypeAIMessageDelta EventType = "ai_message_delta"

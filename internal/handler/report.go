@@ -12,6 +12,7 @@ import (
 	"speakmate/internal/service"
 )
 
+// 当前模块使用的业务错误码和事件常量。
 const (
 	invalidReportRequestCode  = 5001
 	sessionNotFinishedCode    = 5002
@@ -70,6 +71,7 @@ func (h *ReportHandler) Get(c *gin.Context) {
 	response.Success(c, report)
 }
 
+// parsePositiveReportSessionID 从路径参数解析报告 Session ID。
 func parsePositiveReportSessionID(c *gin.Context) (int, bool) {
 	rawID := c.Param("id")
 	if rawID == "" {
@@ -78,42 +80,43 @@ func parsePositiveReportSessionID(c *gin.Context) (int, bool) {
 
 	id, err := strconv.Atoi(rawID)
 	if err != nil || id <= 0 {
-		response.Error(c, http.StatusBadRequest, invalidReportRequestCode, "invalid report request")
+		response.Error(c, http.StatusBadRequest, invalidReportRequestCode, "报告请求无效")
 		return 0, false
 	}
 
 	return id, true
 }
 
+// writeReportError 将报告业务错误转换为统一 HTTP 响应。
 func writeReportError(c *gin.Context, err error) {
 	if errors.Is(err, service.ErrInvalidReportRequest) {
-		response.Error(c, http.StatusBadRequest, invalidReportRequestCode, "invalid report request")
+		response.Error(c, http.StatusBadRequest, invalidReportRequestCode, "报告请求无效")
 		return
 	}
 	if errors.Is(err, service.ErrSessionNotFound) {
-		response.Error(c, http.StatusNotFound, sessionNotFoundCode, "session not found")
+		response.Error(c, http.StatusNotFound, sessionNotFoundCode, "未找到训练")
 		return
 	}
 	if errors.Is(err, service.ErrSessionNotFinished) {
-		response.Error(c, http.StatusConflict, sessionNotFinishedCode, "session not finished")
+		response.Error(c, http.StatusConflict, sessionNotFinishedCode, "训练尚未结束")
 		return
 	}
 	if errors.Is(err, service.ErrReportNotFound) {
-		response.Error(c, http.StatusNotFound, reportNotFoundCode, "report not found")
+		response.Error(c, http.StatusNotFound, reportNotFoundCode, "未找到课后报告")
 		return
 	}
 	if errors.Is(err, service.ErrReportFeedbackMissing) {
-		response.Error(c, http.StatusConflict, reportFeedbackMissingCode, "report feedback missing")
+		response.Error(c, http.StatusConflict, reportFeedbackMissingCode, "报告缺少反馈数据")
 		return
 	}
 	if errors.Is(err, service.ErrSummaryAgentFailed) {
-		response.Error(c, http.StatusBadGateway, summaryAgentFailedCode, "summary agent failed")
+		response.Error(c, http.StatusBadGateway, summaryAgentFailedCode, "报告摘要生成失败")
 		return
 	}
 	if errors.Is(err, service.ErrEventPublishFailed) {
-		response.Error(c, http.StatusServiceUnavailable, streamEventPublishFailedCode, "stream event publish failed")
+		response.Error(c, http.StatusServiceUnavailable, streamEventPublishFailedCode, "实时事件发布失败")
 		return
 	}
 
-	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "internal server error")
+	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "服务器内部错误")
 }

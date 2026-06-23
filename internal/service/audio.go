@@ -9,24 +9,26 @@ import (
 	"speakmate/internal/agent"
 )
 
+// 当前服务使用的默认值和业务常量。
 const (
 	// MaxAudioUploadBytes 是单段音频上传的默认大小上限。
 	MaxAudioUploadBytes = 10 * 1024 * 1024
 )
 
+// 服务层复用的哨兵错误。
 var (
 	// ErrInvalidAudioRequest 表示音频上传业务参数非法。
-	ErrInvalidAudioRequest = errors.New("invalid audio request")
+	ErrInvalidAudioRequest = errors.New("音频请求无效")
 	// ErrAudioFileRequired 表示请求中缺少音频文件或文件为空。
-	ErrAudioFileRequired = errors.New("audio file is required")
+	ErrAudioFileRequired = errors.New("请上传音频文件")
 	// ErrAudioFileTooLarge 表示音频文件超过大小上限。
-	ErrAudioFileTooLarge = errors.New("audio file too large")
+	ErrAudioFileTooLarge = errors.New("音频文件过大")
 	// ErrAudioFileTypeUnsupported 表示音频类型不在当前支持范围内。
-	ErrAudioFileTypeUnsupported = errors.New("audio file type unsupported")
+	ErrAudioFileTypeUnsupported = errors.New("不支持该音频格式")
 	// ErrASRClientFailed 表示 ASR Client 转写失败。
-	ErrASRClientFailed = errors.New("asr client failed")
+	ErrASRClientFailed = errors.New("语音识别服务调用失败")
 	// ErrAudioTranscriptRequired 表示 ASR 没有返回有效文本。
-	ErrAudioTranscriptRequired = errors.New("audio transcript is required")
+	ErrAudioTranscriptRequired = errors.New("语音识别未返回有效文本")
 )
 
 // AudioMessageSender 定义音频转写后复用的消息发送能力。
@@ -41,6 +43,7 @@ type AudioService struct {
 	maxBytes      int
 }
 
+// AudioOption 用于配置 AudioService。
 type AudioOption func(*AudioService)
 
 // WithMaxAudioUploadBytes 覆盖单段音频上传大小上限。
@@ -139,6 +142,7 @@ func (s *AudioService) UploadAudio(input UploadAudioInput) (UploadAudioResult, e
 	}, nil
 }
 
+// isSupportedAudioContentType 判断音频上传类型是否受支持。
 func isSupportedAudioContentType(contentType string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
 	switch normalized {

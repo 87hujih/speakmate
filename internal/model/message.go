@@ -5,6 +5,7 @@ import "time"
 // MessageRole 表示一条对话消息的发送方角色。
 type MessageRole string
 
+// 当前模型使用的枚举常量。
 const (
 	// MessageRoleUser 表示用户发送的消息。
 	MessageRoleUser MessageRole = "user"

@@ -7,11 +7,12 @@ import (
 	"speakmate/internal/model"
 )
 
+// 仓库层复用的哨兵错误。
 var (
 	// ErrCorrectionNotFound 表示内存仓库中没有找到对应纠错结果。
-	ErrCorrectionNotFound = errors.New("correction not found")
+	ErrCorrectionNotFound = errors.New("未找到纠错结果")
 	// ErrScoreNotFound 表示内存仓库中没有找到对应评分结果。
-	ErrScoreNotFound = errors.New("score not found")
+	ErrScoreNotFound = errors.New("未找到评分结果")
 )
 
 // MemoryFeedbackRepository 使用内存 map 保存消息纠错和 Session 当前评分。
@@ -99,6 +100,7 @@ func (r *MemoryFeedbackRepository) FindCurrentScoreBySessionID(sessionID int) (m
 	return score, nil
 }
 
+// upsertSessionCorrection 维护 Session 到纠错结果的索引。
 func (r *MemoryFeedbackRepository) upsertSessionCorrection(sessionID int, correction model.CorrectionResult) {
 	corrections := r.correctionsBySessionID[sessionID]
 	for i, existing := range corrections {
@@ -112,6 +114,7 @@ func (r *MemoryFeedbackRepository) upsertSessionCorrection(sessionID int, correc
 	r.correctionsBySessionID[sessionID] = append(corrections, correction)
 }
 
+// removeCorrectionFromSession 从 Session 纠错索引中移除旧结果。
 func (r *MemoryFeedbackRepository) removeCorrectionFromSession(sessionID int, messageID int) {
 	corrections := r.correctionsBySessionID[sessionID]
 	for i, existing := range corrections {
@@ -128,6 +131,7 @@ func (r *MemoryFeedbackRepository) removeCorrectionFromSession(sessionID int, me
 	r.correctionsBySessionID[sessionID] = corrections
 }
 
+// cloneCorrectionResults 复制纠错结果切片，避免外部修改仓库状态。
 func cloneCorrectionResults(corrections []model.CorrectionResult) []model.CorrectionResult {
 	cloned := make([]model.CorrectionResult, len(corrections))
 	for i, correction := range corrections {
@@ -137,6 +141,7 @@ func cloneCorrectionResults(corrections []model.CorrectionResult) []model.Correc
 	return cloned
 }
 
+// cloneCorrectionResult 复制单条纠错结果。
 func cloneCorrectionResult(correction model.CorrectionResult) model.CorrectionResult {
 	if correction.Errors != nil {
 		correction.Errors = append([]model.CorrectionError(nil), correction.Errors...)

@@ -17,6 +17,7 @@ import (
 	"speakmate/internal/service"
 )
 
+// 当前模块使用的业务错误码和事件常量。
 const (
 	audioWSEventStart             = "start"
 	audioWSEventAudioChunk        = "audio_chunk"
@@ -60,7 +61,7 @@ func (h *AudioWebSocketHandler) Stream(c *gin.Context) {
 		return
 	}
 	if h.service == nil {
-		response.Error(c, http.StatusServiceUnavailable, audioWSUnavailableCode, "audio websocket unavailable")
+		response.Error(c, http.StatusServiceUnavailable, audioWSUnavailableCode, "实时音频 WebSocket 不可用")
 		return
 	}
 
@@ -116,6 +117,7 @@ func (h *AudioWebSocketHandler) Stream(c *gin.Context) {
 	}
 }
 
+// handleTextMessage 处理 WebSocket 文本控制消息。
 func (h *AudioWebSocketHandler) handleTextMessage(c *gin.Context, conn *websocket.Conn, sessionID int, streamSession *service.AudioStream, message []byte) (*service.AudioStream, bool) {
 	var event audioWSClientEvent
 	if err := json.Unmarshal(message, &event); err != nil {
@@ -180,6 +182,7 @@ func (h *AudioWebSocketHandler) handleTextMessage(c *gin.Context, conn *websocke
 	}
 }
 
+// writePartial 写出实时音频 partial 转写事件。
 func (h *AudioWebSocketHandler) writePartial(conn *websocket.Conn, sessionID int, streamSession *service.AudioStream, input service.AudioStreamChunkInput) bool {
 	partial, err := streamSession.AppendChunk(input)
 	if err != nil {
@@ -192,6 +195,7 @@ func (h *AudioWebSocketHandler) writePartial(conn *websocket.Conn, sessionID int
 	})
 }
 
+// writeError 写出实时音频错误事件并记录连接状态。
 func (h *AudioWebSocketHandler) writeError(c *gin.Context, conn *websocket.Conn, sessionID int, err error) bool {
 	if h.service != nil {
 		ctx := contextFromGin(c)
@@ -203,17 +207,20 @@ func (h *AudioWebSocketHandler) writeError(c *gin.Context, conn *websocket.Conn,
 	return writeAudioWSError(conn, sessionID, err)
 }
 
+// audioWSClientEvent 描述浏览器发来的实时音频控制事件。
 type audioWSClientEvent struct {
 	Type    string               `json:"type"`
 	Payload audioWSClientPayload `json:"payload"`
 }
 
+// audioWSClientPayload 描述实时音频控制事件载荷。
 type audioWSClientPayload struct {
 	ContentType string `json:"content_type"`
 	AudioBase64 string `json:"audio_base64"`
 	Sequence    int    `json:"sequence"`
 }
 
+// audioWSServerEvent 描述后端写回浏览器的实时音频事件。
 type audioWSServerEvent struct {
 	Type      string    `json:"type"`
 	SessionID int       `json:"session_id"`
@@ -221,24 +228,29 @@ type audioWSServerEvent struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// audioWSStartPayload 描述实时音频开始事件载荷。
 type audioWSStartPayload struct {
 	ContentType string `json:"content_type"`
 }
 
+// partialTranscriptPayload 描述实时音频 partial transcript 载荷。
 type partialTranscriptPayload struct {
 	Transcript string `json:"transcript"`
 	Sequence   int    `json:"sequence"`
 }
 
+// audioWSEndPayload 描述实时音频结束事件载荷。
 type audioWSEndPayload struct {
 	Reason string `json:"reason"`
 }
 
+// audioWSErrorPayload 描述实时音频错误事件载荷。
 type audioWSErrorPayload struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
+// audioWSFinalTranscriptPayload 描述实时音频 final transcript 载荷。
 type audioWSFinalTranscriptPayload struct {
 	Transcript  string          `json:"transcript"`
 	UserMessage messageResponse `json:"user_message"`
@@ -248,6 +260,7 @@ type audioWSFinalTranscriptPayload struct {
 	TurnCount   int             `json:"turn_count"`
 }
 
+// finalTranscriptPayload 组装 final transcript 事件载荷。
 func finalTranscriptPayload(result service.AudioStreamResult) audioWSFinalTranscriptPayload {
 	return audioWSFinalTranscriptPayload{
 		Transcript:  result.Transcript,
@@ -259,6 +272,7 @@ func finalTranscriptPayload(result service.AudioStreamResult) audioWSFinalTransc
 	}
 }
 
+// decodeAudioChunk 从 WebSocket 文本消息中解析音频分片。
 func decodeAudioChunk(encoded string) ([]byte, error) {
 	if encoded == "" {
 		return nil, service.ErrAudioFileRequired
@@ -272,6 +286,7 @@ func decodeAudioChunk(encoded string) ([]byte, error) {
 	return audio, nil
 }
 
+// writeAudioWSEvent 向 WebSocket 写出统一事件。
 func writeAudioWSEvent(conn *websocket.Conn, sessionID int, eventType string, payload any) bool {
 	if err := conn.SetWriteDeadline(time.Now().Add(audioWSWriteTimeout)); err != nil {
 		return false
@@ -285,11 +300,13 @@ func writeAudioWSEvent(conn *websocket.Conn, sessionID int, eventType string, pa
 	}) == nil
 }
 
+// writeAudioWSClose 向 WebSocket 写出关闭帧。
 func writeAudioWSClose(conn *websocket.Conn, code int, text string) {
 	deadline := time.Now().Add(audioWSWriteTimeout)
 	_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(code, text), deadline)
 }
 
+// writeAudioWSError 写出错误事件后关闭 WebSocket 连接。
 func writeAudioWSError(conn *websocket.Conn, sessionID int, err error) bool {
 	code, message := audioWSError(err)
 
@@ -299,33 +316,35 @@ func writeAudioWSError(conn *websocket.Conn, sessionID int, err error) bool {
 	})
 }
 
+// audioWSError 构造实时音频错误事件。
 func audioWSError(err error) (string, string) {
 	switch {
 	case errors.Is(err, service.ErrInvalidAudioRequest):
-		return "invalid_audio_request", "invalid audio request"
+		return "invalid_audio_request", "音频请求无效"
 	case errors.Is(err, service.ErrAudioFileRequired):
-		return "audio_file_required", "audio file is required"
+		return "audio_file_required", "请上传音频文件"
 	case errors.Is(err, service.ErrAudioFileTooLarge):
-		return "audio_file_too_large", "audio file too large"
+		return "audio_file_too_large", "音频文件过大"
 	case errors.Is(err, service.ErrAudioFileTypeUnsupported):
-		return "audio_file_type_unsupported", "audio file type unsupported"
+		return "audio_file_type_unsupported", "不支持该音频格式"
 	case errors.Is(err, service.ErrASRClientFailed):
-		return "asr_client_failed", "asr client failed"
+		return "asr_client_failed", "语音识别服务调用失败"
 	case errors.Is(err, service.ErrAudioTranscriptRequired):
-		return "audio_transcript_required", "audio transcript is required"
+		return "audio_transcript_required", "语音识别未返回有效文本"
 	case errors.Is(err, service.ErrStateStoreFailed):
-		return "session_state_store_failed", "session state store failed"
+		return "session_state_store_failed", "训练短期状态写入失败"
 	case errors.Is(err, service.ErrSessionNotFound):
-		return "session_not_found", "session not found"
+		return "session_not_found", "未找到训练"
 	case errors.Is(err, service.ErrSessionAlreadyFinished):
-		return "session_already_finished", "session already finished"
+		return "session_already_finished", "训练已结束"
 	case errors.Is(err, service.ErrMessageContentRequired):
-		return "message_content_required", "message content is required"
+		return "message_content_required", "消息内容不能为空"
 	default:
-		return "audio_websocket_failed", "audio websocket failed"
+		return "audio_websocket_failed", "实时音频连接处理失败"
 	}
 }
 
+// contextFromGin 从 Gin 请求中提取连接生命周期上下文。
 func contextFromGin(c *gin.Context) context.Context {
 	if c == nil || c.Request == nil {
 		return context.Background()
@@ -334,6 +353,7 @@ func contextFromGin(c *gin.Context) context.Context {
 	return c.Request.Context()
 }
 
+// webSocketOriginChecker 根据 CORS 配置生成 WebSocket Origin 校验器。
 func webSocketOriginChecker(cfg config.CORSConfig) func(*http.Request) bool {
 	allowedOrigins := make(map[string]struct{}, len(cfg.AllowedOrigins))
 	allowWildcard := false

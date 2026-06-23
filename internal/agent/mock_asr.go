@@ -6,13 +6,14 @@ import (
 	"strings"
 )
 
-var ErrMockASRTranscriptRequired = errors.New("mock asr transcript required")
+var ErrMockASRTranscriptRequired = errors.New("Mock ASR 转写文本不能为空")
 
 // MockASRClient 返回稳定转写文本，供本地开发和自动测试使用。
 type MockASRClient struct {
 	transcript string
 }
 
+// MockASROption 用于配置 Mock ASR 客户端。
 type MockASROption func(*MockASRClient)
 
 // WithMockASRTranscript 覆盖 Mock ASR 的稳定转写文本。

@@ -13,6 +13,7 @@ import (
 	"speakmate/internal/service"
 )
 
+// 当前模块使用的业务错误码和事件常量。
 const (
 	invalidSessionRequestCode  = 2001
 	invalidSessionIDCode       = 2002
@@ -43,7 +44,7 @@ func NewSessionHandler(service SessionService) *SessionHandler {
 func (h *SessionHandler) Create(c *gin.Context) {
 	var req createSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.ScenarioID <= 0 {
-		response.Error(c, http.StatusBadRequest, invalidSessionRequestCode, "invalid session request")
+		response.Error(c, http.StatusBadRequest, invalidSessionRequestCode, "训练请求无效")
 		return
 	}
 	if req.UserID <= 0 {
@@ -105,11 +106,13 @@ func (h *SessionHandler) Finish(c *gin.Context) {
 	})
 }
 
+// createSessionRequest 是创建训练 Session 的请求结构。
 type createSessionRequest struct {
 	ScenarioID int `json:"scenario_id"`
 	UserID     int `json:"user_id"`
 }
 
+// createSessionResponse 是创建训练 Session 的返回结构。
 type createSessionResponse struct {
 	SessionID      int    `json:"session_id"`
 	SessionNo      string `json:"session_no"`
@@ -118,6 +121,7 @@ type createSessionResponse struct {
 	OpeningMessage string `json:"opening_message"`
 }
 
+// sessionDetailResponse 是训练 Session 详情返回结构。
 type sessionDetailResponse struct {
 	SessionID int               `json:"session_id"`
 	SessionNo string            `json:"session_no"`
@@ -129,6 +133,7 @@ type sessionDetailResponse struct {
 	EndedAt   *string           `json:"ended_at"`
 }
 
+// messageResponse 是 HTTP API 中的消息返回结构。
 type messageResponse struct {
 	ID        int    `json:"id"`
 	SessionID int    `json:"session_id"`
@@ -138,6 +143,7 @@ type messageResponse struct {
 	CreatedAt string `json:"created_at"`
 }
 
+// finishSessionResponse 是结束训练 Session 的返回结构。
 type finishSessionResponse struct {
 	SessionID int    `json:"session_id"`
 	Status    string `json:"status"`
@@ -145,6 +151,7 @@ type finishSessionResponse struct {
 	EndedAt   string `json:"ended_at"`
 }
 
+// parsePositiveSessionID 从路径参数解析训练 Session ID。
 func parsePositiveSessionID(c *gin.Context) (int, bool) {
 	rawID := c.Param("id")
 	if rawID == "" {
@@ -153,13 +160,14 @@ func parsePositiveSessionID(c *gin.Context) (int, bool) {
 
 	id, err := strconv.Atoi(rawID)
 	if err != nil || id <= 0 {
-		response.Error(c, http.StatusBadRequest, invalidSessionIDCode, "invalid session id")
+		response.Error(c, http.StatusBadRequest, invalidSessionIDCode, "训练 ID 无效")
 		return 0, false
 	}
 
 	return id, true
 }
 
+// toSessionDetailResponse 将 Session 详情转换为 HTTP 响应结构。
 func toSessionDetailResponse(result service.GetSessionResult) sessionDetailResponse {
 	return sessionDetailResponse{
 		SessionID: result.Session.ID,
@@ -179,6 +187,7 @@ func toSessionDetailResponse(result service.GetSessionResult) sessionDetailRespo
 	}
 }
 
+// toMessageResponses 批量转换消息响应结构。
 func toMessageResponses(messages []model.Message) []messageResponse {
 	result := make([]messageResponse, 0, len(messages))
 	for _, message := range messages {
@@ -188,6 +197,7 @@ func toMessageResponses(messages []model.Message) []messageResponse {
 	return result
 }
 
+// toMessageResponse 将单条消息转换为 HTTP 响应结构。
 func toMessageResponse(message model.Message) messageResponse {
 	return messageResponse{
 		ID:        message.ID,
@@ -199,6 +209,7 @@ func toMessageResponse(message model.Message) messageResponse {
 	}
 }
 
+// formatOptionalTime 格式化可能为空的时间。
 func formatOptionalTime(value *time.Time) *string {
 	if value == nil {
 		return nil
@@ -208,31 +219,33 @@ func formatOptionalTime(value *time.Time) *string {
 	return &formatted
 }
 
+// formatTime 使用统一 RFC3339 格式输出时间。
 func formatTime(value time.Time) string {
 	return value.UTC().Format(time.RFC3339)
 }
 
+// writeSessionError 将 Session 业务错误转换为统一 HTTP 响应。
 func writeSessionError(c *gin.Context, err error) {
 	if errors.Is(err, service.ErrInvalidSessionRequest) {
-		response.Error(c, http.StatusBadRequest, invalidSessionRequestCode, "invalid session request")
+		response.Error(c, http.StatusBadRequest, invalidSessionRequestCode, "训练请求无效")
 		return
 	}
 	if errors.Is(err, service.ErrScenarioNotFound) {
-		response.Error(c, http.StatusNotFound, scenarioNotFoundCode, "scenario not found")
+		response.Error(c, http.StatusNotFound, scenarioNotFoundCode, "未找到训练场景")
 		return
 	}
 	if errors.Is(err, service.ErrSessionNotFound) {
-		response.Error(c, http.StatusNotFound, sessionNotFoundCode, "session not found")
+		response.Error(c, http.StatusNotFound, sessionNotFoundCode, "未找到训练")
 		return
 	}
 	if errors.Is(err, service.ErrSessionAlreadyFinished) {
-		response.Error(c, http.StatusConflict, sessionAlreadyFinishedCode, "session already finished")
+		response.Error(c, http.StatusConflict, sessionAlreadyFinishedCode, "训练已结束")
 		return
 	}
 	if errors.Is(err, service.ErrStateStoreFailed) {
-		response.Error(c, http.StatusServiceUnavailable, sessionStateStoreFailedCode, "session state store failed")
+		response.Error(c, http.StatusServiceUnavailable, sessionStateStoreFailedCode, "训练短期状态写入失败")
 		return
 	}
 
-	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "internal server error")
+	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "服务器内部错误")
 }

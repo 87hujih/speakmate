@@ -27,12 +27,26 @@ import (
 	infraredis "speakmate/internal/infra/redis"
 )
 
+var routerTestLLMBaseURL string
+
 func TestMain(m *testing.M) {
-	_ = os.Setenv("LLM_USE_MOCK", "true")
+	llmServer := httptest.NewServer(http.HandlerFunc(routerTestLLMHandler))
+	routerTestLLMBaseURL = llmServer.URL
+	_ = os.Setenv("LLM_PROVIDER", "openai-compatible")
+	_ = os.Setenv("LLM_BASE_URL", routerTestLLMBaseURL)
+	_ = os.Setenv("LLM_API_KEY", "test-key")
+	_ = os.Setenv("LLM_MODEL", "test-model")
+	_ = os.Setenv("LLM_USE_MOCK", "false")
+	_ = os.Setenv("LLM_FALLBACK_TO_MOCK", "false")
+	_ = os.Setenv("CORRECTION_USE_MOCK", "true")
+	_ = os.Setenv("SCORING_USE_MOCK", "true")
+	_ = os.Setenv("SUMMARY_USE_MOCK", "true")
 	_ = os.Setenv("ASR_PROVIDER", "mock")
 	_ = os.Setenv("ASR_USE_MOCK", "true")
 	_ = os.Setenv("ASR_MOCK_TRANSCRIPT", "I am study computer science and I have did a project.")
-	os.Exit(m.Run())
+	code := m.Run()
+	llmServer.Close()
+	os.Exit(code)
 }
 
 // TestHealthEndpointReturnsOK 验证健康检查接口保持统一成功响应结构。
@@ -315,8 +329,8 @@ func TestScenarioDetailReturnsNotFoundError(t *testing.T) {
 	if body.Code != 1001 {
 		t.Fatalf("code = %d, want 1001", body.Code)
 	}
-	if body.Message != "scenario not found" {
-		t.Fatalf("message = %q, want %q", body.Message, "scenario not found")
+	if body.Message != "未找到训练场景" {
+		t.Fatalf("message = %q, want %q", body.Message, "未找到训练场景")
 	}
 }
 
@@ -344,8 +358,8 @@ func TestScenarioDetailReturnsInvalidIDError(t *testing.T) {
 	if body.Code != 1002 {
 		t.Fatalf("code = %d, want 1002", body.Code)
 	}
-	if body.Message != "invalid scenario id" {
-		t.Fatalf("message = %q, want %q", body.Message, "invalid scenario id")
+	if body.Message != "场景 ID 无效" {
+		t.Fatalf("message = %q, want %q", body.Message, "场景 ID 无效")
 	}
 }
 
@@ -422,7 +436,7 @@ func TestSessionCreateRejectsInvalidRequest(t *testing.T) {
 
 			engine.ServeHTTP(rec, req)
 
-			assertErrorResponse(t, rec, http.StatusBadRequest, 2001, "invalid session request")
+			assertErrorResponse(t, rec, http.StatusBadRequest, 2001, "训练请求无效")
 		})
 	}
 }
@@ -437,7 +451,7 @@ func TestSessionCreateReturnsScenarioNotFound(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertErrorResponse(t, rec, http.StatusNotFound, 1001, "scenario not found")
+	assertErrorResponse(t, rec, http.StatusNotFound, 1001, "未找到训练场景")
 }
 
 // TestSessionGetReturnsCreatedSession 验证查询 Session 会返回场景摘要、轮次和空消息列表。
@@ -519,7 +533,7 @@ func TestSessionGetReturnsNotFound(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertErrorResponse(t, rec, http.StatusNotFound, 2003, "session not found")
+	assertErrorResponse(t, rec, http.StatusNotFound, 2003, "未找到训练")
 }
 
 // TestSessionInvalidIDReturnsBadRequest 验证 Session 路径 ID 非正整数时返回统一 400。
@@ -548,7 +562,7 @@ func TestSessionInvalidIDReturnsBadRequest(t *testing.T) {
 
 			engine.ServeHTTP(rec, req)
 
-			assertErrorResponse(t, rec, http.StatusBadRequest, 2002, "invalid session id")
+			assertErrorResponse(t, rec, http.StatusBadRequest, 2002, "训练 ID 无效")
 		})
 	}
 }
@@ -617,11 +631,11 @@ func TestSessionFinishTwiceReturnsConflict(t *testing.T) {
 	secondRec := httptest.NewRecorder()
 	engine.ServeHTTP(secondRec, secondReq)
 
-	assertErrorResponse(t, secondRec, http.StatusConflict, 2004, "session already finished")
+	assertErrorResponse(t, secondRec, http.StatusConflict, 2004, "训练已结束")
 }
 
-// TestMessageSendCreatesMockReplyAndSessionHistory 验证发送文本消息后会保存用户消息、AI 回复和轮次。
-func TestMessageSendCreatesMockReplyAndSessionHistory(t *testing.T) {
+// TestMessageSendCreatesAIReplyAndSessionHistory 验证发送文本消息后会保存用户消息、AI 回复和轮次。
+func TestMessageSendCreatesAIReplyAndSessionHistory(t *testing.T) {
 	engine := New()
 	sessionID := createSession(t, engine, 1)
 
@@ -914,10 +928,10 @@ func TestMessageSendGeneratesFeedbackAndFeedbackRoutesReturnIt(t *testing.T) {
 		t.Fatalf("correction code = %d, want 0", correctionBody.Code)
 	}
 	if correctionBody.Data.MessageID != messageID {
-		t.Fatalf("correction message_id = %d, want %d", correctionBody.Data.MessageID, messageID)
+		t.Fatalf("纠错 message_id = %d，期望 %d", correctionBody.Data.MessageID, messageID)
 	}
 	if correctionBody.Data.SessionID != sessionID {
-		t.Fatalf("correction session_id = %d, want %d", correctionBody.Data.SessionID, sessionID)
+		t.Fatalf("纠错 session_id = %d，期望 %d", correctionBody.Data.SessionID, sessionID)
 	}
 	if correctionBody.Data.CorrectedText != "I am studying computer science, and I have done a project." {
 		t.Fatalf("corrected_text = %q, want mock corrected text", correctionBody.Data.CorrectedText)
@@ -951,7 +965,7 @@ func TestMessageSendGeneratesFeedbackAndFeedbackRoutesReturnIt(t *testing.T) {
 		t.Fatalf("session corrections length = %d, want 1", len(sessionCorrectionsBody.Data))
 	}
 	if sessionCorrectionsBody.Data[0].MessageID != messageID {
-		t.Fatalf("session correction message_id = %d, want %d", sessionCorrectionsBody.Data[0].MessageID, messageID)
+		t.Fatalf("session 纠错 message_id = %d，期望 %d", sessionCorrectionsBody.Data[0].MessageID, messageID)
 	}
 
 	scoreReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+strconv.Itoa(sessionID)+"/scores", nil)
@@ -979,10 +993,10 @@ func TestMessageSendGeneratesFeedbackAndFeedbackRoutesReturnIt(t *testing.T) {
 		t.Fatalf("score code = %d, want 0", scoreBody.Code)
 	}
 	if scoreBody.Data.MessageID != messageID {
-		t.Fatalf("score message_id = %d, want %d", scoreBody.Data.MessageID, messageID)
+		t.Fatalf("评分 message_id = %d，期望 %d", scoreBody.Data.MessageID, messageID)
 	}
 	if scoreBody.Data.SessionID != sessionID {
-		t.Fatalf("score session_id = %d, want %d", scoreBody.Data.SessionID, sessionID)
+		t.Fatalf("评分 session_id = %d，期望 %d", scoreBody.Data.SessionID, sessionID)
 	}
 	if scoreBody.Data.TotalScore != 77 {
 		t.Fatalf("score total_score = %d, want 77", scoreBody.Data.TotalScore)
@@ -1020,9 +1034,9 @@ func TestMessageSendRejectsInvalidRequest(t *testing.T) {
 		wantMsg    string
 		wantStatus int
 	}{
-		{name: "invalid json", body: `{`, wantStatus: http.StatusBadRequest, wantCode: 3001, wantMsg: "invalid message request"},
-		{name: "missing content", body: `{}`, wantStatus: http.StatusBadRequest, wantCode: 3001, wantMsg: "invalid message request"},
-		{name: "blank content", body: `{"content":"   "}`, wantStatus: http.StatusBadRequest, wantCode: 3002, wantMsg: "message content is required"},
+		{name: "invalid json", body: `{`, wantStatus: http.StatusBadRequest, wantCode: 3001, wantMsg: "消息请求无效"},
+		{name: "missing content", body: `{}`, wantStatus: http.StatusBadRequest, wantCode: 3001, wantMsg: "消息请求无效"},
+		{name: "blank content", body: `{"content":"   "}`, wantStatus: http.StatusBadRequest, wantCode: 3002, wantMsg: "消息内容不能为空"},
 	}
 
 	for _, tt := range tests {
@@ -1059,7 +1073,7 @@ func TestMessageSendReturnsNotFound(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertErrorResponse(t, rec, http.StatusNotFound, 2003, "session not found")
+	assertErrorResponse(t, rec, http.StatusNotFound, 2003, "未找到训练")
 }
 
 // TestMessageSendRejectsFinishedSession 验证已结束 Session 不允许继续发送消息。
@@ -1084,7 +1098,7 @@ func TestMessageSendRejectsFinishedSession(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertErrorResponse(t, rec, http.StatusConflict, 2004, "session already finished")
+	assertErrorResponse(t, rec, http.StatusConflict, 2004, "训练已结束")
 }
 
 // TestSessionScoresRouteReturnsScoreNotFound 验证 Session 当前评分查询路由已注册并返回统一反馈错误。
@@ -1097,7 +1111,7 @@ func TestSessionScoresRouteReturnsScoreNotFound(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertErrorResponse(t, rec, http.StatusNotFound, 4003, "score not found")
+	assertErrorResponse(t, rec, http.StatusNotFound, 4003, "未找到评分结果")
 }
 
 // TestMessageCorrectionsRouteReturnsCorrectionNotFound 验证单条消息纠错查询路由已注册并返回统一反馈错误。
@@ -1109,7 +1123,7 @@ func TestMessageCorrectionsRouteReturnsCorrectionNotFound(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertErrorResponse(t, rec, http.StatusNotFound, 4002, "correction not found")
+	assertErrorResponse(t, rec, http.StatusNotFound, 4002, "未找到纠错结果")
 }
 
 // TestSessionCorrectionsRouteReturnsCorrectionNotFound 验证整场训练纠错查询路由已注册并返回统一反馈错误。
@@ -1122,7 +1136,7 @@ func TestSessionCorrectionsRouteReturnsCorrectionNotFound(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertErrorResponse(t, rec, http.StatusNotFound, 4002, "correction not found")
+	assertErrorResponse(t, rec, http.StatusNotFound, 4002, "未找到纠错结果")
 }
 
 // TestSessionStreamRouteIsRegistered 验证 Session SSE 路由已注册并返回流式响应头。
@@ -1307,7 +1321,7 @@ func TestReportRoutesReturnNotFoundBeforeGeneration(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertErrorResponse(t, rec, http.StatusNotFound, 5003, "report not found")
+	assertErrorResponse(t, rec, http.StatusNotFound, 5003, "未找到课后报告")
 }
 
 // TestReportRoutesRequireFinishedSession 验证 running 状态不能生成课后报告。
@@ -1321,7 +1335,7 @@ func TestReportRoutesRequireFinishedSession(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertErrorResponse(t, rec, http.StatusConflict, 5002, "session not finished")
+	assertErrorResponse(t, rec, http.StatusConflict, 5002, "训练尚未结束")
 }
 
 // TestReportRoutesRequireFeedbackData 验证缺少纠错或评分时报告生成失败。
@@ -1341,7 +1355,7 @@ func TestReportRoutesRequireFeedbackData(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertErrorResponse(t, rec, http.StatusConflict, 5004, "report feedback missing")
+	assertErrorResponse(t, rec, http.StatusConflict, 5004, "报告缺少反馈数据")
 }
 
 // TestSessionHistoryRoutesReturnPaginatedSummaries 验证历史记录列表支持分页、用户过滤和报告状态摘要。
@@ -1444,7 +1458,7 @@ func TestSessionHistoryRoutesValidatePaginationAndUserID(t *testing.T) {
 
 			engine.ServeHTTP(rec, req)
 
-			assertErrorResponse(t, rec, http.StatusBadRequest, 6001, "invalid history request")
+			assertErrorResponse(t, rec, http.StatusBadRequest, 6001, "历史记录请求无效")
 		})
 	}
 }
@@ -1498,7 +1512,7 @@ func TestHistoryInsightsRouteRejectsInvalidServiceDays(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertErrorResponse(t, rec, http.StatusBadRequest, 6001, "invalid history request")
+	assertErrorResponse(t, rec, http.StatusBadRequest, 6001, "历史记录请求无效")
 }
 
 // TestHistoryInsightsRouteSummarizesFinishedReportedSession 验证完成训练并生成报告后洞察摘要包含评分和报告数。
@@ -1878,6 +1892,61 @@ func assertErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, httpStatu
 	}
 }
 
+func routerTestLLMHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/chat/completions" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var request struct {
+		Stream bool `json:"stream"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&request)
+
+	if request.Stream {
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeRouterTestLLMStreamChunk(w, "That project ")
+		writeRouterTestLLMStreamChunk(w, "sounds relevant. ")
+		writeRouterTestLLMStreamChunk(w, "Could you explain ")
+		writeRouterTestLLMStreamChunk(w, "your project role ")
+		writeRouterTestLLMStreamChunk(w, "and one technical challenge?")
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"choices": []map[string]any{
+			{
+				"message": map[string]any{
+					"role":    "assistant",
+					"content": "That project sounds relevant. Could you explain your project role and one technical challenge?",
+				},
+			},
+		},
+	})
+}
+
+func writeRouterTestLLMStreamChunk(w http.ResponseWriter, content string) {
+	data, _ := json.Marshal(map[string]any{
+		"choices": []map[string]any{
+			{
+				"delta": map[string]any{
+					"content": content,
+				},
+			},
+		},
+	})
+	_, _ = w.Write([]byte("data: " + string(data) + "\n\n"))
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 func validRouterTencentASRConfig() config.ASRConfig {
 	return config.ASRConfig{
 		Provider:           "tencent",
@@ -1887,6 +1956,18 @@ func validRouterTencentASRConfig() config.ASRConfig {
 		TencentSecretKey:   "secret-key",
 		TencentEngineType:  "16k_en",
 		TencentVoiceFormat: "ogg-opus",
+	}
+}
+
+func validRouterLLMConfig() config.LLMConfig {
+	return config.LLMConfig{
+		Provider:       "openai-compatible",
+		BaseURL:        routerTestLLMBaseURL,
+		APIKey:         "test-key",
+		Model:          "test-model",
+		TimeoutSeconds: 30,
+		UseMock:        false,
+		FallbackToMock: false,
 	}
 }
 
@@ -1902,11 +1983,7 @@ func redisRouterConfig(addr string) config.Config {
 			DB:                    0,
 			ConnectTimeoutSeconds: 1,
 		},
-		LLM: config.LLMConfig{
-			Provider:       "openai-compatible",
-			UseMock:        true,
-			FallbackToMock: true,
-		},
+		LLM: validRouterLLMConfig(),
 		ASR: config.ASRConfig{
 			Provider: "mock",
 			UseMock:  true,

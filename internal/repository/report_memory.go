@@ -7,9 +7,10 @@ import (
 	"speakmate/internal/model"
 )
 
+// 仓库层复用的哨兵错误。
 var (
 	// ErrReportNotFound 表示内存仓库中没有找到对应报告。
-	ErrReportNotFound = errors.New("report not found")
+	ErrReportNotFound = errors.New("未找到课后报告")
 )
 
 // MemoryReportRepository 使用内存 map 保存训练报告。
@@ -48,6 +49,7 @@ func (r *MemoryReportRepository) FindBySessionID(sessionID int) (model.Report, e
 	return cloneReport(report), nil
 }
 
+// cloneReport 复制报告结构，避免调用方修改仓库内部状态。
 func cloneReport(report model.Report) model.Report {
 	if report.MajorProblems != nil {
 		report.MajorProblems = append([]string(nil), report.MajorProblems...)

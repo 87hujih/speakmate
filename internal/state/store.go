@@ -8,6 +8,7 @@ import (
 	"speakmate/internal/model"
 )
 
+// 短期状态存储使用的默认 TTL 常量。
 const (
 	// DefaultSessionStateTTL 是训练临时上下文、状态、评分和纠错摘要的默认保留时间。
 	DefaultSessionStateTTL = 2 * time.Hour
@@ -15,11 +16,12 @@ const (
 	DefaultWebSocketConnectionTTL = 30 * time.Minute
 )
 
+// 短期状态层复用的哨兵错误。
 var (
 	// ErrStateNotFound 表示短期状态不存在或已经过期。
-	ErrStateNotFound = errors.New("session state not found")
+	ErrStateNotFound = errors.New("未找到训练短期状态")
 	// ErrInvalidState 表示写入短期状态时缺少必要字段。
-	ErrInvalidState = errors.New("invalid session state")
+	ErrInvalidState = errors.New("训练短期状态无效")
 )
 
 // SessionStateStore 管理训练过程中的短期状态，不替代长期持久化仓库。

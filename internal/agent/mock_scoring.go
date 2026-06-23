@@ -56,6 +56,7 @@ func (a *MockScoringAgent) Score(input ScoringInput) (ScoringOutput, error) {
 	}, nil
 }
 
+// weightedTotalScore 按固定权重计算总分。
 func weightedTotalScore(result model.ScoreResult) int {
 	return int(math.Round(
 		0.25*float64(result.Fluency) +

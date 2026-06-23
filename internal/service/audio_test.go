@@ -67,7 +67,7 @@ func TestAudioServiceRejectsInvalidAudioInputBeforeASR(t *testing.T) {
 		want  error
 	}{
 		{
-			name: "invalid session id",
+			name: "训练 ID 无效",
 			input: service.UploadAudioInput{
 				SessionID:   0,
 				Filename:    "answer.webm",

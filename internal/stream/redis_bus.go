@@ -10,6 +10,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
+// 事件流模块使用的事件类型和默认值。
 const (
 	defaultRedisBusBufferSize = 16
 	defaultRedisBusEventLimit = 200
@@ -25,6 +26,7 @@ type RedisBus struct {
 	eventLimit int64
 }
 
+// RedisBusOption 用于配置 Redis 事件总线。
 type RedisBusOption func(*RedisBus)
 
 // NewRedisBus 创建 Redis 事件总线。
@@ -131,6 +133,7 @@ func (b *RedisBus) Publish(event Event) error {
 	return err
 }
 
+// sessionEventsKey 构造 Redis 事件列表键。
 func sessionEventsKey(sessionID int) string {
 	return "session:" + strconv.Itoa(sessionID) + ":events"
 }

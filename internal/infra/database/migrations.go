@@ -11,16 +11,17 @@ import (
 	"strings"
 )
 
+// Migration 表示一个待执行的 SQL 迁移文件。
 type Migration struct {
 	Name string
 	SQL  string
 }
 
-// LoadMigrations reads .sql files from dir in lexical order.
+// LoadMigrations 按文件名字典序读取目录中的 .sql 迁移文件。
 func LoadMigrations(dir string) ([]Migration, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("read migrations dir %q: %w", dir, err)
+		return nil, fmt.Errorf("读取迁移目录 %q 失败：%w", dir, err)
 	}
 
 	names := make([]string, 0, len(entries))
@@ -32,14 +33,14 @@ func LoadMigrations(dir string) ([]Migration, error) {
 	}
 	sort.Strings(names)
 	if len(names) == 0 {
-		return nil, fmt.Errorf("no .sql migrations found in %q", dir)
+		return nil, fmt.Errorf("迁移目录 %q 中未找到 .sql 文件", dir)
 	}
 
 	migrations := make([]Migration, 0, len(names))
 	for _, name := range names {
 		content, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
-			return nil, fmt.Errorf("read migration %q: %w", name, err)
+			return nil, fmt.Errorf("读取迁移文件 %q 失败：%w", name, err)
 		}
 		migrations = append(migrations, Migration{
 			Name: name,
@@ -50,11 +51,11 @@ func LoadMigrations(dir string) ([]Migration, error) {
 	return migrations, nil
 }
 
-// ApplyMigrations executes all SQL statements in order. The current migrations
-// are idempotent through IF NOT EXISTS and ON DUPLICATE KEY UPDATE.
+// ApplyMigrations 按顺序执行所有 SQL 语句。
+// 当前迁移通过 IF NOT EXISTS 和 ON DUPLICATE KEY UPDATE 保持幂等。
 func ApplyMigrations(ctx context.Context, db *sql.DB, migrations []Migration) error {
 	if db == nil {
-		return errors.New("database connection is nil")
+		return errors.New("数据库连接不能为空")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -64,7 +65,7 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, migrations []Migration) er
 		statements := SplitSQLStatements(migration.SQL)
 		for index, statement := range statements {
 			if _, err := db.ExecContext(ctx, statement); err != nil {
-				return fmt.Errorf("apply migration %s statement %d failed: %w", migration.Name, index+1, err)
+				return fmt.Errorf("执行迁移 %s 的第 %d 条语句失败：%w", migration.Name, index+1, err)
 			}
 		}
 	}
@@ -72,8 +73,7 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, migrations []Migration) er
 	return nil
 }
 
-// SplitSQLStatements splits migration SQL into executable statements while
-// ignoring line comments and semicolons inside quoted strings.
+// SplitSQLStatements 将迁移 SQL 拆成可执行语句，并忽略行注释和字符串中的分号。
 func SplitSQLStatements(sqlText string) []string {
 	var statements []string
 	var current strings.Builder

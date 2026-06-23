@@ -4,6 +4,7 @@ import (
 	"strings"
 )
 
+// BuildSummaryPrompt 封装当前文件中的辅助处理逻辑。
 func BuildSummaryPrompt(input SummaryInput) []PromptMessage {
 	correctionsJSON := mustMarshalPromptJSON(input.Corrections)
 	scoreJSON := mustMarshalPromptJSON(input.Score)

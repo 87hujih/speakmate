@@ -11,17 +11,18 @@ import (
 	"speakmate/internal/stream"
 )
 
+// 服务层复用的哨兵错误。
 var (
 	// ErrInvalidReportRequest 表示报告请求参数非法。
-	ErrInvalidReportRequest = errors.New("invalid report request")
+	ErrInvalidReportRequest = errors.New("报告请求无效")
 	// ErrSessionNotFinished 表示 Session 尚未结束，不能生成报告。
-	ErrSessionNotFinished = errors.New("session not finished")
+	ErrSessionNotFinished = errors.New("训练尚未结束")
 	// ErrReportNotFound 表示业务层没有找到对应报告。
-	ErrReportNotFound = errors.New("report not found")
+	ErrReportNotFound = errors.New("未找到课后报告")
 	// ErrReportFeedbackMissing 表示报告生成缺少纠错或评分数据。
-	ErrReportFeedbackMissing = errors.New("report feedback missing")
+	ErrReportFeedbackMissing = errors.New("报告缺少反馈数据")
 	// ErrSummaryAgentFailed 表示 Summary Agent 生成报告内容失败。
-	ErrSummaryAgentFailed = errors.New("summary agent failed")
+	ErrSummaryAgentFailed = errors.New("报告摘要生成失败")
 )
 
 // ReportSessionReader 定义报告服务依赖的 Session 读取能力。
@@ -52,6 +53,7 @@ type ReportService struct {
 	now            func() time.Time
 }
 
+// ReportOption 用于配置 ReportService。
 type ReportOption func(*ReportService)
 
 // NewReportService 创建 Report 服务实例。
@@ -77,6 +79,7 @@ func NewReportService(
 	return service
 }
 
+// WithSummaryAgent 返回用于覆盖默认行为的配置选项。
 func WithSummaryAgent(summary agent.SummaryAgent) ReportOption {
 	return func(service *ReportService) {
 		if summary != nil {
@@ -85,6 +88,7 @@ func WithSummaryAgent(summary agent.SummaryAgent) ReportOption {
 	}
 }
 
+// WithReportNow 返回用于覆盖默认行为的配置选项。
 func WithReportNow(now func() time.Time) ReportOption {
 	return func(service *ReportService) {
 		if now != nil {
@@ -93,6 +97,7 @@ func WithReportNow(now func() time.Time) ReportOption {
 	}
 }
 
+// WithReportEventPublisher 返回用于覆盖默认行为的配置选项。
 func WithReportEventPublisher(publisher EventPublisher) ReportOption {
 	return func(service *ReportService) {
 		if publisher != nil {
@@ -202,6 +207,7 @@ func (s *ReportService) GetReport(sessionID int) (model.Report, error) {
 	return model.Report{}, err
 }
 
+// durationSeconds 计算训练持续秒数。
 func durationSeconds(session model.Session) int {
 	if session.EndedAt == nil || session.CreatedAt.IsZero() {
 		return 0
@@ -214,6 +220,7 @@ func durationSeconds(session model.Session) int {
 	return int(duration.Seconds())
 }
 
+// stringListOrEmpty 将空字符串数组替换为默认列表。
 func stringListOrEmpty(values []string) []string {
 	if values == nil {
 		return []string{}
@@ -222,6 +229,7 @@ func stringListOrEmpty(values []string) []string {
 	return append([]string(nil), values...)
 }
 
+// publishReportDone 发布报告生成完成事件。
 func (s *ReportService) publishReportDone(report model.Report) error {
 	if s.events == nil {
 		return nil
@@ -242,6 +250,7 @@ func (s *ReportService) publishReportDone(report model.Report) error {
 	return nil
 }
 
+// publishReportError 发布报告生成失败事件。
 func (s *ReportService) publishReportError(sessionID int, err error) error {
 	if s.events == nil {
 		return err
@@ -261,17 +270,18 @@ func (s *ReportService) publishReportError(sessionID int, err error) error {
 	return err
 }
 
+// reportErrorPayload 将报告错误转换为 SSE 错误载荷。
 func reportErrorPayload(err error) (string, string) {
 	switch {
 	case errors.Is(err, ErrSessionNotFound):
-		return "session_not_found", "session not found"
+		return "session_not_found", "未找到训练"
 	case errors.Is(err, ErrSessionNotFinished):
-		return "session_not_finished", "session not finished"
+		return "session_not_finished", "训练尚未结束"
 	case errors.Is(err, ErrReportFeedbackMissing):
-		return "report_feedback_missing", "report feedback missing"
+		return "report_feedback_missing", "报告缺少反馈数据"
 	case errors.Is(err, ErrSummaryAgentFailed):
-		return "summary_agent_failed", "summary agent failed"
+		return "summary_agent_failed", "报告摘要生成失败"
 	default:
-		return "report_generation_failed", "report generation failed"
+		return "report_generation_failed", "报告生成失败"
 	}
 }

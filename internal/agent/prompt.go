@@ -7,11 +7,13 @@ import (
 	"speakmate/internal/model"
 )
 
+// PromptMessage 表示发送给 LLM 的单条提示词消息。
 type PromptMessage struct {
 	Role    string
 	Content string
 }
 
+// BuildConversationPrompt 封装当前文件中的辅助处理逻辑。
 func BuildConversationPrompt(input ConversationInput) []PromptMessage {
 	currentStage := StageNameForTurn(input.Scenario.Stages, input.Session.TurnCount)
 	currentStageDescription := stageDescriptionForTurn(input.Scenario.Stages, input.Session.TurnCount)
@@ -31,6 +33,7 @@ func BuildConversationPrompt(input ConversationInput) []PromptMessage {
 		"Keep every reply to 1-3 sentences.",
 		"Prioritize a natural follow-up over frequent grammar correction.",
 		"Ask one natural follow-up that advances the user's training goal.",
+		"Do not prefix replies with stage labels, brackets, speaker names, or metadata.",
 		"Scenario: " + valueOrFallback(input.Scenario.Name, input.Scenario.Code, "general practice"),
 		"AI role: " + role,
 		"Training goal: " + userGoal,
@@ -46,9 +49,6 @@ func BuildConversationPrompt(input ConversationInput) []PromptMessage {
 		content := strings.TrimSpace(historyMessage.Content)
 		if content == "" {
 			continue
-		}
-		if historyMessage.Stage != "" {
-			content = fmt.Sprintf("[%s] %s", historyMessage.Stage, content)
 		}
 		messages = append(messages, PromptMessage{
 			Role:    promptRole(historyMessage.Role),
@@ -69,6 +69,7 @@ func BuildConversationPrompt(input ConversationInput) []PromptMessage {
 	return messages
 }
 
+// promptRole 将消息角色转换为提示词中的说话人标签。
 func promptRole(role model.MessageRole) string {
 	switch role {
 	case model.MessageRoleAI:
@@ -80,6 +81,7 @@ func promptRole(role model.MessageRole) string {
 	}
 }
 
+// valueOrFallback 返回有效字符串或默认兜底值。
 func valueOrFallback(values ...string) string {
 	for _, value := range values {
 		value = strings.TrimSpace(value)

@@ -14,25 +14,26 @@ import (
 	"speakmate/internal/stream"
 )
 
+// 服务层复用的哨兵错误。
 var (
 	// ErrInvalidSessionRequest 表示创建 Session 的业务参数非法。
-	ErrInvalidSessionRequest = errors.New("invalid session request")
+	ErrInvalidSessionRequest = errors.New("训练请求无效")
 	// ErrSessionNotFound 表示业务层没有找到对应 Session。
-	ErrSessionNotFound = errors.New("session not found")
+	ErrSessionNotFound = errors.New("未找到训练")
 	// ErrSessionAlreadyFinished 表示 Session 已经结束，不能执行运行中操作。
-	ErrSessionAlreadyFinished = errors.New("session already finished")
+	ErrSessionAlreadyFinished = errors.New("训练已结束")
 	// ErrInvalidMessageRequest 表示发送消息的业务参数非法。
-	ErrInvalidMessageRequest = errors.New("invalid message request")
+	ErrInvalidMessageRequest = errors.New("消息请求无效")
 	// ErrMessageContentRequired 表示消息内容不能为空。
-	ErrMessageContentRequired = errors.New("message content is required")
+	ErrMessageContentRequired = errors.New("消息内容不能为空")
 	// ErrConversationAgentFailed 表示对话 Agent 生成回复失败。
-	ErrConversationAgentFailed = errors.New("conversation agent failed")
+	ErrConversationAgentFailed = errors.New("对话 AI 回复失败")
 	// ErrFeedbackAgentFailed 表示反馈 Agent 生成纠错或评分失败。
-	ErrFeedbackAgentFailed = errors.New("feedback agent failed")
+	ErrFeedbackAgentFailed = errors.New("反馈 AI 生成失败")
 	// ErrStateStoreFailed 表示短期状态写入失败。
-	ErrStateStoreFailed = errors.New("session state store failed")
+	ErrStateStoreFailed = errors.New("训练短期状态写入失败")
 	// ErrEventPublishFailed 表示 SSE/WebSocket 事件发布失败。
-	ErrEventPublishFailed = errors.New("stream event publish failed")
+	ErrEventPublishFailed = errors.New("实时事件发布失败")
 )
 
 // ScenarioReader 定义 Session 服务依赖的场景读取能力。
@@ -67,6 +68,7 @@ type SessionService struct {
 	now              func() time.Time
 }
 
+// SessionOption 用于配置 SessionService。
 type SessionOption func(*SessionService)
 
 // NewSessionService 创建 Session 服务实例。
@@ -87,6 +89,7 @@ func NewSessionService(scenarioReader ScenarioReader, repo SessionRepository, op
 	return service
 }
 
+// WithConversationAgent 返回用于覆盖默认行为的配置选项。
 func WithConversationAgent(conversation agent.ConversationAgent) SessionOption {
 	return func(service *SessionService) {
 		if conversation != nil {
@@ -95,6 +98,7 @@ func WithConversationAgent(conversation agent.ConversationAgent) SessionOption {
 	}
 }
 
+// WithFeedbackRepository 返回用于覆盖默认行为的配置选项。
 func WithFeedbackRepository(feedbackRepo FeedbackRepository) SessionOption {
 	return func(service *SessionService) {
 		if feedbackRepo != nil {
@@ -103,6 +107,7 @@ func WithFeedbackRepository(feedbackRepo FeedbackRepository) SessionOption {
 	}
 }
 
+// WithEventPublisher 返回用于覆盖默认行为的配置选项。
 func WithEventPublisher(publisher EventPublisher) SessionOption {
 	return func(service *SessionService) {
 		if publisher != nil {
@@ -111,6 +116,7 @@ func WithEventPublisher(publisher EventPublisher) SessionOption {
 	}
 }
 
+// WithStateStore 返回用于覆盖默认行为的配置选项。
 func WithStateStore(store state.SessionStateStore) SessionOption {
 	return func(service *SessionService) {
 		if store != nil {
@@ -119,6 +125,7 @@ func WithStateStore(store state.SessionStateStore) SessionOption {
 	}
 }
 
+// WithCorrectionAgent 返回用于覆盖默认行为的配置选项。
 func WithCorrectionAgent(correction agent.CorrectionAgent) SessionOption {
 	return func(service *SessionService) {
 		if correction != nil {
@@ -127,6 +134,7 @@ func WithCorrectionAgent(correction agent.CorrectionAgent) SessionOption {
 	}
 }
 
+// WithScoringAgent 返回用于覆盖默认行为的配置选项。
 func WithScoringAgent(scoring agent.ScoringAgent) SessionOption {
 	return func(service *SessionService) {
 		if scoring != nil {
@@ -135,6 +143,7 @@ func WithScoringAgent(scoring agent.ScoringAgent) SessionOption {
 	}
 }
 
+// WithFeedbackFailOpen 返回用于覆盖默认行为的配置选项。
 func WithFeedbackFailOpen(failOpen bool) SessionOption {
 	return func(service *SessionService) {
 		service.feedbackFailOpen = failOpen
@@ -360,7 +369,7 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 		return SendMessageResult{}, err
 	}
 	if len(updated.Messages) < 2 {
-		return SendMessageResult{}, errors.New("append turn returned incomplete messages")
+		return SendMessageResult{}, errors.New("追加对话轮次后返回的消息不完整")
 	}
 
 	messages := updated.Messages
@@ -409,6 +418,7 @@ func (s *SessionService) SendMessage(input SendMessageInput) (SendMessageResult,
 	}, nil
 }
 
+// generateConversationReply 生成 AI 回复并发布流式事件。
 func (s *SessionService) generateConversationReply(ctx context.Context, sessionID int, conversation agent.ConversationAgent, input agent.ConversationInput) (agent.ConversationOutput, bool, error) {
 	if streamingConversation, ok := conversation.(agent.StreamingConversationAgent); ok {
 		reply, err := streamingConversation.StreamReply(ctx, input, func(delta agent.ConversationDelta) error {
@@ -436,6 +446,7 @@ func (s *SessionService) generateConversationReply(ctx context.Context, sessionI
 	return reply, false, err
 }
 
+// generateFeedback 为用户消息生成纠错和评分。
 func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Scenario, session model.Session, userMessage model.Message) (CorrectionSummary, ScoreSummary, error) {
 	if s.feedbackRepo == nil {
 		return CorrectionSummary{}, ScoreSummary{}, nil
@@ -452,11 +463,11 @@ func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Sc
 		UserMessage: userMessage,
 	})
 	if err != nil {
-		return s.handleFeedbackFailure(CorrectionSummary{}, ScoreSummary{}, "correction agent failed", err)
+		return s.handleFeedbackFailure(CorrectionSummary{}, ScoreSummary{}, "纠错 Agent 失败", err)
 	}
 	correction := normalizeCorrectionResult(correctionOutput.Result, session.ID, userMessage)
 	if err := s.feedbackRepo.SaveCorrection(correction); err != nil {
-		return s.handleFeedbackFailure(CorrectionSummary{}, ScoreSummary{}, "save correction failed", err)
+		return s.handleFeedbackFailure(CorrectionSummary{}, ScoreSummary{}, "保存纠错结果失败", err)
 	}
 	if err := s.appendCorrectionState(ctx, correction); err != nil {
 		return CorrectionSummary{}, ScoreSummary{}, err
@@ -486,11 +497,11 @@ func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Sc
 		Correction:  correction,
 	})
 	if err != nil {
-		return s.handleFeedbackFailure(correctionSummaryFromResult(correction), ScoreSummary{}, "scoring agent failed", err)
+		return s.handleFeedbackFailure(correctionSummaryFromResult(correction), ScoreSummary{}, "评分 Agent 失败", err)
 	}
 	score := normalizeScoreResult(scoreOutput.Result, session.ID, userMessage, correction)
 	if err := s.feedbackRepo.SaveScore(score); err != nil {
-		return s.handleFeedbackFailure(correctionSummary, ScoreSummary{}, "save score failed", err)
+		return s.handleFeedbackFailure(correctionSummary, ScoreSummary{}, "保存评分结果失败", err)
 	}
 	if err := s.savePartialScoreState(ctx, score); err != nil {
 		return CorrectionSummary{}, ScoreSummary{}, err
@@ -512,14 +523,16 @@ func (s *SessionService) generateFeedback(ctx context.Context, scenario model.Sc
 	return correctionSummary, scoreSummary, nil
 }
 
+// handleFeedbackFailure 根据 fail-open 策略处理反馈生成失败。
 func (s *SessionService) handleFeedbackFailure(correctionSummary CorrectionSummary, scoreSummary ScoreSummary, step string, err error) (CorrectionSummary, ScoreSummary, error) {
 	if s.feedbackFailOpen {
 		return correctionSummary, scoreSummary, nil
 	}
 
-	return CorrectionSummary{}, ScoreSummary{}, fmt.Errorf("%w: %s: %v", ErrFeedbackAgentFailed, step, err)
+	return CorrectionSummary{}, ScoreSummary{}, fmt.Errorf("%w：%s：%v", ErrFeedbackAgentFailed, step, err)
 }
 
+// normalizeCorrectionResult 归一化纠错结果的消息和 Session 归属。
 func normalizeCorrectionResult(correction model.CorrectionResult, sessionID int, userMessage model.Message) model.CorrectionResult {
 	if correction.MessageID == 0 {
 		correction.MessageID = userMessage.ID
@@ -543,6 +556,7 @@ func normalizeCorrectionResult(correction model.CorrectionResult, sessionID int,
 	return correction
 }
 
+// normalizeScoreResult 归一化评分结果的消息和 Session 归属。
 func normalizeScoreResult(score model.ScoreResult, sessionID int, userMessage model.Message, correction model.CorrectionResult) model.ScoreResult {
 	if score.MessageID == 0 {
 		score.MessageID = correction.MessageID
@@ -560,6 +574,7 @@ func normalizeScoreResult(score model.ScoreResult, sessionID int, userMessage mo
 	return score
 }
 
+// correctionSummaryFromResult 从纠错结果生成摘要。
 func correctionSummaryFromResult(correction model.CorrectionResult) CorrectionSummary {
 	errorCount := len(correction.Errors)
 	return CorrectionSummary{
@@ -568,6 +583,7 @@ func correctionSummaryFromResult(correction model.CorrectionResult) CorrectionSu
 	}
 }
 
+// scoreSummaryFromResult 从评分结果生成摘要。
 func scoreSummaryFromResult(score model.ScoreResult) ScoreSummary {
 	return ScoreSummary{
 		TotalScore: score.TotalScore,
@@ -576,16 +592,18 @@ func scoreSummaryFromResult(score model.ScoreResult) ScoreSummary {
 	}
 }
 
+// saveMessageState 保存消息快照到短期状态存储。
 func (s *SessionService) saveMessageState(ctx context.Context, session model.Session, stage string) error {
 	if s.stateStore == nil {
 		return nil
 	}
 	if err := s.stateStore.SaveMessageSnapshot(ctx, session.ID, session.Messages); err != nil {
-		return fmt.Errorf("%w: save message snapshot: %v", ErrStateStoreFailed, err)
+		return fmt.Errorf("%w: 保存消息快照失败：%v", ErrStateStoreFailed, err)
 	}
 	return s.saveSessionState(ctx, session, stage)
 }
 
+// saveSessionState 保存 Session 快照到短期状态存储。
 func (s *SessionService) saveSessionState(ctx context.Context, session model.Session, stage string) error {
 	if s.stateStore == nil {
 		return nil
@@ -606,34 +624,37 @@ func (s *SessionService) saveSessionState(ctx context.Context, session model.Ses
 		UpdatedAt:  s.now().UTC(),
 	})
 	if err != nil {
-		return fmt.Errorf("%w: save session state: %v", ErrStateStoreFailed, err)
+		return fmt.Errorf("%w: 保存 Session 状态失败：%v", ErrStateStoreFailed, err)
 	}
 
 	return nil
 }
 
+// appendCorrectionState 将纠错结果追加到短期状态存储。
 func (s *SessionService) appendCorrectionState(ctx context.Context, correction model.CorrectionResult) error {
 	if s.stateStore == nil {
 		return nil
 	}
 	if err := s.stateStore.AppendCorrection(ctx, correction); err != nil {
-		return fmt.Errorf("%w: save correction state: %v", ErrStateStoreFailed, err)
+		return fmt.Errorf("%w: 保存纠错状态失败：%v", ErrStateStoreFailed, err)
 	}
 
 	return nil
 }
 
+// savePartialScoreState 保存当前评分到短期状态存储。
 func (s *SessionService) savePartialScoreState(ctx context.Context, score model.ScoreResult) error {
 	if s.stateStore == nil {
 		return nil
 	}
 	if err := s.stateStore.SavePartialScore(ctx, score); err != nil {
-		return fmt.Errorf("%w: save partial score: %v", ErrStateStoreFailed, err)
+		return fmt.Errorf("%w: 保存当前评分失败：%v", ErrStateStoreFailed, err)
 	}
 
 	return nil
 }
 
+// currentSessionStage 返回 Session 当前训练阶段。
 func currentSessionStage(session model.Session) string {
 	if len(session.Messages) == 0 {
 		return ""
@@ -642,6 +663,7 @@ func currentSessionStage(session model.Session) string {
 	return session.Messages[len(session.Messages)-1].Stage
 }
 
+// publishStreamEvent 发布训练流式业务事件。
 func (s *SessionService) publishStreamEvent(event stream.Event) error {
 	if s.events == nil {
 		return nil
@@ -656,6 +678,7 @@ func (s *SessionService) publishStreamEvent(event stream.Event) error {
 	return nil
 }
 
+// publishSessionError 发布训练消息链路错误事件。
 func (s *SessionService) publishSessionError(sessionID int, err error) {
 	if s.events == nil {
 		return
@@ -672,17 +695,18 @@ func (s *SessionService) publishSessionError(sessionID int, err error) {
 	})
 }
 
+// sessionErrorPayload 将 Session 错误转换为 SSE 错误载荷。
 func sessionErrorPayload(err error) (string, string) {
 	switch {
 	case errors.Is(err, ErrConversationAgentFailed):
-		return "conversation_agent_failed", "conversation agent failed"
+		return "conversation_agent_failed", "对话 AI 回复失败"
 	case errors.Is(err, ErrFeedbackAgentFailed):
-		return "feedback_agent_failed", "feedback agent failed"
+		return "feedback_agent_failed", "反馈 AI 生成失败"
 	case errors.Is(err, ErrSessionNotFound):
-		return "session_not_found", "session not found"
+		return "session_not_found", "未找到训练"
 	case errors.Is(err, ErrSessionAlreadyFinished):
-		return "session_already_finished", "session already finished"
+		return "session_already_finished", "训练已结束"
 	default:
-		return "message_send_failed", "message send failed"
+		return "message_send_failed", "消息发送失败"
 	}
 }

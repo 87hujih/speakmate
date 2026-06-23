@@ -5,9 +5,10 @@ import (
 	"errors"
 )
 
+// Agent 层复用的哨兵错误。
 var (
 	// ErrASRAudioRequired 表示 ASR 输入缺少音频内容。
-	ErrASRAudioRequired = errors.New("asr audio required")
+	ErrASRAudioRequired = errors.New("ASR 音频不能为空")
 )
 
 // ASRClient 定义音频转文本能力。

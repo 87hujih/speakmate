@@ -8,7 +8,7 @@ import (
 )
 
 // ErrScenarioNotFound 表示业务层没有找到对应场景。
-var ErrScenarioNotFound = errors.New("scenario not found")
+var ErrScenarioNotFound = errors.New("未找到训练场景")
 
 // ScenarioRepository 定义场景服务依赖的数据访问能力。
 type ScenarioRepository interface {

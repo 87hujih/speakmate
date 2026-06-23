@@ -97,7 +97,7 @@ func TestReportHandlerRejectsInvalidSessionID(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertReportErrorResponse(t, rec, http.StatusBadRequest, 5001, "invalid report request")
+	assertReportErrorResponse(t, rec, http.StatusBadRequest, 5001, "报告请求无效")
 	if reportService.callCount != 0 {
 		t.Fatalf("call count = %d, want 0", reportService.callCount)
 	}
@@ -111,12 +111,12 @@ func TestReportHandlerMapsServiceErrors(t *testing.T) {
 		wantCode   int
 		wantMsg    string
 	}{
-		{name: "session not found", err: service.ErrSessionNotFound, wantStatus: http.StatusNotFound, wantCode: 2003, wantMsg: "session not found"},
-		{name: "session not finished", err: service.ErrSessionNotFinished, wantStatus: http.StatusConflict, wantCode: 5002, wantMsg: "session not finished"},
-		{name: "report not found", err: service.ErrReportNotFound, wantStatus: http.StatusNotFound, wantCode: 5003, wantMsg: "report not found"},
-		{name: "feedback missing", err: service.ErrReportFeedbackMissing, wantStatus: http.StatusConflict, wantCode: 5004, wantMsg: "report feedback missing"},
-		{name: "summary failed", err: service.ErrSummaryAgentFailed, wantStatus: http.StatusBadGateway, wantCode: 5005, wantMsg: "summary agent failed"},
-		{name: "internal error", err: errors.New("store failed"), wantStatus: http.StatusInternalServerError, wantCode: http.StatusInternalServerError, wantMsg: "internal server error"},
+		{name: "未找到训练", err: service.ErrSessionNotFound, wantStatus: http.StatusNotFound, wantCode: 2003, wantMsg: "未找到训练"},
+		{name: "训练尚未结束", err: service.ErrSessionNotFinished, wantStatus: http.StatusConflict, wantCode: 5002, wantMsg: "训练尚未结束"},
+		{name: "未找到课后报告", err: service.ErrReportNotFound, wantStatus: http.StatusNotFound, wantCode: 5003, wantMsg: "未找到课后报告"},
+		{name: "feedback missing", err: service.ErrReportFeedbackMissing, wantStatus: http.StatusConflict, wantCode: 5004, wantMsg: "报告缺少反馈数据"},
+		{name: "summary failed", err: service.ErrSummaryAgentFailed, wantStatus: http.StatusBadGateway, wantCode: 5005, wantMsg: "报告摘要生成失败"},
+		{name: "internal error", err: errors.New("store failed"), wantStatus: http.StatusInternalServerError, wantCode: http.StatusInternalServerError, wantMsg: "服务器内部错误"},
 	}
 
 	for _, tt := range tests {

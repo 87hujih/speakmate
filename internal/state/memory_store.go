@@ -8,6 +8,7 @@ import (
 	"speakmate/internal/model"
 )
 
+// memoryEntry 保存内存短期状态及过期时间。
 type memoryEntry[T any] struct {
 	value     T
 	expiresAt time.Time
@@ -27,6 +28,7 @@ type MemorySessionStateStore struct {
 	connections map[int]memoryEntry[WebSocketConnectionState]
 }
 
+// MemoryStoreOption 用于配置内存短期状态存储。
 type MemoryStoreOption func(*MemorySessionStateStore)
 
 // NewMemorySessionStateStore 创建内存短期状态存储。
@@ -84,6 +86,7 @@ func WithMemoryWebSocketTTL(ttl time.Duration) MemoryStoreOption {
 	}
 }
 
+// SaveMessageSnapshot 封装当前文件中的辅助处理逻辑。
 func (s *MemorySessionStateStore) SaveMessageSnapshot(ctx context.Context, sessionID int, messages []model.Message) error {
 	if sessionID <= 0 {
 		return ErrInvalidState
@@ -98,6 +101,7 @@ func (s *MemorySessionStateStore) SaveMessageSnapshot(ctx context.Context, sessi
 	return nil
 }
 
+// GetMessageSnapshot 封装当前文件中的辅助处理逻辑。
 func (s *MemorySessionStateStore) GetMessageSnapshot(ctx context.Context, sessionID int) ([]model.Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -110,6 +114,7 @@ func (s *MemorySessionStateStore) GetMessageSnapshot(ctx context.Context, sessio
 	return cloneMessages(entry.value), nil
 }
 
+// SaveSessionState 封装当前文件中的辅助处理逻辑。
 func (s *MemorySessionStateStore) SaveSessionState(ctx context.Context, state SessionState) error {
 	if state.SessionID <= 0 {
 		return ErrInvalidState
@@ -127,6 +132,7 @@ func (s *MemorySessionStateStore) SaveSessionState(ctx context.Context, state Se
 	return nil
 }
 
+// GetSessionState 封装当前文件中的辅助处理逻辑。
 func (s *MemorySessionStateStore) GetSessionState(ctx context.Context, sessionID int) (SessionState, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -139,6 +145,7 @@ func (s *MemorySessionStateStore) GetSessionState(ctx context.Context, sessionID
 	return entry.value, nil
 }
 
+// SavePartialScore 封装当前文件中的辅助处理逻辑。
 func (s *MemorySessionStateStore) SavePartialScore(ctx context.Context, score model.ScoreResult) error {
 	if score.SessionID <= 0 {
 		return ErrInvalidState
@@ -153,6 +160,7 @@ func (s *MemorySessionStateStore) SavePartialScore(ctx context.Context, score mo
 	return nil
 }
 
+// GetPartialScore 封装当前文件中的辅助处理逻辑。
 func (s *MemorySessionStateStore) GetPartialScore(ctx context.Context, sessionID int) (model.ScoreResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -165,6 +173,7 @@ func (s *MemorySessionStateStore) GetPartialScore(ctx context.Context, sessionID
 	return entry.value, nil
 }
 
+// AppendCorrection 封装当前文件中的辅助处理逻辑。
 func (s *MemorySessionStateStore) AppendCorrection(ctx context.Context, correction model.CorrectionResult) error {
 	if correction.SessionID <= 0 {
 		return ErrInvalidState
@@ -184,6 +193,7 @@ func (s *MemorySessionStateStore) AppendCorrection(ctx context.Context, correcti
 	return nil
 }
 
+// ListCorrections 封装当前文件中的辅助处理逻辑。
 func (s *MemorySessionStateStore) ListCorrections(ctx context.Context, sessionID int) ([]model.CorrectionResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -196,6 +206,7 @@ func (s *MemorySessionStateStore) ListCorrections(ctx context.Context, sessionID
 	return cloneCorrections(entry.value), nil
 }
 
+// SaveWebSocketConnection 封装当前文件中的辅助处理逻辑。
 func (s *MemorySessionStateStore) SaveWebSocketConnection(ctx context.Context, connection WebSocketConnectionState) error {
 	if connection.SessionID <= 0 {
 		return ErrInvalidState
@@ -213,6 +224,7 @@ func (s *MemorySessionStateStore) SaveWebSocketConnection(ctx context.Context, c
 	return nil
 }
 
+// GetWebSocketConnection 封装当前文件中的辅助处理逻辑。
 func (s *MemorySessionStateStore) GetWebSocketConnection(ctx context.Context, sessionID int) (WebSocketConnectionState, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -225,14 +237,17 @@ func (s *MemorySessionStateStore) GetWebSocketConnection(ctx context.Context, se
 	return entry.value, nil
 }
 
+// expiresAt 根据 TTL 计算过期时间。
 func (s *MemorySessionStateStore) expiresAt(ttl time.Duration) time.Time {
 	return s.now().UTC().Add(ttl)
 }
 
+// entryExpired 判断内存状态条目是否已过期。
 func (s *MemorySessionStateStore) entryExpired(expiresAt time.Time) bool {
 	return !expiresAt.IsZero() && !s.now().UTC().Before(expiresAt)
 }
 
+// cloneMessages 复制消息列表，避免外部修改状态缓存。
 func cloneMessages(messages []model.Message) []model.Message {
 	if messages == nil {
 		return nil
@@ -243,6 +258,7 @@ func cloneMessages(messages []model.Message) []model.Message {
 	return cloned
 }
 
+// cloneCorrections 复制纠错列表，避免外部修改状态缓存。
 func cloneCorrections(corrections []model.CorrectionResult) []model.CorrectionResult {
 	if corrections == nil {
 		return nil
@@ -255,6 +271,7 @@ func cloneCorrections(corrections []model.CorrectionResult) []model.CorrectionRe
 	return cloned
 }
 
+// cloneCorrection 复制单条纠错结果。
 func cloneCorrection(correction model.CorrectionResult) model.CorrectionResult {
 	if correction.Errors != nil {
 		correction.Errors = append([]model.CorrectionError(nil), correction.Errors...)

@@ -13,6 +13,7 @@ import (
 	"speakmate/internal/stream"
 )
 
+// 当前模块使用的业务错误码和事件常量。
 const (
 	streamUnavailableCode = 7001
 	defaultHeartbeat      = 15 * time.Second
@@ -29,6 +30,7 @@ type StreamHandler struct {
 	heartbeatInterval time.Duration
 }
 
+// StreamOption 用于配置 SSE StreamHandler。
 type StreamOption func(*StreamHandler)
 
 // NewStreamHandler 创建 SSE Handler。
@@ -61,7 +63,7 @@ func (h *StreamHandler) Stream(c *gin.Context) {
 		return
 	}
 	if h.subscriber == nil {
-		response.Error(c, http.StatusServiceUnavailable, streamUnavailableCode, "stream unavailable")
+		response.Error(c, http.StatusServiceUnavailable, streamUnavailableCode, "实时事件流不可用")
 		return
 	}
 
@@ -74,7 +76,7 @@ func (h *StreamHandler) Stream(c *gin.Context) {
 
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
-		response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "streaming unsupported")
+		response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "当前连接不支持流式输出")
 		return
 	}
 
@@ -108,15 +110,17 @@ func (h *StreamHandler) Stream(c *gin.Context) {
 	}
 }
 
+// writeStreamError 将 SSE 订阅错误转换为统一 HTTP 响应。
 func writeStreamError(c *gin.Context, err error) {
 	if errors.Is(err, stream.ErrBusClosed) {
-		response.Error(c, http.StatusServiceUnavailable, streamUnavailableCode, "stream unavailable")
+		response.Error(c, http.StatusServiceUnavailable, streamUnavailableCode, "实时事件流不可用")
 		return
 	}
 
-	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "internal server error")
+	response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "服务器内部错误")
 }
 
+// writeSSEEvent 写出单条 SSE 业务事件。
 func writeSSEEvent(writer io.Writer, flusher http.Flusher, event stream.Event) error {
 	if event.CreatedAt.IsZero() {
 		event.CreatedAt = time.Now().UTC()
@@ -136,6 +140,7 @@ func writeSSEEvent(writer io.Writer, flusher http.Flusher, event stream.Event) e
 	return nil
 }
 
+// writeSSEHeartbeat 写出 SSE 心跳事件。
 func writeSSEHeartbeat(writer io.Writer, flusher http.Flusher) error {
 	if _, err := io.WriteString(writer, ": ping\n\n"); err != nil {
 		return err

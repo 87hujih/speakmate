@@ -8,9 +8,10 @@ import (
 
 const defaultBufferSize = 16
 
+// 当前模块复用的变量。
 var (
 	// ErrBusClosed 表示事件总线已经关闭，不能继续订阅或发布。
-	ErrBusClosed = errors.New("stream bus closed")
+	ErrBusClosed = errors.New("事件总线已关闭")
 )
 
 // Bus 是按 session_id 隔离的内存事件总线。
@@ -94,6 +95,7 @@ func (b *Bus) Close() {
 	}
 }
 
+// unsubscribe 从内存事件总线移除订阅者。
 func (b *Bus) unsubscribe(sessionID int, events chan Event) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

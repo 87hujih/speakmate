@@ -539,7 +539,7 @@ func TestSessionServicePublishesErrorWhenStreamingConversationFails(t *testing.T
 	if !ok {
 		t.Fatalf("payload type = %T, want ErrorPayload", event.Payload)
 	}
-	if payload.Code != "conversation_agent_failed" || payload.Message != "conversation agent failed" {
+	if payload.Code != "conversation_agent_failed" || payload.Message != "对话 AI 回复失败" {
 		t.Fatalf("payload = %+v, want conversation failure", payload)
 	}
 
@@ -722,7 +722,7 @@ func TestSessionServicePublishesErrorEventWhenFeedbackFails(t *testing.T) {
 	if !ok {
 		t.Fatalf("payload type = %T, want ErrorPayload", event.Payload)
 	}
-	if payload.Code != "feedback_agent_failed" || payload.Message != "feedback agent failed" {
+	if payload.Code != "feedback_agent_failed" || payload.Message != "反馈 AI 生成失败" {
 		t.Fatalf("payload = %+v, want feedback failure", payload)
 	}
 }

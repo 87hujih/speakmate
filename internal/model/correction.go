@@ -3,6 +3,7 @@ package model
 // CorrectionErrorType 表示纠错问题分类。
 type CorrectionErrorType string
 
+// 当前模型使用的枚举常量。
 const (
 	// CorrectionErrorTypeGrammar 表示语法错误。
 	CorrectionErrorTypeGrammar CorrectionErrorType = "grammar"

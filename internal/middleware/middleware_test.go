@@ -40,8 +40,8 @@ func TestBodySizeLimitRejectsOversizedKnownLengthRequests(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("response is not valid JSON: %v", err)
 	}
-	if body.Code != 9003 || body.Message != "request body too large" {
-		t.Fatalf("body = %#v, want code 9003 request body too large", body)
+	if body.Code != 9003 || body.Message != "请求体过大" {
+		t.Fatalf("body = %#v, want code 9003 请求体过大", body)
 	}
 }
 
@@ -82,8 +82,8 @@ func TestRateLimitRejectsRequestsBeyondWindowLimit(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("response is not valid JSON: %v", err)
 	}
-	if body.Code != 9004 || body.Message != "rate limit exceeded" {
-		t.Fatalf("body = %#v, want code 9004 rate limit exceeded", body)
+	if body.Code != 9004 || body.Message != "请求过于频繁" {
+		t.Fatalf("body = %#v, want code 9004 请求过于频繁", body)
 	}
 }
 
@@ -167,8 +167,8 @@ func TestRecoverMiddlewareReturnsUnifiedErrorAndRedactsPanic(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("response is not valid JSON: %v", err)
 	}
-	if body.Code != 9001 || body.Message != "internal server error" {
-		t.Fatalf("body = %#v, want code 9001 internal server error", body)
+	if body.Code != 9001 || body.Message != "服务器内部错误" {
+		t.Fatalf("body = %#v, want code 9001 服务器内部错误", body)
 	}
 
 	logLine := output.String()

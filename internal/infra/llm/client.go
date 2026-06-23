@@ -15,33 +15,40 @@ import (
 	"speakmate/internal/config"
 )
 
+// Client 定义非流式 LLM 聊天补全能力。
 type Client interface {
 	CreateChatCompletion(ctx context.Context, request ChatRequest) (ChatResponse, error)
 }
 
+// StreamingClient 定义流式 LLM 聊天补全能力。
 type StreamingClient interface {
 	CreateChatCompletionStream(ctx context.Context, request ChatRequest, onDelta func(ChatStreamDelta) error) (ChatResponse, error)
 }
 
+// Message 表示发送给 OpenAI-compatible 接口的一条消息。
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
+// ChatRequest 是 OpenAI-compatible 聊天补全请求。
 type ChatRequest struct {
 	Messages []Message
 }
 
+// ChatResponse 是聊天补全的聚合响应。
 type ChatResponse struct {
 	Content string
 	Raw     string
 }
 
+// ChatStreamDelta 表示流式聊天补全的单个文本片段。
 type ChatStreamDelta struct {
 	Content string
 	Raw     string
 }
 
+// OpenAICompatibleClient 封装 OpenAI-compatible HTTP 调用。
 type OpenAICompatibleClient struct {
 	baseURL    string
 	apiKey     string
@@ -49,9 +56,10 @@ type OpenAICompatibleClient struct {
 	httpClient *http.Client
 }
 
+// NewOpenAICompatibleClient 创建并返回对应组件实例。
 func NewOpenAICompatibleClient(cfg config.LLMConfig) (*OpenAICompatibleClient, error) {
 	if !cfg.HasRequiredFields() {
-		return nil, errors.New("llm base url, api key, and model are required")
+		return nil, errors.New("LLM BaseURL、API Key 和模型不能为空")
 	}
 
 	timeoutSeconds := cfg.TimeoutSeconds
@@ -69,6 +77,7 @@ func NewOpenAICompatibleClient(cfg config.LLMConfig) (*OpenAICompatibleClient, e
 	}, nil
 }
 
+// CreateChatCompletion 封装当前文件中的辅助处理逻辑。
 func (c *OpenAICompatibleClient) CreateChatCompletion(ctx context.Context, request ChatRequest) (ChatResponse, error) {
 	body, err := json.Marshal(openAIChatRequest{
 		Model:       c.model,
@@ -102,7 +111,7 @@ func (c *OpenAICompatibleClient) CreateChatCompletion(ctx context.Context, reque
 		return ChatResponse{}, err
 	}
 	if httpResponse.StatusCode < http.StatusOK || httpResponse.StatusCode >= http.StatusMultipleChoices {
-		return ChatResponse{}, fmt.Errorf("llm request failed with status %d: %s", httpResponse.StatusCode, strings.TrimSpace(string(raw)))
+		return ChatResponse{}, fmt.Errorf("LLM 请求失败，状态码 %d：%s", httpResponse.StatusCode, strings.TrimSpace(string(raw)))
 	}
 
 	var parsed openAIChatResponse
@@ -110,12 +119,12 @@ func (c *OpenAICompatibleClient) CreateChatCompletion(ctx context.Context, reque
 		return ChatResponse{}, err
 	}
 	if len(parsed.Choices) == 0 {
-		return ChatResponse{}, errors.New("llm response has no choices")
+		return ChatResponse{}, errors.New("LLM 响应缺少 choices")
 	}
 
 	content := strings.TrimSpace(parsed.Choices[0].Message.Content)
 	if content == "" {
-		return ChatResponse{}, errors.New("llm response content is empty")
+		return ChatResponse{}, errors.New("LLM 响应内容为空")
 	}
 
 	return ChatResponse{
@@ -124,6 +133,7 @@ func (c *OpenAICompatibleClient) CreateChatCompletion(ctx context.Context, reque
 	}, nil
 }
 
+// CreateChatCompletionStream 封装当前文件中的辅助处理逻辑。
 func (c *OpenAICompatibleClient) CreateChatCompletionStream(ctx context.Context, request ChatRequest, onDelta func(ChatStreamDelta) error) (ChatResponse, error) {
 	if onDelta == nil {
 		onDelta = func(ChatStreamDelta) error { return nil }
@@ -164,7 +174,7 @@ func (c *OpenAICompatibleClient) CreateChatCompletionStream(ctx context.Context,
 			return ChatResponse{}, readErr
 		}
 
-		return ChatResponse{}, fmt.Errorf("llm stream request failed with status %d: %s", httpResponse.StatusCode, strings.TrimSpace(string(raw)))
+		return ChatResponse{}, fmt.Errorf("LLM 流式请求失败，状态码 %d：%s", httpResponse.StatusCode, strings.TrimSpace(string(raw)))
 	}
 
 	var content strings.Builder
@@ -192,7 +202,7 @@ func (c *OpenAICompatibleClient) CreateChatCompletionStream(ctx context.Context,
 
 	reply := strings.TrimSpace(content.String())
 	if reply == "" {
-		return ChatResponse{}, errors.New("llm response content is empty")
+		return ChatResponse{}, errors.New("LLM 响应内容为空")
 	}
 
 	return ChatResponse{
@@ -201,6 +211,7 @@ func (c *OpenAICompatibleClient) CreateChatCompletionStream(ctx context.Context,
 	}, nil
 }
 
+// handleOpenAIStreamLine 解析 OpenAI-compatible 流式响应行。
 func handleOpenAIStreamLine(line string, content *strings.Builder, raw *strings.Builder, onDelta func(ChatStreamDelta) error) (bool, error) {
 	if line == "" || strings.HasPrefix(line, ":") {
 		return false, nil
@@ -239,6 +250,7 @@ func handleOpenAIStreamLine(line string, content *strings.Builder, raw *strings.
 	return false, nil
 }
 
+// openAIChatRequest 是 OpenAI-compatible 接口的内部请求结构。
 type openAIChatRequest struct {
 	Model       string    `json:"model"`
 	Messages    []Message `json:"messages"`
@@ -246,12 +258,14 @@ type openAIChatRequest struct {
 	Stream      bool      `json:"stream,omitempty"`
 }
 
+// openAIChatResponse 是 OpenAI-compatible 接口的内部响应结构。
 type openAIChatResponse struct {
 	Choices []struct {
 		Message Message `json:"message"`
 	} `json:"choices"`
 }
 
+// openAIChatStreamChunk 是 OpenAI-compatible 流式响应块。
 type openAIChatStreamChunk struct {
 	Choices []struct {
 		Delta Message `json:"delta"`

@@ -49,6 +49,7 @@ func (a *MockSummaryAgent) Summarize(input SummaryInput) (SummaryOutput, error) 
 	}, nil
 }
 
+// frequentErrorsFromCorrections 从纠错结果中归纳高频问题。
 func frequentErrorsFromCorrections(corrections []model.CorrectionResult) []string {
 	result := make([]string, 0)
 	seen := make(map[string]struct{})
@@ -82,6 +83,7 @@ func frequentErrorsFromCorrections(corrections []model.CorrectionResult) []strin
 	return result
 }
 
+// betterExpressionsFromCorrections 从纠错结果中提取更自然表达。
 func betterExpressionsFromCorrections(corrections []model.CorrectionResult) []string {
 	result := make([]string, 0)
 	seen := make(map[string]struct{})
@@ -109,6 +111,7 @@ func betterExpressionsFromCorrections(corrections []model.CorrectionResult) []st
 	return result
 }
 
+// majorProblemsFromFeedback 根据纠错和评分生成主要问题摘要。
 func majorProblemsFromFeedback(score model.ScoreResult, corrections []model.CorrectionResult, history []model.Message) []string {
 	problems := make([]string, 0)
 	evidence := firstCorrectionEvidence(corrections)
@@ -134,6 +137,7 @@ func majorProblemsFromFeedback(score model.ScoreResult, corrections []model.Corr
 	return problems
 }
 
+// nextPracticePlanForSummary 根据报告证据生成下一步练习计划。
 func nextPracticePlanForSummary(code string, corrections []model.CorrectionResult, history []model.Message) []string {
 	correctionTarget := firstCorrectionTarget(corrections)
 	switch code {
@@ -166,6 +170,7 @@ func nextPracticePlanForSummary(code string, corrections []model.CorrectionResul
 	}
 }
 
+// scoreCommentOrFallback 返回评分评语或默认提示。
 func scoreCommentOrFallback(comment string) string {
 	comment = strings.TrimSpace(comment)
 	if comment == "" {
@@ -175,6 +180,7 @@ func scoreCommentOrFallback(comment string) string {
 	return comment
 }
 
+// hasCorrectionErrors 判断纠错结果是否包含实际问题。
 func hasCorrectionErrors(corrections []model.CorrectionResult) bool {
 	for _, correction := range corrections {
 		if len(correction.Errors) > 0 {
@@ -185,6 +191,7 @@ func hasCorrectionErrors(corrections []model.CorrectionResult) bool {
 	return false
 }
 
+// firstUserUtterance 返回训练中的首条用户表达。
 func firstUserUtterance(history []model.Message) string {
 	for _, message := range history {
 		if message.Role != model.MessageRoleUser {
@@ -199,6 +206,7 @@ func firstUserUtterance(history []model.Message) string {
 	return ""
 }
 
+// firstCorrectionEvidence 返回第一条可解释的纠错证据。
 func firstCorrectionEvidence(corrections []model.CorrectionResult) string {
 	for _, correction := range corrections {
 		original := strings.TrimSpace(correction.OriginalText)
@@ -220,6 +228,7 @@ func firstCorrectionEvidence(corrections []model.CorrectionResult) string {
 	return ""
 }
 
+// firstCorrectionTarget 返回第一条纠错建议目标。
 func firstCorrectionTarget(corrections []model.CorrectionResult) string {
 	pairs := make([]string, 0)
 	suggestions := make([]string, 0)
@@ -251,6 +260,7 @@ func firstCorrectionTarget(corrections []model.CorrectionResult) string {
 	)
 }
 
+// appendCorrectionPractice 根据纠错证据补充练习项。
 func appendCorrectionPractice(items []string, correctionTarget string) []string {
 	if correctionTarget == "" {
 		return items
@@ -259,6 +269,7 @@ func appendCorrectionPractice(items []string, correctionTarget string) []string 
 	return append([]string{correctionTarget}, items...)
 }
 
+// withEvidence 将练习建议和证据文本拼接展示。
 func withEvidence(problem string, evidence string) string {
 	evidence = strings.TrimSpace(evidence)
 	if evidence == "" {
@@ -268,6 +279,7 @@ func withEvidence(problem string, evidence string) string {
 	return problem + " 证据：" + evidence
 }
 
+// truncateReportText 控制报告片段长度，避免 Mock 文案过长。
 func truncateReportText(text string, maxLen int) string {
 	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
 	if maxLen <= 0 || len(text) <= maxLen {

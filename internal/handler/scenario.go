@@ -12,6 +12,7 @@ import (
 	"speakmate/internal/service"
 )
 
+// 当前模块使用的业务错误码和事件常量。
 const (
 	// scenarioNotFoundCode 是场景不存在时的临时业务错误码。
 	scenarioNotFoundCode = 1001
@@ -46,7 +47,7 @@ func (h *ScenarioHandler) List(c *gin.Context) {
 func (h *ScenarioHandler) Detail(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
-		response.Error(c, http.StatusBadRequest, invalidScenarioID, "invalid scenario id")
+		response.Error(c, http.StatusBadRequest, invalidScenarioID, "场景 ID 无效")
 		return
 	}
 
@@ -54,11 +55,11 @@ func (h *ScenarioHandler) Detail(c *gin.Context) {
 	scenario, err := h.service.GetScenario(id)
 	if err != nil {
 		if errors.Is(err, service.ErrScenarioNotFound) {
-			response.Error(c, http.StatusNotFound, scenarioNotFoundCode, "scenario not found")
+			response.Error(c, http.StatusNotFound, scenarioNotFoundCode, "未找到训练场景")
 			return
 		}
 
-		response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "internal server error")
+		response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "服务器内部错误")
 		return
 	}
 

@@ -53,6 +53,7 @@ func (r *MySQLScenarioRepository) FindByID(id int) (model.Scenario, error) {
 	return scenario, nil
 }
 
+// scanScenario 从数据库行读取训练场景。
 func scanScenario(row scanner) (model.Scenario, error) {
 	var scenario model.Scenario
 	var stagesJSON string

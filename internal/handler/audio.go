@@ -11,6 +11,7 @@ import (
 	"speakmate/internal/service"
 )
 
+// 当前模块使用的业务错误码和事件常量。
 const (
 	invalidAudioRequestCode        = 7001
 	audioFileRequiredCode          = 7002
@@ -47,20 +48,20 @@ func (h *AudioHandler) Upload(c *gin.Context) {
 	}
 
 	if err := c.Request.ParseMultipartForm(audioMultipartMemoryLimitBytes); err != nil && !errors.Is(err, http.ErrNotMultipart) {
-		response.Error(c, http.StatusBadRequest, invalidAudioRequestCode, "invalid audio request")
+		response.Error(c, http.StatusBadRequest, invalidAudioRequestCode, "音频请求无效")
 		return
 	}
 
 	file, header, err := c.Request.FormFile("audio")
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, audioFileRequiredCode, "audio file is required")
+		response.Error(c, http.StatusBadRequest, audioFileRequiredCode, "请上传音频文件")
 		return
 	}
 	defer file.Close()
 
 	audio, err := io.ReadAll(io.LimitReader(file, audioReadLimitBytes))
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "internal server error")
+		response.Error(c, http.StatusInternalServerError, http.StatusInternalServerError, "服务器内部错误")
 		return
 	}
 
@@ -89,6 +90,7 @@ func (h *AudioHandler) Upload(c *gin.Context) {
 	})
 }
 
+// uploadAudioResponse 是单段音频上传接口返回结构。
 type uploadAudioResponse struct {
 	Transcript        string                    `json:"transcript"`
 	UserMessage       messageResponse           `json:"user_message"`
@@ -100,29 +102,30 @@ type uploadAudioResponse struct {
 	ScoreSummary      scoreSummaryResponse      `json:"score_summary"`
 }
 
+// writeAudioError 将音频业务错误转换为统一 HTTP 响应。
 func writeAudioError(c *gin.Context, err error) {
 	if errors.Is(err, service.ErrInvalidAudioRequest) {
-		response.Error(c, http.StatusBadRequest, invalidAudioRequestCode, "invalid audio request")
+		response.Error(c, http.StatusBadRequest, invalidAudioRequestCode, "音频请求无效")
 		return
 	}
 	if errors.Is(err, service.ErrAudioFileRequired) {
-		response.Error(c, http.StatusBadRequest, audioFileRequiredCode, "audio file is required")
+		response.Error(c, http.StatusBadRequest, audioFileRequiredCode, "请上传音频文件")
 		return
 	}
 	if errors.Is(err, service.ErrAudioFileTooLarge) {
-		response.Error(c, http.StatusRequestEntityTooLarge, audioFileTooLargeCode, "audio file too large")
+		response.Error(c, http.StatusRequestEntityTooLarge, audioFileTooLargeCode, "音频文件过大")
 		return
 	}
 	if errors.Is(err, service.ErrAudioFileTypeUnsupported) {
-		response.Error(c, http.StatusBadRequest, audioFileTypeUnsupportedCode, "audio file type unsupported")
+		response.Error(c, http.StatusBadRequest, audioFileTypeUnsupportedCode, "不支持该音频格式")
 		return
 	}
 	if errors.Is(err, service.ErrASRClientFailed) {
-		response.Error(c, http.StatusBadGateway, asrClientFailedCode, "asr client failed")
+		response.Error(c, http.StatusBadGateway, asrClientFailedCode, "语音识别服务调用失败")
 		return
 	}
 	if errors.Is(err, service.ErrAudioTranscriptRequired) {
-		response.Error(c, http.StatusBadRequest, audioTranscriptRequiredCode, "audio transcript is required")
+		response.Error(c, http.StatusBadRequest, audioTranscriptRequiredCode, "语音识别未返回有效文本")
 		return
 	}
 

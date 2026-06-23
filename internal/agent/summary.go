@@ -26,6 +26,7 @@ type SummaryOutput struct {
 	Raw               any
 }
 
+// HistoryMessages 将消息历史转换为 Agent 可消费的上下文列表。
 func (input SummaryInput) HistoryMessages() []model.Message {
 	if input.Messages != nil {
 		return input.Messages

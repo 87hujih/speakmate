@@ -51,8 +51,35 @@ func TestLLMConversationAgentUsesClientAndReturnsStageAndNextGoal(t *testing.T) 
 	}
 }
 
+func TestLLMConversationAgentStripsLeadingStageLabelFromReply(t *testing.T) {
+	client := &fakeLLMClient{
+		response: llm.ChatResponse{Content: "[澄清确认] Let me confirm the owner and timeline. Who will follow up?"},
+	}
+	agent := NewLLMConversationAgent(client)
+
+	output, err := agent.GenerateReply(context.Background(), ConversationInput{
+		Scenario: model.Scenario{
+			Code:   "meeting",
+			AIRole: "project manager",
+			Stages: []model.ScenarioStage{
+				{Name: "进度同步"},
+				{Name: "澄清确认"},
+			},
+		},
+		Session:     model.Session{TurnCount: 0},
+		UserContent: "Alice will own the follow-up.",
+	})
+	if err != nil {
+		t.Fatalf("GenerateReply returned error: %v", err)
+	}
+
+	if output.Reply != "Let me confirm the owner and timeline. Who will follow up?" {
+		t.Fatalf("Reply = %q, want leading stage label removed", output.Reply)
+	}
+}
+
 func TestLLMConversationAgentFallsBackToMockWhenClientFails(t *testing.T) {
-	client := &fakeLLMClient{err: errors.New("upstream unavailable")}
+	client := &fakeLLMClient{err: errors.New("up实时事件流不可用")}
 	agent := NewLLMConversationAgent(client, WithFallbackAgent(NewMockConversationAgent()))
 
 	output, err := agent.GenerateReply(context.Background(), ConversationInput{
@@ -121,8 +148,46 @@ func TestLLMConversationAgentStreamsDeltasAndReturnsCombinedReply(t *testing.T) 
 	}
 }
 
+func TestLLMConversationAgentStripsLeadingStageLabelFromStreamedDeltas(t *testing.T) {
+	client := &fakeStreamingLLMClient{
+		deltas: []llm.ChatStreamDelta{
+			{Content: "[澄清确认] "},
+			{Content: "Let me confirm the owner and timeline."},
+		},
+		response: llm.ChatResponse{Content: "[澄清确认] Let me confirm the owner and timeline."},
+	}
+	agent := NewLLMConversationAgent(client)
+
+	var deltas []string
+	output, err := agent.StreamReply(context.Background(), ConversationInput{
+		Scenario: model.Scenario{
+			Code:   "meeting",
+			AIRole: "project manager",
+			Stages: []model.ScenarioStage{
+				{Name: "进度同步"},
+				{Name: "澄清确认"},
+			},
+		},
+		Session:     model.Session{TurnCount: 0},
+		UserContent: "Alice will own the follow-up.",
+	}, func(delta ConversationDelta) error {
+		deltas = append(deltas, delta.Content)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("StreamReply returned error: %v", err)
+	}
+
+	if got := strings.Join(deltas, ""); got != "Let me confirm the owner and timeline." {
+		t.Fatalf("streamed content = %q, want leading stage label removed", got)
+	}
+	if output.Reply != "Let me confirm the owner and timeline." {
+		t.Fatalf("Reply = %q, want leading stage label removed", output.Reply)
+	}
+}
+
 func TestLLMConversationAgentStreamsFallbackWhenClientFails(t *testing.T) {
-	client := &fakeStreamingLLMClient{streamErr: errors.New("upstream unavailable")}
+	client := &fakeStreamingLLMClient{streamErr: errors.New("up实时事件流不可用")}
 	agent := NewLLMConversationAgent(client, WithFallbackAgent(NewMockConversationAgent()))
 
 	var chunks []string
@@ -152,7 +217,7 @@ func TestLLMConversationAgentStreamsFallbackWhenClientFails(t *testing.T) {
 }
 
 func TestLLMConversationAgentReturnsStreamErrorWithoutFallback(t *testing.T) {
-	client := &fakeStreamingLLMClient{streamErr: errors.New("upstream unavailable")}
+	client := &fakeStreamingLLMClient{streamErr: errors.New("up实时事件流不可用")}
 	agent := NewLLMConversationAgent(client)
 
 	_, err := agent.StreamReply(context.Background(), ConversationInput{
@@ -163,12 +228,12 @@ func TestLLMConversationAgentReturnsStreamErrorWithoutFallback(t *testing.T) {
 	})
 
 	if err == nil {
-		t.Fatal("StreamReply error = nil, want upstream error")
+		t.Fatal("StreamReply error = nil, want up事件流错误")
 	}
 }
 
 func TestLLMConversationAgentReturnsErrorWhenClientFailsWithoutFallback(t *testing.T) {
-	client := &fakeLLMClient{err: errors.New("upstream unavailable")}
+	client := &fakeLLMClient{err: errors.New("up实时事件流不可用")}
 	agent := NewLLMConversationAgent(client)
 
 	_, err := agent.GenerateReply(context.Background(), ConversationInput{

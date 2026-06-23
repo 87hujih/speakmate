@@ -111,7 +111,7 @@ func TestStreamHandlerRejectsInvalidSessionID(t *testing.T) {
 
 	engine.ServeHTTP(rec, req)
 
-	assertSessionErrorResponse(t, rec, http.StatusBadRequest, invalidSessionIDCode, "invalid session id")
+	assertSessionErrorResponse(t, rec, http.StatusBadRequest, invalidSessionIDCode, "训练 ID 无效")
 	if subscriber.callCount != 0 {
 		t.Fatalf("subscribe call count = %d, want 0", subscriber.callCount)
 	}

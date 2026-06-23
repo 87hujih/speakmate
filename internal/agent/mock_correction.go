@@ -60,6 +60,7 @@ func (a *MockCorrectionAgent) Correct(input CorrectionInput) (CorrectionOutput, 
 	}, nil
 }
 
+// betterExpressionsForScenario 根据场景返回本地表达建议。
 func betterExpressionsForScenario(code string) []string {
 	switch code {
 	case "interview":

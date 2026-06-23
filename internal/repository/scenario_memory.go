@@ -7,7 +7,7 @@ import (
 )
 
 // ErrScenarioNotFound 表示内存仓库中没有找到对应场景。
-var ErrScenarioNotFound = errors.New("scenario not found")
+var ErrScenarioNotFound = errors.New("未找到训练场景")
 
 // MemoryScenarioRepository 使用内存数据提供场景查询能力。
 type MemoryScenarioRepository struct {

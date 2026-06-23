@@ -56,7 +56,7 @@ func parseHistoryInsightsPositiveQueryInt(c *gin.Context, key string) (int, bool
 	}
 	value, err := strconv.Atoi(raw)
 	if err != nil || value <= 0 {
-		response.Error(c, http.StatusBadRequest, invalidHistoryRequestCode, "invalid history request")
+		response.Error(c, http.StatusBadRequest, invalidHistoryRequestCode, "历史记录请求无效")
 		return 0, false
 	}
 

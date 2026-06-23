@@ -134,11 +134,13 @@ func NewWithError(configs ...config.Config) (*gin.Engine, error) {
 	return engine, nil
 }
 
+// realtimeEventBus 聚合事件订阅和发布能力。
 type realtimeEventBus interface {
 	service.EventPublisher
 	handler.EventSubscriber
 }
 
+// newRealtimeState 创建训练实时状态存储。
 func newRealtimeState(cfg config.Config) (state.SessionStateStore, realtimeEventBus, error) {
 	if cfg.Redis.Enabled {
 		client, err := infraredis.OpenClient(context.Background(), cfg.Redis)
@@ -152,6 +154,7 @@ func newRealtimeState(cfg config.Config) (state.SessionStateStore, realtimeEvent
 	return state.NewMemorySessionStateStore(), stream.NewBus(), nil
 }
 
+// sessionStore 聚合 Session 仓库和历史查询能力。
 type sessionStore interface {
 	service.SessionRepository
 	service.ReportSessionReader
@@ -159,16 +162,19 @@ type sessionStore interface {
 	service.HistoryInsightSessionRepository
 }
 
+// feedbackStore 聚合反馈仓库读写能力。
 type feedbackStore interface {
 	service.FeedbackRepository
 	service.ReportFeedbackReader
 }
 
+// reportStore 聚合报告仓库读写能力。
 type reportStore interface {
 	service.ReportRepository
 	service.HistoryReportRepository
 }
 
+// newRepositories 根据配置创建长期数据仓库。
 func newRepositories(cfg config.Config) (service.ScenarioRepository, sessionStore, feedbackStore, reportStore, error) {
 	if cfg.Storage.IsMySQL() {
 		db, err := database.OpenMySQL(context.Background(), cfg.Storage)
@@ -190,27 +196,27 @@ func newRepositories(cfg config.Config) (service.ScenarioRepository, sessionStor
 		nil
 }
 
+// NewConversationAgent 根据配置创建对话 Agent。
 func NewConversationAgent(cfg config.Config) agent.ConversationAgent {
-	if cfg.LLM.UseMock || !cfg.LLM.HasRequiredFields() {
-		return agent.NewMockConversationAgent()
+	if cfg.LLM.UseMock {
+		return agent.NewUnavailableConversationAgent("真实 LLM 对话已禁用，因为 LLM_USE_MOCK 为 true")
+	}
+	if !cfg.LLM.HasRequiredFields() {
+		return agent.NewUnavailableConversationAgent("LLM BaseURL、API Key 和模型不能为空")
 	}
 	if !strings.EqualFold(cfg.LLM.Provider, "openai-compatible") {
-		return agent.NewMockConversationAgent()
+		return agent.NewUnavailableConversationAgent("不支持的对话 LLM Provider：" + cfg.LLM.Provider)
 	}
 
 	client, err := llm.NewOpenAICompatibleClient(cfg.LLM)
 	if err != nil {
-		return agent.NewMockConversationAgent()
+		return agent.NewUnavailableConversationAgent(err.Error())
 	}
 
-	opts := []agent.LLMConversationOption{}
-	if cfg.LLM.FallbackToMock {
-		opts = append(opts, agent.WithFallbackAgent(agent.NewMockConversationAgent()))
-	}
-
-	return agent.NewLLMConversationAgent(client, opts...)
+	return agent.NewLLMConversationAgent(client)
 }
 
+// NewCorrectionAgent 根据配置创建纠错 Agent。
 func NewCorrectionAgent(cfg config.Config) agent.CorrectionAgent {
 	if cfg.LLM.UseMock || cfg.Feedback.CorrectionUseMock || !cfg.LLM.HasRequiredFields() {
 		return agent.NewMockCorrectionAgent()
@@ -232,6 +238,7 @@ func NewCorrectionAgent(cfg config.Config) agent.CorrectionAgent {
 	return agent.NewLLMCorrectionAgent(client, opts...)
 }
 
+// NewScoringAgent 根据配置创建评分 Agent。
 func NewScoringAgent(cfg config.Config) agent.ScoringAgent {
 	if cfg.LLM.UseMock || cfg.Feedback.ScoringUseMock || !cfg.LLM.HasRequiredFields() {
 		return agent.NewMockScoringAgent()
@@ -253,6 +260,7 @@ func NewScoringAgent(cfg config.Config) agent.ScoringAgent {
 	return agent.NewLLMScoringAgent(client, opts...)
 }
 
+// NewSummaryAgent 根据配置创建报告摘要 Agent。
 func NewSummaryAgent(cfg config.Config) agent.SummaryAgent {
 	if cfg.LLM.UseMock || cfg.Feedback.SummaryUseMock || !cfg.LLM.HasRequiredFields() {
 		return agent.NewMockSummaryAgent()
@@ -274,6 +282,7 @@ func NewSummaryAgent(cfg config.Config) agent.SummaryAgent {
 	return agent.NewLLMSummaryAgent(client, opts...)
 }
 
+// NewASRClient 根据配置创建 ASR 客户端。
 func NewASRClient(cfg config.Config) (agent.ASRClient, error) {
 	if cfg.ASR.UseMock || strings.EqualFold(cfg.ASR.Provider, "mock") {
 		return agent.NewMockASRClient(agent.WithMockASRTranscript(cfg.ASR.MockTranscript)), nil
@@ -282,9 +291,10 @@ func NewASRClient(cfg config.Config) (agent.ASRClient, error) {
 		return infraasr.NewTencentFlashClient(cfg.ASR)
 	}
 
-	return nil, fmt.Errorf("unsupported asr provider: %s", cfg.ASR.Provider)
+	return nil, fmt.Errorf("不支持的 ASR Provider：%s", cfg.ASR.Provider)
 }
 
+// audioStreamPartialTranscriptionEnabled 判断实时音频是否启用 partial 转写。
 func audioStreamPartialTranscriptionEnabled(cfg config.Config) bool {
 	return cfg.ASR.UseMock || strings.EqualFold(cfg.ASR.Provider, "mock")
 }

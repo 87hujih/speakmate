@@ -37,20 +37,20 @@ func TestLoadDefaultsToPort8080(t *testing.T) {
 	if cfg.LLM.TimeoutSeconds != 30 {
 		t.Fatalf("LLM.TimeoutSeconds = %d, want 30", cfg.LLM.TimeoutSeconds)
 	}
-	if !cfg.LLM.UseMock {
-		t.Fatal("LLM.UseMock = false, want true by default")
+	if cfg.LLM.UseMock {
+		t.Fatal("LLM.UseMock = true, want false by default")
 	}
-	if !cfg.LLM.FallbackToMock {
-		t.Fatal("LLM.FallbackToMock = false, want true by default")
+	if cfg.LLM.FallbackToMock {
+		t.Fatal("LLM.FallbackToMock = true, want false by default")
 	}
-	if !cfg.Feedback.CorrectionUseMock {
-		t.Fatal("Feedback.CorrectionUseMock = false, want true by default")
+	if cfg.Feedback.CorrectionUseMock {
+		t.Fatal("Feedback.CorrectionUseMock = true, want false by default")
 	}
-	if !cfg.Feedback.ScoringUseMock {
-		t.Fatal("Feedback.ScoringUseMock = false, want true by default")
+	if cfg.Feedback.ScoringUseMock {
+		t.Fatal("Feedback.ScoringUseMock = true, want false by default")
 	}
-	if !cfg.Feedback.SummaryUseMock {
-		t.Fatal("Feedback.SummaryUseMock = false, want true by default")
+	if cfg.Feedback.SummaryUseMock {
+		t.Fatal("Feedback.SummaryUseMock = true, want false by default")
 	}
 	if !cfg.Feedback.FailOpen {
 		t.Fatal("Feedback.FailOpen = false, want true by default")
@@ -557,20 +557,20 @@ func TestLoadFallsBackForInvalidLLMTimeoutAndMockFlag(t *testing.T) {
 	if cfg.LLM.TimeoutSeconds != 30 {
 		t.Fatalf("LLM.TimeoutSeconds = %d, want 30", cfg.LLM.TimeoutSeconds)
 	}
-	if !cfg.LLM.UseMock {
-		t.Fatal("LLM.UseMock = false, want true for invalid flag")
+	if cfg.LLM.UseMock {
+		t.Fatal("LLM.UseMock = true, want false for invalid flag")
 	}
-	if !cfg.LLM.FallbackToMock {
-		t.Fatal("LLM.FallbackToMock = false, want true for invalid flag")
+	if cfg.LLM.FallbackToMock {
+		t.Fatal("LLM.FallbackToMock = true, want false for invalid flag")
 	}
-	if !cfg.Feedback.CorrectionUseMock {
-		t.Fatal("Feedback.CorrectionUseMock = false, want true for invalid flag")
+	if cfg.Feedback.CorrectionUseMock {
+		t.Fatal("Feedback.CorrectionUseMock = true, want false for invalid flag")
 	}
-	if !cfg.Feedback.ScoringUseMock {
-		t.Fatal("Feedback.ScoringUseMock = false, want true for invalid flag")
+	if cfg.Feedback.ScoringUseMock {
+		t.Fatal("Feedback.ScoringUseMock = true, want false for invalid flag")
 	}
-	if !cfg.Feedback.SummaryUseMock {
-		t.Fatal("Feedback.SummaryUseMock = false, want true for invalid flag")
+	if cfg.Feedback.SummaryUseMock {
+		t.Fatal("Feedback.SummaryUseMock = true, want false for invalid flag")
 	}
 	if !cfg.Feedback.FailOpen {
 		t.Fatal("Feedback.FailOpen = false, want true for invalid flag")

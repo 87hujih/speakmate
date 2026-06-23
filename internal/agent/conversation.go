@@ -8,15 +8,18 @@ import (
 	"speakmate/internal/model"
 )
 
+// ConversationAgent 定义非流式 AI 对话回复能力。
 type ConversationAgent interface {
 	GenerateReply(ctx context.Context, input ConversationInput) (ConversationOutput, error)
 }
 
+// StreamingConversationAgent 定义可输出回复分片的 AI 对话能力。
 type StreamingConversationAgent interface {
 	ConversationAgent
 	StreamReply(ctx context.Context, input ConversationInput, onDelta func(ConversationDelta) error) (ConversationOutput, error)
 }
 
+// ConversationInput 是生成 AI 回复所需的训练上下文。
 type ConversationInput struct {
 	Scenario    model.Scenario
 	Session     model.Session
@@ -24,11 +27,13 @@ type ConversationInput struct {
 	UserContent string
 }
 
+// ConversationDelta 表示 AI 流式回复中的一个增量片段。
 type ConversationDelta struct {
 	Content string
 	Raw     string
 }
 
+// ConversationOutput 是 AI 对话回复的结构化输出。
 type ConversationOutput struct {
 	Reply    string
 	Stage    string
@@ -36,6 +41,7 @@ type ConversationOutput struct {
 	Raw      string
 }
 
+// HistoryMessages 将消息历史转换为 Agent 可消费的上下文列表。
 func (input ConversationInput) HistoryMessages() []model.Message {
 	if input.History != nil {
 		return input.History
@@ -44,6 +50,7 @@ func (input ConversationInput) HistoryMessages() []model.Message {
 	return input.Session.Messages
 }
 
+// StageNameForTurn 根据当前轮次推导训练阶段名称。
 func StageNameForTurn(stages []model.ScenarioStage, turnIndex int) string {
 	if len(stages) == 0 {
 		return "general"
@@ -58,6 +65,7 @@ func StageNameForTurn(stages []model.ScenarioStage, turnIndex int) string {
 	return stages[turnIndex].Name
 }
 
+// stageDescriptionForTurn 根据轮次返回对应阶段说明。
 func stageDescriptionForTurn(stages []model.ScenarioStage, turnIndex int) string {
 	if len(stages) == 0 {
 		return ""
@@ -72,6 +80,7 @@ func stageDescriptionForTurn(stages []model.ScenarioStage, turnIndex int) string
 	return strings.TrimSpace(stages[turnIndex].Description)
 }
 
+// NextGoalForTurn 根据场景阶段推导下一步训练目标。
 func NextGoalForTurn(stages []model.ScenarioStage, turnIndex int) string {
 	stage := StageNameForTurn(stages, turnIndex)
 	description := stageDescriptionForTurn(stages, turnIndex)

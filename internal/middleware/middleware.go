@@ -16,6 +16,7 @@ import (
 	"speakmate/internal/security"
 )
 
+// 当前模块使用的常量。
 const (
 	internalServerErrorCode = 9001
 	requestTimeoutCode      = 9002
@@ -23,12 +24,13 @@ const (
 	rateLimitExceededCode   = 9004
 )
 
+// rateLimitBucket 保存单个客户端在当前限流窗口内的计数。
 type rateLimitBucket struct {
 	count   int
 	resetAt time.Time
 }
 
-// CORS applies the configured cross-origin policy and handles preflight requests.
+// CORS 应用跨域访问配置，并处理浏览器预检请求。
 func CORS(cfg config.CORSConfig) gin.HandlerFunc {
 	allowedOrigins := make(map[string]struct{}, len(cfg.AllowedOrigins))
 	allowWildcard := false
@@ -80,7 +82,7 @@ func CORS(cfg config.CORSConfig) gin.HandlerFunc {
 	}
 }
 
-// RequestLogger writes one redacted access log line per request.
+// RequestLogger 为每个请求写入一行已脱敏的访问日志。
 func RequestLogger(logger *log.Logger) gin.HandlerFunc {
 	if logger == nil {
 		logger = log.Default()
@@ -91,7 +93,7 @@ func RequestLogger(logger *log.Logger) gin.HandlerFunc {
 		c.Next()
 
 		logger.Printf(
-			"request method=%s path=%s status=%d duration=%s",
+			"请求 方法=%s 路径=%s 状态=%d 耗时=%s",
 			c.Request.Method,
 			security.RedactURL(c.Request.URL.RequestURI()),
 			c.Writer.Status(),
@@ -100,8 +102,8 @@ func RequestLogger(logger *log.Logger) gin.HandlerFunc {
 	}
 }
 
-// BodySizeLimit caps request bodies before handlers parse JSON or multipart
-// payloads. Audio endpoints still keep their stricter file-level validation.
+// BodySizeLimit 在 Handler 解析 JSON 或 multipart 前限制请求体大小。
+// 音频接口仍保留更严格的文件级校验。
 func BodySizeLimit(maxBytes int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if maxBytes <= 0 || c.Request == nil || c.Request.Body == nil {
@@ -111,7 +113,7 @@ func BodySizeLimit(maxBytes int) gin.HandlerFunc {
 
 		if c.Request.ContentLength > int64(maxBytes) {
 			c.Abort()
-			response.Error(c, http.StatusRequestEntityTooLarge, requestBodyTooLargeCode, "request body too large")
+			response.Error(c, http.StatusRequestEntityTooLarge, requestBodyTooLargeCode, "请求体过大")
 			return
 		}
 
@@ -120,8 +122,8 @@ func BodySizeLimit(maxBytes int) gin.HandlerFunc {
 	}
 }
 
-// RateLimit provides a simple in-memory per-client-IP abuse guard. It is meant
-// for local demo and basic deployment hygiene, not distributed production quota.
+// RateLimit 提供按客户端 IP 计数的内存限流，用于 Demo 和基础部署防护。
+// 它不承担分布式生产配额能力。
 func RateLimit(requests int, window time.Duration) gin.HandlerFunc {
 	var mu sync.Mutex
 	buckets := make(map[string]rateLimitBucket)
@@ -146,7 +148,7 @@ func RateLimit(requests int, window time.Duration) gin.HandlerFunc {
 		if bucket.count >= requests {
 			mu.Unlock()
 			c.Abort()
-			response.Error(c, http.StatusTooManyRequests, rateLimitExceededCode, "rate limit exceeded")
+			response.Error(c, http.StatusTooManyRequests, rateLimitExceededCode, "请求过于频繁")
 			return
 		}
 		bucket.count++
@@ -157,8 +159,7 @@ func RateLimit(requests int, window time.Duration) gin.HandlerFunc {
 	}
 }
 
-// Recover catches panics and returns the standard API error shape without
-// exposing panic details to the client.
+// Recover 捕获 panic 并返回统一 API 错误结构，避免向客户端暴露 panic 细节。
 func Recover(logger *log.Logger) gin.HandlerFunc {
 	if logger == nil {
 		logger = log.Default()
@@ -168,14 +169,14 @@ func Recover(logger *log.Logger) gin.HandlerFunc {
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				logger.Printf(
-					"panic recovered method=%s path=%s error=%s",
+					"已捕获 panic 方法=%s 路径=%s 错误=%s",
 					c.Request.Method,
 					security.RedactURL(c.Request.URL.RequestURI()),
 					security.RedactString(fmt.Sprint(recovered)),
 				)
 				c.Abort()
 				if !c.Writer.Written() {
-					response.Error(c, http.StatusInternalServerError, internalServerErrorCode, "internal server error")
+					response.Error(c, http.StatusInternalServerError, internalServerErrorCode, "服务器内部错误")
 				}
 			}
 		}()
@@ -184,8 +185,7 @@ func Recover(logger *log.Logger) gin.HandlerFunc {
 	}
 }
 
-// RequestTimeout attaches a deadline to the request context. Handlers and
-// outbound calls using c.Request.Context() will be cancelled when it expires.
+// RequestTimeout 为请求上下文设置截止时间，超时后会取消使用该上下文的下游调用。
 func RequestTimeout(timeout time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if timeout <= 0 || isLongLivedRequest(c.Request.URL.Path) {
@@ -201,11 +201,12 @@ func RequestTimeout(timeout time.Duration) gin.HandlerFunc {
 
 		if ctx.Err() == context.DeadlineExceeded && !c.Writer.Written() {
 			c.Abort()
-			response.Error(c, http.StatusGatewayTimeout, requestTimeoutCode, "request timeout")
+			response.Error(c, http.StatusGatewayTimeout, requestTimeoutCode, "请求超时")
 		}
 	}
 }
 
+// isLongLivedRequest 判断请求是否属于长连接链路。
 func isLongLivedRequest(path string) bool {
 	return strings.HasSuffix(path, "/stream") || strings.HasSuffix(path, "/audio/ws")
 }

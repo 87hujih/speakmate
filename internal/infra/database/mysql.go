@@ -17,7 +17,7 @@ func OpenMySQL(ctx context.Context, storage config.StorageConfig) (*sql.DB, erro
 		return nil, err
 	}
 	if !storage.IsMySQL() {
-		return nil, fmt.Errorf("storage mode %q is not mysql", storage.Mode)
+		return nil, fmt.Errorf("存储模式 %q 不是 MySQL", storage.Mode)
 	}
 
 	db, err := sql.Open("mysql", storage.MySQLDSN)

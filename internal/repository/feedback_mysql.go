@@ -134,6 +134,7 @@ func (r *MySQLFeedbackRepository) FindCurrentScoreBySessionID(sessionID int) (mo
 	return score, nil
 }
 
+// scanCorrection 从数据库行读取纠错结果。
 func scanCorrection(row scanner) (model.CorrectionResult, error) {
 	var correction model.CorrectionResult
 	var errorsJSON string
@@ -164,6 +165,7 @@ func scanCorrection(row scanner) (model.CorrectionResult, error) {
 	return correction, nil
 }
 
+// scanScore 从数据库行读取评分结果。
 func scanScore(row scanner) (model.ScoreResult, error) {
 	var score model.ScoreResult
 	if err := row.Scan(

@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// 当前模块使用的常量。
 const (
 	// StorageModeMemory 表示使用内存仓库，适合本地开发和自动测试。
 	StorageModeMemory = "memory"
@@ -15,15 +16,17 @@ const (
 	StorageModeMySQL = "mysql"
 )
 
+// 当前模块复用的变量。
 var (
 	// ErrStorageModeUnsupported 表示配置了不支持的存储模式。
-	ErrStorageModeUnsupported = errors.New("unsupported storage mode")
+	ErrStorageModeUnsupported = errors.New("不支持的存储模式")
 	// ErrMySQLDSNRequired 表示 MySQL 模式缺少 DSN。
-	ErrMySQLDSNRequired = errors.New("mysql dsn required")
+	ErrMySQLDSNRequired = errors.New("MySQL DSN 不能为空")
 	// ErrRedisAddrRequired 表示启用 Redis 预留连接时缺少地址。
-	ErrRedisAddrRequired = errors.New("redis addr required")
+	ErrRedisAddrRequired = errors.New("Redis 地址不能为空")
 )
 
+// Config 汇总后端服务运行所需的全部配置。
 type Config struct {
 	Port                          string
 	Server                        ServerConfig
@@ -36,6 +39,7 @@ type Config struct {
 	ExternalServiceTimeoutSeconds int
 }
 
+// ServerConfig 描述 HTTP 服务的超时、限流和请求体限制。
 type ServerConfig struct {
 	RequestTimeoutSeconds  int
 	RequestBodyLimitBytes  int
@@ -43,6 +47,7 @@ type ServerConfig struct {
 	RateLimitWindowSeconds int
 }
 
+// CORSConfig 描述跨域访问控制配置。
 type CORSConfig struct {
 	AllowedOrigins   []string
 	AllowedMethods   []string
@@ -50,6 +55,7 @@ type CORSConfig struct {
 	AllowCredentials bool
 }
 
+// LLMConfig 描述 OpenAI-compatible LLM 调用配置。
 type LLMConfig struct {
 	Provider       string
 	BaseURL        string
@@ -60,6 +66,7 @@ type LLMConfig struct {
 	FallbackToMock bool
 }
 
+// ASRConfig 描述语音识别服务调用配置。
 type ASRConfig struct {
 	Provider               string
 	BaseURL                string
@@ -83,6 +90,7 @@ type ASRConfig struct {
 	TencentWordInfo        int
 }
 
+// FeedbackConfig 描述纠错、评分和报告生成策略。
 type FeedbackConfig struct {
 	CorrectionUseMock bool
 	ScoringUseMock    bool
@@ -90,11 +98,13 @@ type FeedbackConfig struct {
 	FailOpen          bool
 }
 
+// StorageConfig 描述核心训练数据的持久化配置。
 type StorageConfig struct {
 	Mode     string
 	MySQLDSN string
 }
 
+// RedisConfig 描述短期状态和事件总线使用的 Redis 配置。
 type RedisConfig struct {
 	Enabled               bool
 	Addr                  string
@@ -103,6 +113,7 @@ type RedisConfig struct {
 	ConnectTimeoutSeconds int
 }
 
+// Load 从环境变量和本地 .env 文件读取运行配置。
 func Load() Config {
 	loadDotEnvIntoProcessEnv(findDotEnvPath(".env"))
 
@@ -112,8 +123,8 @@ func Load() Config {
 	}
 
 	externalServiceTimeoutSeconds := positiveIntEnv("EXTERNAL_SERVICE_TIMEOUT_SECONDS", 30)
-	llmUseMock := boolEnv("LLM_USE_MOCK", true)
-	llmFallbackToMock := boolEnv("LLM_FALLBACK_TO_MOCK", llmUseMock)
+	llmUseMock := boolEnv("LLM_USE_MOCK", false)
+	llmFallbackToMock := boolEnv("LLM_FALLBACK_TO_MOCK", false)
 
 	return Config{
 		Port: port,
@@ -161,9 +172,9 @@ func Load() Config {
 			TencentWordInfo:        nonNegativeIntEnv("TENCENT_ASR_WORD_INFO", 0),
 		},
 		Feedback: FeedbackConfig{
-			CorrectionUseMock: boolEnv("CORRECTION_USE_MOCK", true),
-			ScoringUseMock:    boolEnv("SCORING_USE_MOCK", true),
-			SummaryUseMock:    boolEnv("SUMMARY_USE_MOCK", true),
+			CorrectionUseMock: boolEnv("CORRECTION_USE_MOCK", false),
+			ScoringUseMock:    boolEnv("SCORING_USE_MOCK", false),
+			SummaryUseMock:    boolEnv("SUMMARY_USE_MOCK", false),
 			FailOpen:          boolEnv("FEEDBACK_FAIL_OPEN", true),
 		},
 		Storage: StorageConfig{
@@ -181,10 +192,12 @@ func Load() Config {
 	}
 }
 
+// Addr 返回 Redis 配置中的连接地址。
 func (c Config) Addr() string {
 	return ":" + c.Port
 }
 
+// Validate 校验当前配置结构是否满足启动要求。
 func (c Config) Validate() error {
 	if err := c.Storage.Validate(); err != nil {
 		return err
@@ -196,18 +209,21 @@ func (c Config) Validate() error {
 	return nil
 }
 
+// HasRequiredFields 判断 LLM 调用所需配置是否完整。
 func (c LLMConfig) HasRequiredFields() bool {
 	return strings.TrimSpace(c.BaseURL) != "" &&
 		strings.TrimSpace(c.APIKey) != "" &&
 		strings.TrimSpace(c.Model) != ""
 }
 
+// HasRequiredFields 判断通用 ASR 调用所需配置是否完整。
 func (c ASRConfig) HasRequiredFields() bool {
 	return strings.TrimSpace(c.BaseURL) != "" &&
 		strings.TrimSpace(c.APIKey) != "" &&
 		strings.TrimSpace(c.Model) != ""
 }
 
+// HasTencentRequiredFields 判断腾讯 ASR 所需配置是否完整。
 func (c ASRConfig) HasTencentRequiredFields() bool {
 	return strings.TrimSpace(c.TencentAppID) != "" &&
 		strings.TrimSpace(c.TencentSecretID) != "" &&
@@ -215,6 +231,7 @@ func (c ASRConfig) HasTencentRequiredFields() bool {
 		strings.TrimSpace(c.TencentEngineType) != ""
 }
 
+// Validate 校验存储配置是否满足当前存储模式要求。
 func (c StorageConfig) Validate() error {
 	mode := normalizeStorageMode(c.Mode)
 	if mode == "" {
@@ -235,10 +252,12 @@ func (c StorageConfig) Validate() error {
 	}
 }
 
+// IsMySQL 判断当前存储配置是否使用 MySQL。
 func (c StorageConfig) IsMySQL() bool {
 	return normalizeStorageMode(c.Mode) == StorageModeMySQL
 }
 
+// Validate 校验 Redis 配置是否满足启用条件。
 func (c RedisConfig) Validate() error {
 	if !c.Enabled {
 		return nil
@@ -250,10 +269,12 @@ func (c RedisConfig) Validate() error {
 	return nil
 }
 
+// normalizeStorageMode 归一化存储模式并提供默认值。
 func normalizeStorageMode(mode string) string {
 	return strings.ToLower(strings.TrimSpace(mode))
 }
 
+// stringEnv 读取字符串环境变量并处理默认值。
 func stringEnv(key string, fallback string) string {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -263,6 +284,7 @@ func stringEnv(key string, fallback string) string {
 	return value
 }
 
+// positiveIntEnv 读取正整数环境变量并处理默认值。
 func positiveIntEnv(key string, fallback int) int {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -277,6 +299,7 @@ func positiveIntEnv(key string, fallback int) int {
 	return parsed
 }
 
+// nonNegativeIntEnv 读取非负整数环境变量并处理默认值。
 func nonNegativeIntEnv(key string, fallback int) int {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -291,6 +314,7 @@ func nonNegativeIntEnv(key string, fallback int) int {
 	return parsed
 }
 
+// boolEnv 读取布尔环境变量并处理默认值。
 func boolEnv(key string, fallback bool) bool {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -305,6 +329,7 @@ func boolEnv(key string, fallback bool) bool {
 	return parsed
 }
 
+// listEnv 读取逗号分隔环境变量并过滤空项。
 func listEnv(key string, fallback []string) []string {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -326,6 +351,7 @@ func listEnv(key string, fallback []string) []string {
 	return items
 }
 
+// loadDotEnvIntoProcessEnv 将本地 .env 中的键值补充到进程环境变量。
 func loadDotEnvIntoProcessEnv(path string) {
 	if path == "" {
 		return
@@ -353,6 +379,7 @@ func loadDotEnvIntoProcessEnv(path string) {
 	}
 }
 
+// findDotEnvPath 从当前目录向上查找本地 .env 文件。
 func findDotEnvPath(name string) string {
 	if filepath.IsAbs(name) {
 		if _, err := os.Stat(name); err == nil {
