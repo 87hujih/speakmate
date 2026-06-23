@@ -12,12 +12,14 @@ import { Button, buttonClasses } from "../components/ui/Button";
 import { Panel } from "../components/ui/Panel";
 import type { TrainingReport } from "../types";
 
+/** parseRouteSessionId 将路由参数解析为合法 Session ID。 */
 function parseRouteSessionId(value: string | undefined) {
   const numeric = Number(value);
 
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
 }
 
+/** ReportPage 渲染对应的页面或界面组件。 */
 export function ReportPage() {
   const { sessionId } = useParams();
   const numericSessionId = parseRouteSessionId(sessionId);

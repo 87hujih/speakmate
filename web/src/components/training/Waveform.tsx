@@ -1,7 +1,9 @@
+/** WaveformProps 定义对应组件接收的属性。 */
 interface WaveformProps {
   active?: boolean;
 }
 
+/** Waveform 渲染对应的页面或界面组件。 */
 export function Waveform({ active = true }: WaveformProps) {
   return (
     <div className="flex h-12 flex-1 items-center justify-center gap-1">

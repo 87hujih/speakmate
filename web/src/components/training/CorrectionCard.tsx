@@ -1,6 +1,7 @@
 import type { Correction } from "../../types";
 import { cn } from "../../utils/cn";
 
+/** CorrectionCardProps 定义对应组件接收的属性。 */
 interface CorrectionCardProps {
   correction: Correction;
 }
@@ -11,6 +12,7 @@ const tagTone = {
   vocabulary: "bg-emerald-50 text-emerald-700",
 };
 
+/** CorrectionCard 渲染对应的页面或界面组件。 */
 export function CorrectionCard({ correction }: CorrectionCardProps) {
   return (
     <div className="rounded-[22px] border border-line bg-white p-3 shadow-soft">

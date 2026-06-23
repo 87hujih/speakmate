@@ -226,6 +226,7 @@ export const trainingSessions: Record<string, TrainingSession> = {
   },
 };
 
+/** getTrainingSession 封装当前模块的辅助逻辑。 */
 export function getTrainingSession(sessionId: string) {
   return trainingSessions[sessionId] ?? interviewSession;
 }

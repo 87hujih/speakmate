@@ -4,6 +4,7 @@ import { cn } from "../../utils/cn";
 import { Waveform } from "./Waveform";
 import { voiceStatusContent, voiceStatusOrder } from "./voiceStatus";
 
+/** VoiceRecorderProps 定义对应组件接收的属性。 */
 interface VoiceRecorderProps {
   status: VoiceStatus;
   transcript?: string;
@@ -12,6 +13,7 @@ interface VoiceRecorderProps {
   onToggle?: () => void;
 }
 
+/** VoiceRecorder 渲染对应的页面或界面组件。 */
 export function VoiceRecorder({ status, transcript, error, isDisabled = false, onToggle }: VoiceRecorderProps) {
   const copy = voiceStatusContent[status];
   const isActive = status !== "idle";

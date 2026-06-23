@@ -61,9 +61,9 @@ describe("audio websocket api helpers", () => {
       parseAudioWebSocketEvent(JSON.stringify({ type: "correction", payload: { has_errors: true, error_count: 2 } })),
     ).toEqual({ type: "correction", has_errors: true, error_count: 2 });
 
-    expect(parseAudioWebSocketEvent(JSON.stringify({ type: "error", payload: { message: "audio file is required" } }))).toEqual({
+    expect(parseAudioWebSocketEvent(JSON.stringify({ type: "error", payload: { message: "请上传音频文件" } }))).toEqual({
       type: "error",
-      message: "audio file is required",
+      message: "请上传音频文件",
     });
   });
 });

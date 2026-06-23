@@ -45,6 +45,7 @@ export const voiceStatusContent: Record<
   },
 };
 
+/** getNextVoiceStatus 根据当前语音状态推导按钮的下一个状态。 */
 export function getNextVoiceStatus(status: VoiceStatus) {
   return nextStatusByStatus[status];
 }

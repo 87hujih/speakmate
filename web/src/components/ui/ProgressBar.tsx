@@ -1,10 +1,12 @@
 import { cn } from "../../utils/cn";
 
+/** ProgressBarProps 定义对应组件接收的属性。 */
 interface ProgressBarProps {
   value: number;
   className?: string;
 }
 
+/** ProgressBar 渲染对应的页面或界面组件。 */
 export function ProgressBar({ value, className }: ProgressBarProps) {
   const safeValue = Math.min(100, Math.max(0, value));
 

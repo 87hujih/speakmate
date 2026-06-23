@@ -29,8 +29,8 @@ describe("session stream helpers", () => {
     expect(
       parseSessionStreamEvent(
         "error",
-        JSON.stringify({ type: "error", session_id: 7, payload: { code: "conversation_agent_failed", message: "conversation agent failed" } }),
+        JSON.stringify({ type: "error", session_id: 7, payload: { code: "conversation_agent_failed", message: "对话 AI 回复失败" } }),
       ),
-    ).toEqual({ type: "error", code: "conversation_agent_failed", message: "conversation agent failed" });
+    ).toEqual({ type: "error", code: "conversation_agent_failed", message: "对话 AI 回复失败" });
   });
 });

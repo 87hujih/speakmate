@@ -1,17 +1,22 @@
+/** ScenarioCode 表示训练场景业务编码。 */
 export type ScenarioCode = string;
 
+/** Difficulty 表示训练场景难度。 */
 export type Difficulty = string;
 
+/** ScenarioStage 描述训练场景中的阶段。 */
 export interface ScenarioStage {
   name: string;
   description: string;
 }
 
+/** ScenarioRubric 描述训练场景中的评分维度。 */
 export interface ScenarioRubric {
   name: string;
   description: string;
 }
 
+/** Scenario 描述前端使用的训练场景模型。 */
 export interface Scenario {
   id: number;
   code: ScenarioCode;
@@ -29,16 +34,20 @@ export interface Scenario {
   sessionId: string;
 }
 
+/** MessageRole 表示前端聊天消息角色。 */
 export type MessageRole = "ai" | "user";
 
+/** VoiceStatus 表示训练页语音控件状态。 */
 export type VoiceStatus = "idle" | "recording" | "recognizing" | "thinking" | "speaking";
 
+/** MessageMeta 描述消息附带的评分和纠错摘要。 */
 export interface MessageMeta {
   asrConfidence?: number;
   wpm?: number;
   pauses?: number;
 }
 
+/** ChatMessage 描述聊天面板中的消息。 */
 export interface ChatMessage {
   id: number;
   role: MessageRole;
@@ -50,13 +59,16 @@ export interface ChatMessage {
   meta?: MessageMeta;
 }
 
+/** ConversationMessage 保留聊天消息的兼容类型别名。 */
 export type ConversationMessage = ChatMessage;
 
+/** TrainingTask 描述训练任务进度项。 */
 export interface TrainingTask {
   label: string;
   status: "done" | "active" | "pending";
 }
 
+/** ScoreDimension 描述单个评分维度。 */
 export interface ScoreDimension {
   key: "fluency" | "grammar" | "expression" | "vocabulary" | "completion";
   name: string;
@@ -64,6 +76,7 @@ export interface ScoreDimension {
   description: string;
 }
 
+/** Correction 描述前端展示的纠错卡片数据。 */
 export interface Correction {
   title: string;
   category: "grammar" | "expression" | "vocabulary";
@@ -73,6 +86,7 @@ export interface Correction {
   issues?: string[];
 }
 
+/** TrainingSession 描述训练页完整状态。 */
 export interface TrainingSession {
   sessionId: string;
   sessionNo: string;
@@ -94,16 +108,19 @@ export interface TrainingSession {
   naturalExpression: string;
 }
 
+/** BetterExpression 描述报告中的更自然表达建议。 */
 export interface BetterExpression {
   before: string;
   after: string;
 }
 
+/** PracticePlanItem 描述报告中的后续练习项。 */
 export interface PracticePlanItem {
   title: string;
   description: string;
 }
 
+/** TrainingReport 描述报告页展示模型。 */
 export interface TrainingReport {
   sessionId: string;
   scenario: Scenario;
@@ -122,6 +139,7 @@ export interface TrainingReport {
   createdAt: string;
 }
 
+/** HistoryRecord 描述历史记录卡片数据。 */
 export interface HistoryRecord {
   sessionId: string;
   sessionNo: string;

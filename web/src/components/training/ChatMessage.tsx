@@ -2,10 +2,12 @@ import { Bot, UserRound } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "../../types";
 import { cn } from "../../utils/cn";
 
+/** ChatMessageProps 定义对应组件接收的属性。 */
 interface ChatMessageProps {
   message: ChatMessageType;
 }
 
+/** ChatMessage 描述聊天面板中的消息。 */
 export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
   const Icon = isUser ? UserRound : Bot;

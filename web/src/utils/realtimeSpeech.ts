@@ -1,3 +1,4 @@
+/** SpeechRecognitionLike 描述浏览器语音识别实例的最小接口。 */
 export interface SpeechRecognitionLike {
   continuous: boolean;
   interimResults: boolean;
@@ -10,13 +11,16 @@ export interface SpeechRecognitionLike {
   abort: () => void;
 }
 
+/** SpeechRecognitionConstructor 描述语音识别构造器。 */
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
+/** SpeechRecognitionHost 描述可能提供语音识别能力的宿主对象。 */
 interface SpeechRecognitionHost {
   SpeechRecognition?: SpeechRecognitionConstructor;
   webkitSpeechRecognition?: SpeechRecognitionConstructor;
 }
 
+/** RealtimeSpeechSessionOptions 定义实时语音会话回调。 */
 export interface RealtimeSpeechSessionOptions {
   host?: SpeechRecognitionHost;
   language?: string;
@@ -26,18 +30,21 @@ export interface RealtimeSpeechSessionOptions {
   onEnd?: () => void;
 }
 
+/** RealtimeSpeechSession 定义实时语音会话控制接口。 */
 export interface RealtimeSpeechSession {
   start: () => void;
   stop: () => void;
   abort: () => void;
 }
 
+/** RealtimeSpeechFallbackState 描述实时语音降级判断所需状态。 */
 export interface RealtimeSpeechFallbackState {
   finalReceived?: boolean;
   stopRequested?: boolean;
   fallbackAttempted?: boolean;
 }
 
+/** NormalizedSpeechResult 描述归一化后的语音识别结果。 */
 interface NormalizedSpeechResult {
   transcript: string;
   isFinal: boolean;
@@ -45,6 +52,7 @@ interface NormalizedSpeechResult {
 
 const nonFallbackSpeechErrors = new Set(["no-speech", "not-allowed", "realtime_speech_unsupported"]);
 
+/** browserSpeechHost 读取浏览器实时语音识别宿主对象。 */
 function browserSpeechHost(): SpeechRecognitionHost {
   if (typeof window === "undefined") {
     return {};
@@ -53,14 +61,17 @@ function browserSpeechHost(): SpeechRecognitionHost {
   return window as unknown as SpeechRecognitionHost;
 }
 
+/** speechRecognitionConstructor 获取当前浏览器可用的语音识别构造器。 */
 function speechRecognitionConstructor(host: SpeechRecognitionHost = browserSpeechHost()) {
   return host.SpeechRecognition ?? host.webkitSpeechRecognition;
 }
 
+/** isRealtimeSpeechSupported 判断浏览器是否支持实时语音识别。 */
 export function isRealtimeSpeechSupported(host: SpeechRecognitionHost = browserSpeechHost()) {
   return Boolean(speechRecognitionConstructor(host));
 }
 
+/** shouldFallbackToRecordedAudio 判断实时识别错误是否应降级到录音上传。 */
 export function shouldFallbackToRecordedAudio(code: string, state: RealtimeSpeechFallbackState = {}) {
   if (state.finalReceived || state.stopRequested || state.fallbackAttempted) {
     return false;
@@ -74,6 +85,7 @@ export function shouldFallbackToRecordedAudio(code: string, state: RealtimeSpeec
   return !nonFallbackSpeechErrors.has(normalizedCode);
 }
 
+/** normalizeSpeechRecognitionResult 将浏览器识别事件归一为文本和完成状态。 */
 export function normalizeSpeechRecognitionResult(event: unknown): NormalizedSpeechResult {
   const results = (event as { results?: ArrayLike<unknown> }).results;
   if (!results || results.length === 0) {
@@ -97,6 +109,7 @@ export function normalizeSpeechRecognitionResult(event: unknown): NormalizedSpee
   };
 }
 
+/** createRealtimeSpeechSession 创建浏览器实时语音识别会话。 */
 export function createRealtimeSpeechSession({
   host = browserSpeechHost(),
   language = "en-US",

@@ -70,6 +70,7 @@ export const reports: Record<string, TrainingReport> = {
   },
 };
 
+/** getReport 封装当前模块的辅助逻辑。 */
 export function getReport(sessionId: string) {
   return reports[sessionId] ?? interviewReport;
 }

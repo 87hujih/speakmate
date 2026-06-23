@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "../../utils/cn";
 
+/** BadgeProps 定义对应组件接收的属性。 */
 interface BadgeProps {
   children: ReactNode;
   tone?: "blue" | "green" | "amber" | "red" | "violet" | "slate";
@@ -16,6 +17,7 @@ const toneClasses = {
   slate: "bg-slate-100 text-slate-600 border-slate-200",
 };
 
+/** Badge 渲染对应的页面或界面组件。 */
 export function Badge({ children, tone = "slate", className }: BadgeProps) {
   return (
     <span

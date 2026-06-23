@@ -7,6 +7,7 @@ const navItems = [
   { label: "历史记录", to: "/history", icon: History },
 ];
 
+/** AppHeader 渲染对应的页面或界面组件。 */
 export function AppHeader() {
   return (
     <header className="sticky top-0 z-30 flex min-h-[72px] flex-wrap items-center justify-between gap-3 border-b border-line/80 bg-slate-50/80 px-4 py-3 backdrop-blur-xl md:px-10">

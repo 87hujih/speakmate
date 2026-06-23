@@ -1,6 +1,7 @@
 import type { Correction } from "../../types";
 import { cn } from "../../utils/cn";
 
+/** ErrorAnalysisCardProps 定义对应组件接收的属性。 */
 interface ErrorAnalysisCardProps {
   correction: Correction;
 }
@@ -11,6 +12,7 @@ const tagTone = {
   vocabulary: "bg-emerald-50 text-emerald-700",
 };
 
+/** ErrorAnalysisCard 渲染对应的页面或界面组件。 */
 export function ErrorAnalysisCard({ correction }: ErrorAnalysisCardProps) {
   return (
     <div className="rounded-[20px] border border-line bg-white p-4">

@@ -105,12 +105,12 @@ describe("apiClient", () => {
   it("throws ApiError with backend code and message", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response(JSON.stringify({ code: 3002, message: "message content is required" }), { status: 400 })),
+      vi.fn(async () => new Response(JSON.stringify({ code: 3002, message: "消息内容不能为空" }), { status: 400 })),
     );
 
     await expect(apiClient.sendTextMessage(7, " ")).rejects.toMatchObject({
       code: 3002,
-      message: "message content is required",
+      message: "消息内容不能为空",
       status: 400,
     });
   });

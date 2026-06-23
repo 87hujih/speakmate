@@ -1,9 +1,11 @@
+/** ApiResponse 描述后端统一响应体。 */
 export interface ApiResponse<T> {
   code: number;
   message: string;
   data?: T;
 }
 
+/** BackendScenarioSummary 描述后端场景摘要结构。 */
 export interface BackendScenarioSummary {
   id: number;
   code: string;
@@ -12,6 +14,7 @@ export interface BackendScenarioSummary {
   difficulty: string;
 }
 
+/** BackendScenario 描述后端场景详情结构。 */
 export interface BackendScenario extends BackendScenarioSummary {
   ai_role: string;
   user_goal: string;
@@ -26,9 +29,12 @@ export interface BackendScenario extends BackendScenarioSummary {
   }>;
 }
 
+/** BackendSessionStatus 表示后端 Session 生命周期状态。 */
 export type BackendSessionStatus = "running" | "finished";
+/** BackendMessageRole 表示后端消息发送方角色。 */
 export type BackendMessageRole = "user" | "ai";
 
+/** BackendMessage 描述后端消息结构。 */
 export interface BackendMessage {
   id: number;
   session_id: number;
@@ -38,6 +44,7 @@ export interface BackendMessage {
   created_at: string;
 }
 
+/** BackendSessionCreateResult 描述创建 Session 的后端返回值。 */
 export interface BackendSessionCreateResult {
   session_id: number;
   session_no: string;
@@ -46,6 +53,7 @@ export interface BackendSessionCreateResult {
   opening_message: string;
 }
 
+/** BackendSessionDetail 描述训练 Session 详情返回值。 */
 export interface BackendSessionDetail {
   session_id: number;
   session_no: string;
@@ -57,6 +65,7 @@ export interface BackendSessionDetail {
   ended_at: string | null;
 }
 
+/** BackendSessionFinishResult 描述结束 Session 的后端返回值。 */
 export interface BackendSessionFinishResult {
   session_id: number;
   status: BackendSessionStatus;
@@ -64,17 +73,20 @@ export interface BackendSessionFinishResult {
   ended_at: string;
 }
 
+/** BackendCorrectionSummary 描述消息响应中的纠错摘要。 */
 export interface BackendCorrectionSummary {
   has_errors: boolean;
   error_count: number;
 }
 
+/** BackendScoreSummary 描述消息响应中的评分摘要。 */
 export interface BackendScoreSummary {
   total_score: number;
   grammar: number;
   expression: number;
 }
 
+/** BackendSendMessageResult 描述文本消息发送结果。 */
 export interface BackendSendMessageResult {
   user_message: BackendMessage;
   ai_message: BackendMessage;
@@ -85,10 +97,12 @@ export interface BackendSendMessageResult {
   score_summary: BackendScoreSummary;
 }
 
+/** BackendUploadAudioResult 描述音频消息上传结果。 */
 export interface BackendUploadAudioResult extends BackendSendMessageResult {
   transcript: string;
 }
 
+/** BackendCorrectionError 描述后端单条纠错问题。 */
 export interface BackendCorrectionError {
   type: "grammar" | "vocabulary" | "expression" | "structure" | "scenario";
   span: string;
@@ -96,6 +110,7 @@ export interface BackendCorrectionError {
   explanation: string;
 }
 
+/** BackendCorrectionResult 描述后端纠错结果。 */
 export interface BackendCorrectionResult {
   message_id: number;
   session_id: number;
@@ -105,6 +120,7 @@ export interface BackendCorrectionResult {
   better_expressions: string[] | null;
 }
 
+/** BackendScoreResult 描述后端评分结果。 */
 export interface BackendScoreResult {
   message_id: number;
   session_id: number;
@@ -117,6 +133,7 @@ export interface BackendScoreResult {
   comment: string;
 }
 
+/** BackendReport 描述后端课后报告结构。 */
 export interface BackendReport {
   session_id: number;
   scenario: {
@@ -137,6 +154,7 @@ export interface BackendReport {
   created_at: string;
 }
 
+/** BackendHistoryItem 描述后端历史列表条目。 */
 export interface BackendHistoryItem {
   session_id: number;
   session_no: string;
@@ -150,6 +168,7 @@ export interface BackendHistoryItem {
   ended_at: string | null;
 }
 
+/** BackendHistoryListResult 描述后端历史分页返回值。 */
 export interface BackendHistoryListResult {
   items: BackendHistoryItem[];
   page: number;
@@ -157,6 +176,7 @@ export interface BackendHistoryListResult {
   total: number;
 }
 
+/** BackendHistoryInsightSummary 描述后端历史洞察汇总。 */
 export interface BackendHistoryInsightSummary {
   days: number;
   total_sessions: number;
@@ -169,12 +189,14 @@ export interface BackendHistoryInsightSummary {
   score_delta: number | null;
 }
 
+/** BackendHistoryScoreTrendPoint 描述历史评分趋势点。 */
 export interface BackendHistoryScoreTrendPoint {
   date: string;
   average_score: number;
   session_count: number;
 }
 
+/** BackendScenarioTrend 描述场景维度训练趋势。 */
 export interface BackendScenarioTrend {
   scenario: BackendScenarioSummary;
   session_count: number;
@@ -186,6 +208,7 @@ export interface BackendScenarioTrend {
   last_trained_at: string;
 }
 
+/** BackendFrequentErrorInsight 描述高频错误洞察。 */
 export interface BackendFrequentErrorInsight {
   key: string;
   title: string;
@@ -197,6 +220,7 @@ export interface BackendFrequentErrorInsight {
   source_session_id: number;
 }
 
+/** BackendNextPracticeRecommendation 描述下一次训练推荐。 */
 export interface BackendNextPracticeRecommendation {
   type: "scenario_repractice" | "continue_session" | string;
   reason: string;
@@ -205,6 +229,7 @@ export interface BackendNextPracticeRecommendation {
   focus: string;
 }
 
+/** BackendHistoryInsights 描述历史洞察接口返回值。 */
 export interface BackendHistoryInsights {
   summary: BackendHistoryInsightSummary;
   score_trend: BackendHistoryScoreTrendPoint[] | null;
@@ -213,6 +238,7 @@ export interface BackendHistoryInsights {
   next_recommendation: BackendNextPracticeRecommendation | null;
 }
 
+/** ApiError 保存统一 API 错误码、HTTP 状态和错误提示。 */
 export class ApiError extends Error {
   code: number;
   status: number;
@@ -227,6 +253,7 @@ export class ApiError extends Error {
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
+/** buildApiUrl 基于统一 API 前缀生成请求地址。 */
 function buildApiUrl(path: string) {
   const base = API_BASE_URL.replace(/\/$/, "");
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -234,17 +261,19 @@ function buildApiUrl(path: string) {
   return `${base}${normalizedPath}`;
 }
 
+/** readPayload 读取并解析统一 API 响应体。 */
 async function readPayload<T>(response: Response): Promise<ApiResponse<T>> {
   try {
     return (await response.json()) as ApiResponse<T>;
   } catch {
     return {
       code: response.ok ? 0 : response.status,
-      message: response.statusText || "request failed",
+      message: response.statusText || "请求失败",
     };
   }
 }
 
+/** request 发送 JSON API 请求并校验统一响应结构。 */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(buildApiUrl(path), {
     headers: {
@@ -256,15 +285,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const payload = await readPayload<T>(response);
 
   if (!response.ok || payload.code !== 0) {
-    throw new ApiError(payload.message || "request failed", payload.code, response.status);
+    throw new ApiError(payload.message || "请求失败", payload.code, response.status);
   }
   if (payload.data === undefined) {
-    throw new ApiError("response data missing", payload.code, response.status);
+    throw new ApiError("响应数据缺失", payload.code, response.status);
   }
 
   return payload.data;
 }
 
+/** requestForm 发送表单 API 请求并校验统一响应结构。 */
 async function requestForm<T>(path: string, body: FormData): Promise<T> {
   const response = await fetch(buildApiUrl(path), {
     method: "POST",
@@ -273,15 +303,16 @@ async function requestForm<T>(path: string, body: FormData): Promise<T> {
   const payload = await readPayload<T>(response);
 
   if (!response.ok || payload.code !== 0) {
-    throw new ApiError(payload.message || "request failed", payload.code, response.status);
+    throw new ApiError(payload.message || "请求失败", payload.code, response.status);
   }
   if (payload.data === undefined) {
-    throw new ApiError("response data missing", payload.code, response.status);
+    throw new ApiError("响应数据缺失", payload.code, response.status);
   }
 
   return payload.data;
 }
 
+/** withPagination 为列表路径附加分页参数。 */
 function withPagination(path: string, page: number, pageSize: number) {
   const params = new URLSearchParams();
   params.set("page", String(page));

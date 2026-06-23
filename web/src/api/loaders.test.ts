@@ -56,10 +56,10 @@ describe("api loaders", () => {
       getSession: vi.fn(async () => session),
       getScenario: vi.fn(async () => scenario),
       listSessionCorrections: vi.fn(async () => {
-        throw new ApiError("correction not found", 4002, 404);
+        throw new ApiError("未找到纠错结果", 4002, 404);
       }),
       getSessionScore: vi.fn(async () => {
-        throw new ApiError("score not found", 4003, 404);
+        throw new ApiError("未找到评分结果", 4003, 404);
       }),
     };
 
@@ -74,7 +74,7 @@ describe("api loaders", () => {
   it("returns a missing report state when the backend has no report yet", async () => {
     const client = {
       getReport: vi.fn(async () => {
-        throw new ApiError("report not found", 5003, 404);
+        throw new ApiError("未找到课后报告", 5003, 404);
       }),
     };
 
@@ -127,7 +127,7 @@ describe("api loaders", () => {
       getScenario: vi.fn(async () => scenario),
       listSessionCorrections: vi.fn(async () => []),
       getSessionScore: vi.fn(async () => {
-        throw new ApiError("score not found", 4003, 404);
+        throw new ApiError("未找到评分结果", 4003, 404);
       }),
     };
 

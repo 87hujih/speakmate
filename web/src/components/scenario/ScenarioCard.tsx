@@ -9,12 +9,14 @@ const scenarioIconMap: Record<string, LucideIcon> = {
   meeting: UsersRound,
 };
 
+/** ScenarioCardProps 定义对应组件接收的属性。 */
 interface ScenarioCardProps {
   scenario: Scenario;
   isStarting?: boolean;
   onStart?: (scenario: Scenario) => void;
 }
 
+/** ScenarioCard 渲染对应的页面或界面组件。 */
 export function ScenarioCard({ scenario, isStarting = false, onStart }: ScenarioCardProps) {
   const Icon = scenarioIconMap[scenario.code as ScenarioCode] ?? MessageCircle;
   const startContent = (

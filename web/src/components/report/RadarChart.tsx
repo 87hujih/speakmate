@@ -1,5 +1,6 @@
 import type { ScoreDimension } from "../../types";
 
+/** RadarChartProps 定义对应组件接收的属性。 */
 interface RadarChartProps {
   scores: ScoreDimension[];
 }
@@ -20,6 +21,7 @@ const labels = [
   { x: 15, y: 94, anchor: "end" as const },
 ];
 
+/** scalePoint 按分数缩放雷达图坐标点。 */
 function scalePoint(point: { x: number; y: number }, score: number) {
   const ratio = Math.min(1, Math.max(0, score / 100));
   return {
@@ -28,6 +30,7 @@ function scalePoint(point: { x: number; y: number }, score: number) {
   };
 }
 
+/** RadarChart 渲染对应的页面或界面组件。 */
 export function RadarChart({ scores }: RadarChartProps) {
   const polygon = scores.map((score, index) => scalePoint(points[index], score.score));
   const polygonPoints = polygon.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");

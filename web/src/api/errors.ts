@@ -1,5 +1,6 @@
 import { ApiError } from "./client";
 
+/** demoErrorMessage 将后端错误码转换为面向 Demo 用户的中文提示。 */
 export function demoErrorMessage(error: unknown, fallback: string) {
   if (!(error instanceof Error)) {
     return fallback;
@@ -10,7 +11,7 @@ export function demoErrorMessage(error: unknown, fallback: string) {
 
   switch (error.code) {
     case 3003:
-      return "AI 回复服务调用失败，请检查 LLM_API_KEY、LLM_BASE_URL、LLM_MODEL，或开启 LLM_FALLBACK_TO_MOCK 后重试。";
+      return "真实 AI 回复失败，请检查 LLM_API_KEY、LLM_BASE_URL、LLM_MODEL 和模型服务可用性后重试。";
     case 3004:
       return "AI 纠错或评分生成失败，请检查反馈模型配置，或开启 FEEDBACK_FAIL_OPEN 后重试。";
     case 5002:

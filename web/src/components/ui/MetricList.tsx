@@ -1,10 +1,12 @@
 import type { ScoreDimension } from "../../types";
 import { ProgressBar } from "./ProgressBar";
 
+/** MetricListProps 定义对应组件接收的属性。 */
 interface MetricListProps {
   scores: ScoreDimension[];
 }
 
+/** MetricList 渲染对应的页面或界面组件。 */
 export function MetricList({ scores }: MetricListProps) {
   return (
     <div className="grid gap-3">

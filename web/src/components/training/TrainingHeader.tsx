@@ -3,12 +3,14 @@ import type { TrainingSession } from "../../types";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 
+/** TrainingHeaderProps 定义对应组件接收的属性。 */
 interface TrainingHeaderProps {
   session: TrainingSession;
   isFinishing?: boolean;
   onFinish: () => void;
 }
 
+/** TrainingHeader 渲染对应的页面或界面组件。 */
 export function TrainingHeader({ session, isFinishing = false, onFinish }: TrainingHeaderProps) {
   return (
     <div className="z-20 flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 rounded-[24px] border border-line bg-white/95 px-4 py-3 shadow-panel backdrop-blur-xl md:px-5">

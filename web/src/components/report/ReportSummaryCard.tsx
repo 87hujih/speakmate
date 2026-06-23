@@ -1,10 +1,12 @@
 import { CalendarClock, FileText, MessageSquareText, Target, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { TrainingReport } from "../../types";
 
+/** ReportSummaryCardProps 定义对应组件接收的属性。 */
 interface ReportSummaryCardProps {
   report: TrainingReport;
 }
 
+/** StatCard 渲染报告摘要中的单项统计。 */
 function StatCard({ label, value, icon: Icon }: { label: string; value: string; icon: LucideIcon }) {
   return (
     <div className="rounded-3xl border border-line bg-white p-5 shadow-soft">
@@ -17,6 +19,7 @@ function StatCard({ label, value, icon: Icon }: { label: string; value: string; 
   );
 }
 
+/** ReportSummaryCard 渲染对应的页面或界面组件。 */
 export function ReportSummaryCard({ report }: ReportSummaryCardProps) {
   return (
     <>

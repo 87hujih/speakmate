@@ -86,6 +86,7 @@ export const scenarios: Scenario[] = [
 
 export const interviewScenario = scenarios[0];
 
+/** getScenarioBySessionId 封装当前模块的辅助逻辑。 */
 export function getScenarioBySessionId(sessionId: string) {
   return scenarios.find((scenario) => scenario.sessionId === sessionId) ?? interviewScenario;
 }

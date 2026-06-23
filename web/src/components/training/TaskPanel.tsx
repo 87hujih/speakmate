@@ -3,6 +3,7 @@ import type { Scenario, TrainingTask } from "../../types";
 import { cn } from "../../utils/cn";
 import { ProgressBar } from "../ui/ProgressBar";
 
+/** TaskPanelProps 定义对应组件接收的属性。 */
 interface TaskPanelProps {
   scenario: Scenario;
   tasks: TrainingTask[];
@@ -10,6 +11,7 @@ interface TaskPanelProps {
   focusTags: string[];
 }
 
+/** TaskPanel 渲染对应的页面或界面组件。 */
 export function TaskPanel({ scenario, tasks, progress, focusTags }: TaskPanelProps) {
   return (
     <aside className="h-full min-h-0 overflow-hidden rounded-panel border border-line bg-white/95 p-3.5 shadow-panel">

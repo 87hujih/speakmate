@@ -1,3 +1,4 @@
+/** ScoreRingProps 定义对应组件接收的属性。 */
 interface ScoreRingProps {
   score: number;
   size?: "sm" | "md" | "lg";
@@ -15,6 +16,7 @@ const innerInset = {
   lg: "inset-3",
 };
 
+/** ScoreRing 渲染对应的页面或界面组件。 */
 export function ScoreRing({ score, size = "md" }: ScoreRingProps) {
   const safeScore = Math.min(100, Math.max(0, score));
 

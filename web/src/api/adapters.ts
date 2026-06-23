@@ -46,6 +46,7 @@ const difficultyLabels: Record<string, string> = {
   hard: "困难",
 };
 
+/** formatDurationSeconds 将秒数格式化为报告页使用的分钟文案。 */
 export function formatDurationSeconds(seconds: number) {
   const safeSeconds = Math.max(0, Math.floor(seconds));
   const minutes = Math.floor(safeSeconds / 60);
@@ -54,6 +55,7 @@ export function formatDurationSeconds(seconds: number) {
   return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
+/** formatDateTime 将后端时间转换为本地可读时间。 */
 function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -69,6 +71,7 @@ function formatDateTime(value: string) {
   });
 }
 
+/** formatMessageTime 将消息时间转换为短时间格式。 */
 function formatMessageTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -81,6 +84,7 @@ function formatMessageTime(value: string) {
   });
 }
 
+/** secondsBetween 计算起止时间之间的秒数。 */
 function secondsBetween(start: string, end: string | null, now: Date) {
   const startDate = new Date(start);
   const endDate = end ? new Date(end) : now;
@@ -91,10 +95,12 @@ function secondsBetween(start: string, end: string | null, now: Date) {
   return Math.max(0, Math.floor((endDate.getTime() - startDate.getTime()) / 1000));
 }
 
+/** arrayOrEmpty 将后端可能返回的 null 数组归一为空数组。 */
 function arrayOrEmpty<T>(value: T[] | null | undefined) {
   return Array.isArray(value) ? value : [];
 }
 
+/** mapScenarioBase 将后端场景字段映射为前端场景模型。 */
 function mapScenarioBase(scenario: BackendScenarioSummary | BackendScenario): Scenario {
   const detail = scenario as Partial<BackendScenario>;
   const stages = detail.stages ?? [];
@@ -118,14 +124,17 @@ function mapScenarioBase(scenario: BackendScenarioSummary | BackendScenario): Sc
   };
 }
 
+/** mapScenarioSummary 转换场景列表摘要数据。 */
 export function mapScenarioSummary(scenario: BackendScenarioSummary) {
   return mapScenarioBase(scenario);
 }
 
+/** mapScenarioDetail 转换场景详情数据。 */
 export function mapScenarioDetail(scenario: BackendScenario) {
   return mapScenarioBase(scenario);
 }
 
+/** mapMessage 将后端消息转换为聊天面板消息。 */
 function mapMessage(message: BackendMessage, scenario: Scenario) {
   const isUser = message.role === "user";
 
@@ -139,6 +148,7 @@ function mapMessage(message: BackendMessage, scenario: Scenario) {
   };
 }
 
+/** mapSessionScore 将后端评分转换为维度评分列表。 */
 export function mapSessionScore(score?: BackendScoreResult | null): ScoreDimension[] {
   const values: Record<ScoreDimension["key"], number> = {
     fluency: score?.fluency ?? 0,
@@ -156,6 +166,7 @@ export function mapSessionScore(score?: BackendScoreResult | null): ScoreDimensi
   }));
 }
 
+/** toCorrectionCategory 将后端纠错类型转换为前端分类。 */
 function toCorrectionCategory(type: BackendCorrectionError["type"]): Correction["category"] {
   if (type === "grammar" || type === "vocabulary" || type === "expression") {
     return type;
@@ -164,6 +175,7 @@ function toCorrectionCategory(type: BackendCorrectionError["type"]): Correction[
   return "expression";
 }
 
+/** mapCorrections 将后端纠错结果展开为前端反馈卡片。 */
 export function mapCorrections(corrections: BackendCorrectionResult[]): Correction[] {
   return newestCorrectionsFirst(corrections).flatMap((correction) => {
     const errors = arrayOrEmpty(correction.errors);
@@ -193,10 +205,12 @@ export function mapCorrections(corrections: BackendCorrectionResult[]): Correcti
   });
 }
 
+/** newestCorrectionsFirst 按消息 ID 倒序排列纠错结果。 */
 function newestCorrectionsFirst(corrections: BackendCorrectionResult[]) {
   return [...corrections].sort((first, second) => second.message_id - first.message_id);
 }
 
+/** deriveTasks 根据场景阶段推导训练任务状态。 */
 function deriveTasks(scenario: Scenario, currentStage: string, status: BackendSessionDetail["status"]): TrainingTask[] {
   if (scenario.stages.length === 0) {
     return [{ label: currentStage, status: status === "finished" ? "done" : "active" }];
@@ -222,6 +236,7 @@ function deriveTasks(scenario: Scenario, currentStage: string, status: BackendSe
   });
 }
 
+/** deriveProgress 根据任务完成情况计算训练进度。 */
 function deriveProgress(tasks: TrainingSession["tasks"]) {
   if (tasks.length === 0) {
     return 0;
@@ -231,6 +246,7 @@ function deriveProgress(tasks: TrainingSession["tasks"]) {
   return Math.round((doneCount / tasks.length) * 100);
 }
 
+/** latestBetterExpression 提取最新一条更自然表达建议。 */
 function latestBetterExpression(corrections: BackendCorrectionResult[]) {
   for (const correction of newestCorrectionsFirst(corrections)) {
     const expressions = arrayOrEmpty(correction.better_expressions);
@@ -243,6 +259,7 @@ function latestBetterExpression(corrections: BackendCorrectionResult[]) {
   return "完成一轮输入后，这里会显示更自然的替代表达。";
 }
 
+/** mapSessionDetailToTrainingSession 聚合 Session、场景、纠错和评分为训练页状态。 */
 export function mapSessionDetailToTrainingSession({
   session,
   scenario,
@@ -299,6 +316,7 @@ export function mapSessionDetailToTrainingSession({
   };
 }
 
+/** mapReportScenario 将报告中的场景摘要补齐为前端场景模型。 */
 function mapReportScenario(report: BackendReport): Scenario {
   return {
     ...mapScenarioSummary({
@@ -312,6 +330,7 @@ function mapReportScenario(report: BackendReport): Scenario {
   };
 }
 
+/** parseFrequentError 将报告高频问题文本转换为纠错卡片。 */
 function parseFrequentError(error: string, index: number): Correction {
   const segments = splitReportSegments(error);
   const pair = segments[0] || error;
@@ -328,6 +347,7 @@ function parseFrequentError(error: string, index: number): Correction {
   };
 }
 
+/** splitReportSegments 按常见分隔符拆分报告片段。 */
 function splitReportSegments(value: string) {
   return value
     .split("|")
@@ -335,6 +355,7 @@ function splitReportSegments(value: string) {
     .filter(Boolean);
 }
 
+/** splitArrowPair 拆分“原表达 -> 建议表达”结构。 */
 function splitArrowPair(value: string): [string, string] {
   const arrowIndex = value.indexOf("->");
   if (arrowIndex < 0) {
@@ -344,6 +365,7 @@ function splitArrowPair(value: string): [string, string] {
   return [value.slice(0, arrowIndex).trim(), value.slice(arrowIndex + 2).trim()];
 }
 
+/** parseBetterExpression 将报告表达建议转换为前端展示结构。 */
 function parseBetterExpression(expression: string): BetterExpression {
   const [before, after] = splitArrowPair(expression);
   if (after) {
@@ -356,6 +378,7 @@ function parseBetterExpression(expression: string): BetterExpression {
   };
 }
 
+/** parsePracticePlanItem 将练习计划文本转换为前端列表项。 */
 function parsePracticePlanItem(item: string, index: number): PracticePlanItem {
   const segments = splitReportSegments(item);
   const firstSegment = segments[0] || "";
@@ -369,10 +392,12 @@ function parsePracticePlanItem(item: string, index: number): PracticePlanItem {
   };
 }
 
+/** stripReportPrefix 去掉报告条目前缀标签。 */
 function stripReportPrefix(value: string, prefix: string) {
   return value.startsWith(prefix) ? value.slice(prefix.length).trim() : value.trim();
 }
 
+/** mapReport 将后端报告聚合为报告页展示模型。 */
 export function mapReport(report: BackendReport): TrainingReport {
   const majorProblems = arrayOrEmpty(report.major_problems);
   const frequentErrors = arrayOrEmpty(report.frequent_errors);
@@ -398,6 +423,7 @@ export function mapReport(report: BackendReport): TrainingReport {
   };
 }
 
+/** mapHistoryRecord 将后端历史记录转换为历史页卡片模型。 */
 export function mapHistoryRecord(record: BackendHistoryItem): HistoryRecord {
   return {
     sessionId: String(record.session_id),

@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 
+/** SectionHeaderProps 定义对应组件接收的属性。 */
 interface SectionHeaderProps {
   title: string;
   description?: string;
   action?: ReactNode;
 }
 
+/** SectionHeader 渲染对应的页面或界面组件。 */
 export function SectionHeader({ title, description, action }: SectionHeaderProps) {
   return (
     <div className="mb-5 mt-12 flex items-end justify-between gap-6">

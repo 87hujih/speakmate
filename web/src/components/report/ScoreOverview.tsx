@@ -3,10 +3,12 @@ import { MetricList } from "../ui/MetricList";
 import { Panel } from "../ui/Panel";
 import { RadarChart } from "./RadarChart";
 
+/** ScoreOverviewProps 定义对应组件接收的属性。 */
 interface ScoreOverviewProps {
   scores: ScoreDimension[];
 }
 
+/** ScoreOverview 渲染对应的页面或界面组件。 */
 export function ScoreOverview({ scores }: ScoreOverviewProps) {
   return (
     <Panel className="p-6">

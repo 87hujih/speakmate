@@ -9,6 +9,7 @@ const scenarioIconMap: Record<string, LucideIcon> = {
   meeting: UsersRound,
 };
 
+/** HistorySessionCardProps 定义对应组件接收的属性。 */
 interface HistorySessionCardProps {
   record: HistoryRecord;
   onRepeat?: (record: HistoryRecord) => void;
@@ -16,6 +17,7 @@ interface HistorySessionCardProps {
   isPracticeStarting?: boolean;
 }
 
+/** HistorySessionCard 渲染对应的页面或界面组件。 */
 export function HistorySessionCard({ record, onRepeat, isRepeating = false, isPracticeStarting = false }: HistorySessionCardProps) {
   const Icon = scenarioIconMap[record.scenario.code as ScenarioCode] ?? MessageCircle;
   const actionTo = record.status === "running" ? `/training/${record.sessionId}` : `/report/${record.sessionId}`;

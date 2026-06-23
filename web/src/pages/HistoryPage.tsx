@@ -28,6 +28,7 @@ function scoreDeltaText(delta: number | null | undefined) {
   return delta > 0 ? `+${delta}` : String(delta);
 }
 
+/** HistoryPage 渲染对应的页面或界面组件。 */
 export function HistoryPage() {
   const navigate = useNavigate();
   const [records, setRecords] = useState<HistoryRecord[]>([]);

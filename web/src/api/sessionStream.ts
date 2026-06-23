@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "./client";
 
+/** SessionStreamEvent 表示 Session SSE 的前端事件模型。 */
 export type SessionStreamEvent =
   | { type: "ai_message_delta"; message_id?: number; content: string }
   | { type: "ai_message_done"; message_id?: number; content?: string; stage?: string }
@@ -8,34 +9,40 @@ export type SessionStreamEvent =
   | { type: "report_done" }
   | { type: "error"; code?: string; message: string };
 
+/** SessionStreamHandlers 定义 Session SSE 事件回调。 */
 interface SessionStreamHandlers {
   onEvent: (event: SessionStreamEvent) => void;
   onError?: (message: string) => void;
 }
 
+/** createSessionStreamUrl 根据 API 地址生成 Session SSE 地址。 */
 export function createSessionStreamUrl(sessionId: number | string, apiBaseUrl = API_BASE_URL) {
   return `${apiBaseUrl.replace(/\/$/, "")}/sessions/${sessionId}/stream`;
 }
 
+/** isRecord 判断未知值是否为普通对象。 */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+/** stringValue 从未知值中安全提取字符串。 */
 function stringValue(value: unknown) {
   return typeof value === "string" ? value : undefined;
 }
 
+/** numberValue 从未知值中安全提取数字。 */
 function numberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+/** parseSessionStreamEvent 解析后端 Session SSE 事件。 */
 export function parseSessionStreamEvent(type: SessionStreamEvent["type"], rawData: string): SessionStreamEvent {
   if (!rawData) {
     if (type === "ai_message_delta") {
       return { type, content: "" };
     }
     if (type === "error") {
-      return { type, message: "stream error" };
+      return { type, message: "事件流错误" };
     }
 
     return { type } as SessionStreamEvent;
@@ -64,7 +71,7 @@ export function parseSessionStreamEvent(type: SessionStreamEvent["type"], rawDat
       return {
         type,
         code: stringValue(payload.code),
-        message: stringValue(payload.message) ?? "stream error",
+        message: stringValue(payload.message) ?? "事件流错误",
       };
     }
 
@@ -82,6 +89,7 @@ export function parseSessionStreamEvent(type: SessionStreamEvent["type"], rawDat
   }
 }
 
+/** connectSessionStream 建立 Session SSE 连接并分发事件。 */
 export function connectSessionStream(sessionId: number | string, handlers: SessionStreamHandlers) {
   if (!("EventSource" in window)) {
     handlers.onError?.("当前浏览器不支持实时流，已使用普通消息接口。");

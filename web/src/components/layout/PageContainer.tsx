@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "../../utils/cn";
 
+/** PageContainerProps 定义对应组件接收的属性。 */
 interface PageContainerProps {
   children: ReactNode;
   className?: string;
@@ -13,6 +14,7 @@ const sizeClasses = {
   full: "p-3 md:p-[18px]",
 };
 
+/** PageContainer 渲染对应的页面或界面组件。 */
 export function PageContainer({ children, className, size = "default" }: PageContainerProps) {
   return <div className={cn(sizeClasses[size], className)}>{children}</div>;
 }

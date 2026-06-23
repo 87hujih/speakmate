@@ -9,6 +9,7 @@ import { ProgressBar } from "../components/ui/ProgressBar";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import type { Scenario } from "../types";
 
+/** HeroPreview 渲染首页首屏右侧的训练预览。 */
 function HeroPreview() {
   return (
     <div className="rounded-hero border border-line/80 bg-white/80 p-4 shadow-panel backdrop-blur-xl md:p-5">
@@ -56,6 +57,7 @@ function HeroPreview() {
   );
 }
 
+/** HomePage 渲染对应的页面或界面组件。 */
 export function HomePage() {
   const navigate = useNavigate();
   const [scenarios, setScenarios] = useState<Scenario[]>([]);

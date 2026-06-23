@@ -4,10 +4,12 @@ import { ScoreRing } from "../ui/ScoreRing";
 import { CorrectionCard } from "./CorrectionCard";
 import { ScoreBar } from "./ScoreBar";
 
+/** RealtimeFeedbackPanelProps 定义对应组件接收的属性。 */
 interface RealtimeFeedbackPanelProps {
   session: TrainingSession;
 }
 
+/** RealtimeFeedbackPanel 渲染对应的页面或界面组件。 */
 export function RealtimeFeedbackPanel({ session }: RealtimeFeedbackPanelProps) {
   const latestCorrection = session.corrections[0];
 

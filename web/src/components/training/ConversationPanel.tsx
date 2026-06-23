@@ -4,6 +4,7 @@ import type { ChatMessage as ChatMessageType, VoiceStatus } from "../../types";
 import { ChatMessage } from "./ChatMessage";
 import { VoiceRecorder } from "./VoiceRecorder";
 
+/** ConversationPanelProps 定义对应组件接收的属性。 */
 interface ConversationPanelProps {
   currentStage: string;
   messages: ChatMessageType[];
@@ -22,6 +23,7 @@ interface ConversationPanelProps {
   onVoiceToggle: () => void;
 }
 
+/** ConversationPanel 渲染对应的页面或界面组件。 */
 export function ConversationPanel({
   currentStage,
   messages,
